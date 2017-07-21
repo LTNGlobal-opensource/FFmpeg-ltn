@@ -37,16 +37,18 @@ extern "C" {
 
 #include "decklink_common.h"
 #include "decklink_enc.h"
-
+#include "libklvanc/vanc.h"
+#include "libklvanc/vanc-lines.h"
+#include "libklvanc/pixels.h"
 
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame
 {
 public:
     decklink_frame(struct decklink_ctx *ctx, AVFrame *avframe, AVCodecID codec_id, int height, int width) :
-        _ctx(ctx), _avframe(avframe), _avpacket(NULL), _codec_id(codec_id), _height(height), _width(width),  _refs(1) { }
+        _ctx(ctx), _avframe(avframe), _avpacket(NULL), _codec_id(codec_id), _ancillary(NULL), _height(height), _width(width),  _refs(1) { }
     decklink_frame(struct decklink_ctx *ctx, AVPacket *avpacket, AVCodecID codec_id, int height, int width) :
-        _ctx(ctx), _avframe(NULL), _avpacket(avpacket), _codec_id(codec_id), _height(height), _width(width), _refs(1) { }
+        _ctx(ctx), _avframe(NULL), _avpacket(avpacket), _codec_id(codec_id), _ancillary(NULL), _height(height), _width(width), _refs(1) { }
 
     virtual long           STDMETHODCALLTYPE GetWidth      (void)          { return _width; }
     virtual long           STDMETHODCALLTYPE GetHeight     (void)          { return _height; }
@@ -86,8 +88,13 @@ public:
     }
 
     virtual HRESULT STDMETHODCALLTYPE GetTimecode     (BMDTimecodeFormat format, IDeckLinkTimecode **timecode) { return S_FALSE; }
-    virtual HRESULT STDMETHODCALLTYPE GetAncillaryData(IDeckLinkVideoFrameAncillary **ancillary)               { return S_FALSE; }
-
+    virtual HRESULT STDMETHODCALLTYPE GetAncillaryData(IDeckLinkVideoFrameAncillary **ancillary)
+    {
+        *ancillary = _ancillary;
+        return _ancillary ? S_OK : S_FALSE;
+    }
+    virtual HRESULT STDMETHODCALLTYPE SetAncillaryData(IDeckLinkVideoFrameAncillary
+                                                       *ancillary) { _ancillary = ancillary; return S_OK; }
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID *ppv) { return E_NOINTERFACE; }
     virtual ULONG   STDMETHODCALLTYPE AddRef(void)                            { return ++_refs; }
     virtual ULONG   STDMETHODCALLTYPE Release(void)
@@ -107,6 +114,7 @@ public:
     AVFrame *_avframe;
     AVPacket *_avpacket;
     AVCodecID _codec_id;
+    IDeckLinkVideoFrameAncillary *_ancillary;
     int _height;
     int _width;
 
@@ -167,7 +175,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
         return -1;
     }
     if (ctx->dlo->EnableVideoOutput(ctx->bmd_mode,
-                                    bmdVideoOutputFlagDefault) != S_OK) {
+                                    bmdVideoOutputVANC) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not enable video output!\n");
         return -1;
     }
@@ -274,6 +282,9 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     buffercount_type buffered;
     HRESULT hr;
 
+    struct vanc_line_set_s vanc_lines;
+    memset(&vanc_lines, 0, sizeof(vanc_lines));
+
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
         if (tmp->format != AV_PIX_FMT_UYVY422 ||
             tmp->width  != ctx->bmd_width ||
@@ -297,6 +308,137 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         }
 
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
+
+        int size;
+        const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
+        if (data) {
+            uint8_t cc_count = size / 3;
+            static uint16_t cdp_ftr_sequence_cntr = 0; /* FIXME: not threadsafe */
+
+            unsigned int num = ctx->bmd_tb_den, den = ctx->bmd_tb_num;
+            int rate;
+            if (num == 24000 && den == 1001) {
+                rate = 1;
+            } else if (num == 24 && den == 1) {
+                rate = 2;
+            } else if (num == 25 && den == 1) {
+                rate = 3;
+            } else if (num == 30000 && den == 1001) {
+                rate = 4;
+            } else if (num == 30 && den == 1) {
+                rate = 5;
+            } else if (num == 50 && den == 1) {
+                rate = 6;
+            } else if (num == 60000 && den == 1001) {
+                rate = 7;
+            } else if (num == 60 && den == 1) {
+                rate = 8;
+            } else {
+                printf("Unknown frame rate %d / %d = %.3f\n", num, den, (float)num / den);
+                return AVERROR(EINVAL);
+            }
+
+            uint8_t cdp_len = 9 /* cdp header */
+                              + 3 * cc_count /* cc_data */
+                              + 4; /* cdp footer */
+
+            uint8_t cdp_header[9] = {
+                0x96, // header id
+                0x69,
+                cdp_len,
+                (uint8_t) ((rate << 4) | 0x0f),
+                0x43, // cc_data_present | caption_service_active | reserved
+                (uint8_t) (cdp_ftr_sequence_cntr >> 8),
+                (uint8_t) (cdp_ftr_sequence_cntr & 0xff),
+                0x72, // ccdata_id
+                (uint8_t) (0xe0 | cc_count), // cc_count
+            };
+
+            uint8_t *cdp_in = new uint8_t[cdp_len];
+            memcpy(cdp_in, cdp_header, sizeof(cdp_header));
+
+            /* cdp data */
+            for (size_t i = 0; i < cc_count; i++) { // copy cc_data
+                cdp_in[9+3*i+0] = data[3*i+0] /*| 0xfc*/; // marker bits + cc_valid
+                cdp_in[9+3*i+1] = data[3*i+1];
+                cdp_in[9+3*i+2] = data[3*i+2];
+            }
+
+            /* cdp footer */
+            cdp_in[cdp_len-4] = 0x74; // footer id
+            cdp_in[cdp_len-3] = cdp_ftr_sequence_cntr >> 8;
+            cdp_in[cdp_len-2] = cdp_ftr_sequence_cntr & 0xff;
+            cdp_ftr_sequence_cntr++;
+
+            /* cdp checksum */
+            uint8_t sum = 0;
+            for (uint16_t i = 0; i < cdp_len - 1; i++) {
+                sum += cdp_in[i];
+                sum &= 0xff;
+            }
+            cdp_in[cdp_len-1] = sum ? 256 - sum : 0;
+
+            uint16_t *cdp;
+            uint16_t len;
+            vanc_sdi_create_payload(0x01, 0x61,
+                                    cdp_in, cdp_len,
+                                    &cdp, &len, 10);
+
+#ifdef DJH_DEBUG
+            for (int i = 0; i < len; i++)
+                fprintf(stderr, "%04x ", cdp[i]);
+            fprintf(stderr, "\n");
+#endif
+
+            vanc_line_insert(&vanc_lines, cdp, len, 11, 0);
+        }
+    }
+
+
+    IDeckLinkVideoFrameAncillary *vanc;
+    int result = ctx->dlo->CreateAncillaryData(bmdFormat10BitYUV, &vanc);
+    if (result != S_OK) {
+        fprintf(stderr, "Failed to create vanc\n");
+        return -1;
+    }
+
+    /* Now that we've got all the VANC lines in a nice orderly manner, generate the
+       final VANC sections for the Decklink output */
+    for (int i = 0; i < vanc_lines.num_lines; i++) {
+        struct vanc_line_s *line = vanc_lines.lines[i];
+        uint16_t *out_line;
+        int real_line;
+        int out_len;
+        void *buf;
+
+        if (line == NULL)
+            break;
+
+        real_line = line->line_number;
+#if 0
+        if (decklink_sys->b_psf_interlaced)
+            real_line = Calculate1080psfVancLine(line->line_number);
+#endif
+        result = vanc->GetBufferForVerticalBlankingLine(real_line, &buf);
+        if (result != S_OK) {
+            fprintf(stderr, "Failed to get VANC line %d: %d", real_line, result);
+            continue;
+        }
+
+        /* Generate the full line taking into account all VANC packets on that line */
+        generate_vanc_line(line, &out_line, &out_len, ctx->bmd_width);
+
+        /* Repack the 16-bit ints into 10-bit, and push into final buffer */
+        klvanc_y10_to_v210(out_line, (uint8_t *) buf, out_len);
+        free(out_line);
+        vanc_line_free(line);
+    }
+
+    result = frame->SetAncillaryData(vanc);
+    //vanc->Release(); /* FIXME: segfaults when uncommented */
+    if (result != S_OK) {
+        fprintf(stderr, "Failed to set vanc: %d", result);
+        return AVERROR(EIO);
     }
 
     if (!frame) {

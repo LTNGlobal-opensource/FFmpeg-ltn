@@ -1597,6 +1597,8 @@ enum AVPacketSideDataType {
      */
     AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
 
+    AV_PKT_DATA_A53_CC,
+
     /**
      * The number of side data elements (in fact a bit more than it).
      * This is not part of the public API/ABI in the sense that it may

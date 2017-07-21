@@ -271,6 +271,7 @@ External library support:
   --enable-libxcb-shape    enable X11 grabbing shape rendering [autodetect]
   --enable-libxvid         enable Xvid encoding via xvidcore,
                            native MPEG-4/Xvid encoder exists [no]
+  --enable-libklvanc       enable Kernel Labs VANC processing [no]
   --enable-libzimg         enable z.lib, needed for zscale filter [no]
   --enable-libzmq          enable message passing via libzmq [no]
   --enable-libzvbi         enable teletext support via libzvbi [no]
@@ -1547,6 +1548,7 @@ EXTERNAL_LIBRARY_LIST="
     libgsm
     libiec61883
     libilbc
+    libklvanc
     libkvazaar
     libmodplug
     libmp3lame
@@ -3007,7 +3009,7 @@ bktr_indev_deps_any="dev_bktr_ioctl_bt848_h machine_ioctl_bt848_h dev_video_bktr
 caca_outdev_deps="libcaca"
 decklink_indev_deps="decklink threads"
 decklink_indev_extralibs="-lstdc++"
-decklink_outdev_deps="decklink threads"
+decklink_outdev_deps="decklink libklvanc threads"
 decklink_outdev_extralibs="-lstdc++"
 dshow_indev_deps="IBaseFilter"
 dshow_indev_extralibs="-lpsapi -lole32 -lstrmiids -luuid -loleaut32 -lshlwapi"
@@ -5945,6 +5947,7 @@ enabled libx265           && require_pkg_config x265 x265.h x265_api_get &&
                              { check_cpp_condition x265.h "X265_BUILD >= 68" ||
                                die "ERROR: libx265 version must be >= 68."; }
 enabled libxavs           && require libxavs "stdint.h xavs.h" xavs_encoder_encode -lxavs
+enabled libklvanc         && require libklvanc libklvanc/vanc.h vanc_context_create -lklvanc
 enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
 enabled libzimg           && require_pkg_config "zimg >= 2.3.0" zimg.h zimg_get_api_version
 enabled libzmq            && require_pkg_config libzmq zmq.h zmq_ctx_new

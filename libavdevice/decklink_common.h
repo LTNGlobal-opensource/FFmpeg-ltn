@@ -40,6 +40,13 @@ typedef struct AVPacketQueue {
     AVFormatContext *avctx;
 } AVPacketQueue;
 
+void avpacket_queue_init(AVFormatContext *avctx, AVPacketQueue *q);
+void avpacket_queue_flush(AVPacketQueue *q);
+void avpacket_queue_end(AVPacketQueue *q);
+unsigned long long avpacket_queue_size(AVPacketQueue *q);
+int avpacket_queue_put(AVPacketQueue *q, AVPacket *pkt);
+int avpacket_queue_get(AVPacketQueue *q, AVPacket *pkt, int block);
+
 struct decklink_ctx {
     /* DeckLink SDK interfaces */
     IDeckLink *dl;

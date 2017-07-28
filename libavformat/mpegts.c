@@ -1620,6 +1620,11 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
         MpegTSFilter *f = ts->pids[prg->pcr_pid];
         if (f && f->last_pcr != -1)
             ts->pkt->pts = ts->pkt->dts = f->last_pcr/300;
+        if (f) {
+            int64_t *orig_pts = av_packet_new_side_data(ts->pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+            if (orig_pts)
+                *orig_pts = ts->pkt->pts;
+        }
     }
     ts->stop_parse = 1;
 

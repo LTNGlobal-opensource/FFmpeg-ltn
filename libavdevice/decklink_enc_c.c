@@ -48,6 +48,7 @@ AVOutputFormat ff_decklink_muxer = {
     .audio_codec    = AV_CODEC_ID_PCM_S16LE,
     .video_codec    = AV_CODEC_ID_WRAPPED_AVFRAME,
     .subtitle_codec = AV_CODEC_ID_NONE,
+    .data_codec     = AV_CODEC_ID_SCTE_35,
     .flags          = AVFMT_NOFILE,
     .priv_class     = &decklink_muxer_class,
     .priv_data_size = sizeof(struct decklink_cctx),

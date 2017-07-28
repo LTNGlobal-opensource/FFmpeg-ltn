@@ -37,6 +37,7 @@ extern "C" {
 
 #include "decklink_common.h"
 #include "decklink_enc.h"
+#include "libklscte35/scte35.h"
 #include "libklvanc/vanc.h"
 #include "libklvanc/vanc-lines.h"
 #include "libklvanc/pixels.h"
@@ -179,6 +180,8 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
         av_log(avctx, AV_LOG_ERROR, "Could not enable video output!\n");
         return -1;
     }
+
+    avpacket_queue_init (avctx, &ctx->vanc_queue);
 
     /* Set callback. */
     ctx->output_callback = new decklink_output_callback();
@@ -392,6 +395,46 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 
             vanc_line_insert(&vanc_lines, cdp, len, 11, 0);
         }
+
+        /* See if there any pending data packets to process */
+        if (avpacket_queue_size(&ctx->vanc_queue) > 0) {
+            struct scte35_splice_info_section_s *s;
+            AVPacket vanc_pkt;
+            int size;
+
+            avpacket_queue_get(&ctx->vanc_queue, &vanc_pkt, 1);
+
+            const int64_t *orig_pts = (int64_t *) av_packet_get_side_data(&vanc_pkt, AV_PKT_DATA_ORIG_PTS, &size);
+
+            s = scte35_splice_info_section_parse(vanc_pkt.data, vanc_pkt.size);
+            if (s == NULL) {
+                fprintf(stderr, "Failed to splice section \n");
+                return 0;
+            }
+
+            /* Convert the SCTE35 message into a SCTE104 command */
+            uint8_t *buf;
+            uint16_t byteCount;
+            int ret = scte35_create_scte104_message(s, &buf, &byteCount, orig_pts ? *orig_pts : 0);
+            if (ret != 0) {
+                fprintf(stderr, "Unable to convert SCTE35 to SCTE104, ret = %d\n", ret);
+                scte35_splice_info_section_free(s);
+                return 0;
+            }
+
+            /* Generate a VANC line for SCTE104 message */
+            uint16_t *vancWords = NULL;
+            uint16_t vancWordCount;
+            ret = vanc_sdi_create_payload(0x07, 0x41, buf, byteCount, &vancWords, &vancWordCount, 10);
+            if (ret != 0) {
+                fprintf(stderr, "Error creating VANC message, ret = %d\n", ret);
+                return 0;
+            }
+
+            /* Free the allocated resource */
+            scte35_splice_info_section_free(s);
+            vanc_line_insert(&vanc_lines, vancWords, vancWordCount, 12, 0);
+        }
     }
 
 
@@ -516,6 +559,19 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     return 0;
 }
 
+static int decklink_write_data_packet(AVFormatContext *avctx, AVPacket *pkt)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+
+    AVPacket *avpacket = av_packet_clone(pkt);
+    if (avpacket_queue_put(&ctx->vanc_queue, avpacket) < 0) {
+        fprintf(stderr, "Failed to queue VANC packet\n");
+    }
+
+    return 0;
+}
+
 extern "C" {
 
 av_cold int ff_decklink_write_header(AVFormatContext *avctx)
@@ -569,6 +625,8 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         } else if (c->codec_type == AVMEDIA_TYPE_VIDEO) {
             if (decklink_setup_video(avctx, st))
                 goto error;
+        } else if (c->codec_type == AVMEDIA_TYPE_DATA) {
+            /* No actual setup required */
         } else {
             av_log(avctx, AV_LOG_ERROR, "Unsupported stream type.\n");
             goto error;
@@ -594,6 +652,9 @@ int ff_decklink_write_packet(AVFormatContext *avctx, AVPacket *pkt)
         return decklink_write_video_packet(avctx, pkt);
     else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
         return decklink_write_audio_packet(avctx, pkt);
+    else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+        return decklink_write_data_packet(avctx, pkt);
+    }
 
     return AVERROR(EIO);
 }

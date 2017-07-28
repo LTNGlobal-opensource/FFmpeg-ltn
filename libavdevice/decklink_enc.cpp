@@ -399,41 +399,44 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         /* See if there any pending data packets to process */
         if (avpacket_queue_size(&ctx->vanc_queue) > 0) {
             struct scte35_splice_info_section_s *s;
+            AVStream *vanc_st;
             AVPacket vanc_pkt;
             int size;
 
             avpacket_queue_get(&ctx->vanc_queue, &vanc_pkt, 1);
+            vanc_st = avctx->streams[vanc_pkt.stream_index];
 
-            const int64_t *orig_pts = (int64_t *) av_packet_get_side_data(&vanc_pkt, AV_PKT_DATA_ORIG_PTS, &size);
+            if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SCTE_35) {
+                const int64_t *orig_pts = (int64_t *) av_packet_get_side_data(&vanc_pkt, AV_PKT_DATA_ORIG_PTS, &size);
+                s = scte35_splice_info_section_parse(vanc_pkt.data, vanc_pkt.size);
+                if (s == NULL) {
+                    fprintf(stderr, "Failed to splice section \n");
+                    return 0;
+                }
 
-            s = scte35_splice_info_section_parse(vanc_pkt.data, vanc_pkt.size);
-            if (s == NULL) {
-                fprintf(stderr, "Failed to splice section \n");
-                return 0;
-            }
+                /* Convert the SCTE35 message into a SCTE104 command */
+                uint8_t *buf;
+                uint16_t byteCount;
+                int ret = scte35_create_scte104_message(s, &buf, &byteCount, orig_pts ? *orig_pts : 0);
+                if (ret != 0) {
+                    fprintf(stderr, "Unable to convert SCTE35 to SCTE104, ret = %d\n", ret);
+                    scte35_splice_info_section_free(s);
+                    return 0;
+                }
 
-            /* Convert the SCTE35 message into a SCTE104 command */
-            uint8_t *buf;
-            uint16_t byteCount;
-            int ret = scte35_create_scte104_message(s, &buf, &byteCount, orig_pts ? *orig_pts : 0);
-            if (ret != 0) {
-                fprintf(stderr, "Unable to convert SCTE35 to SCTE104, ret = %d\n", ret);
+                /* Generate a VANC line for SCTE104 message */
+                uint16_t *vancWords = NULL;
+                uint16_t vancWordCount;
+                ret = vanc_sdi_create_payload(0x07, 0x41, buf, byteCount, &vancWords, &vancWordCount, 10);
+                if (ret != 0) {
+                    fprintf(stderr, "Error creating VANC message, ret = %d\n", ret);
+                    return 0;
+                }
+
+                /* Free the allocated resource */
                 scte35_splice_info_section_free(s);
-                return 0;
+                vanc_line_insert(&vanc_lines, vancWords, vancWordCount, 12, 0);
             }
-
-            /* Generate a VANC line for SCTE104 message */
-            uint16_t *vancWords = NULL;
-            uint16_t vancWordCount;
-            ret = vanc_sdi_create_payload(0x07, 0x41, buf, byteCount, &vancWords, &vancWordCount, 10);
-            if (ret != 0) {
-                fprintf(stderr, "Error creating VANC message, ret = %d\n", ret);
-                return 0;
-            }
-
-            /* Free the allocated resource */
-            scte35_splice_info_section_free(s);
-            vanc_line_insert(&vanc_lines, vancWords, vancWordCount, 12, 0);
         }
     }
 

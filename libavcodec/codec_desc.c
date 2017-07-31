@@ -3100,6 +3100,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "scte_35",
         .long_name = NULL_IF_CONFIG_SMALL("SCTE 35 Message Queue"),
     },
+    {
+        .id        = AV_CODEC_ID_SMPTE_2038,
+        .type      = AVMEDIA_TYPE_DATA,
+        .name      = "smpte_2038",
+        .long_name = NULL_IF_CONFIG_SMALL("SMPTE 2038 VANC in MPEG-2 TS"),
+    },
 
     /* deprecated codec ids */
 };

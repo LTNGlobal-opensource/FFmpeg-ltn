@@ -436,6 +436,25 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
                 /* Free the allocated resource */
                 scte35_splice_info_section_free(s);
                 vanc_line_insert(&vanc_lines, vancWords, vancWordCount, 12, 0);
+            } else if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038) {
+                struct smpte2038_anc_data_packet_s *pkt_2038 = 0;
+
+                smpte2038_parse_pes_payload(vanc_pkt.data, vanc_pkt.size, &pkt_2038);
+                if (pkt_2038 == NULL) {
+                    fprintf(stderr, "%s failed to decode PES packet\n", __func__);
+                    return 0;
+                }
+                for (int i = 0; i < pkt_2038->lineCount; i++) {
+                    struct smpte2038_anc_data_line_s *l = &pkt_2038->lines[i];
+                    uint16_t *vancWords = NULL;
+                    uint16_t vancWordCount;
+
+                    if (smpte2038_convert_line_to_words(l, &vancWords, &vancWordCount) < 0)
+                        break;
+
+                    vanc_line_insert(&vanc_lines, vancWords, vancWordCount, l->line_number, 0);
+                }
+                smpte2038_anc_data_packet_free(pkt_2038);
             }
         }
     }

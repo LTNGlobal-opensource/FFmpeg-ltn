@@ -291,6 +291,7 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
     MpegTSWrite *ts = s->priv_data;
     uint8_t data[SECTION_LENGTH], *q, *desc_length_ptr, *program_info_length_ptr;
     int val, stream_type, i, err = 0;
+    int scte35_found = 0;
 
     q = data;
     put16(&q, 0xe000 | service->pcr_pid);
@@ -299,6 +300,24 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
     q += 2; /* patched after */
 
     /* put program info here */
+
+    /* If there is an SCTE-35 stream, we need a registration descriptor
+       at the program level (SCTE 35 2016 Sec 8.1) */
+    for (i = 0; i < s->nb_streams; i++) {
+        AVStream *st = s->streams[i];
+        if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35) {
+            scte35_found = 1;
+            break;
+        }
+    }
+    if (scte35_found) {
+        *q++ = 0x05; /* MPEG-2 registration descriptor */
+        *q++ = 4;
+        *q++ = 'C';
+        *q++ = 'U';
+        *q++ = 'E';
+        *q++ = 'I';
+    }
 
     val = 0xf000 | (q - program_info_length_ptr - 2);
     program_info_length_ptr[0] = val >> 8;
@@ -388,6 +407,9 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
             break;
         case AV_CODEC_ID_TIMED_ID3:
             stream_type = STREAM_TYPE_METADATA;
+            break;
+        case AV_CODEC_ID_SCTE_35:
+            stream_type = STREAM_TYPE_SCTE_35;
             break;
         default:
             stream_type = STREAM_TYPE_PRIVATE_DATA;
@@ -651,6 +673,10 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
                 putstr8(&q, tag, 0);
                 *q++ = 0;            /* metadata service ID */
                 *q++ = 0xF;          /* metadata_locator_record_flag|MPEG_carriage_flags|reserved */
+            } else if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35) {
+                *q++ = 0x8a; /* Cue Identifier Descriptor */
+                *q++ = 0x01; /* length */
+                *q++ = 0x01; /* Cue Stream Type (see Sec 8.2) */
             }
             break;
         }

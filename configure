@@ -318,6 +318,7 @@ External library support:
   --enable-lv2             enable LV2 audio filtering [no]
   --disable-lzma           disable lzma [autodetect]
   --enable-decklink        enable Blackmagic DeckLink I/O support [no]
+  --enable-libndi_newtek   enable Newteck NDI I/O support [no]
   --enable-mbedtls         enable mbedTLS, needed for https support
                            if openssl, gnutls or libtls is not used [no]
   --enable-mediacodec      enable Android MediaCodec support [no]
@@ -1879,6 +1880,7 @@ EXTERNAL_LIBRARY_GPL_LIST="
 EXTERNAL_LIBRARY_NONFREE_LIST="
     decklink
     libfdk_aac
+    libndi_newtek
     libtls
 "
 
@@ -3739,6 +3741,10 @@ kmsgrab_indev_deps="libdrm"
 lavfi_indev_deps="avfilter"
 libcdio_indev_deps="libcdio"
 libdc1394_indev_deps="libdc1394"
+libndi_newtek_indev_deps="libndi_newtek"
+libndi_newtek_indev_extralibs="-lndi"
+libndi_newtek_outdev_deps="libndi_newtek"
+libndi_newtek_outdev_extralibs="-lndi"
 openal_indev_deps="openal"
 opengl_outdev_deps="opengl"
 opengl_outdev_suggest="sdl2"
@@ -7164,6 +7170,10 @@ if enabled decklink; then
             ;;
     esac
 fi
+
+libndi_newtek_outdev_extralibs="$libndi_newtek_outdev_extralibs $ldl"
+libndi_newtek_indev_extralibs="$libndi_newtek_indev_extralibs $ldl"
+enabled libndi_newtek && { check_headers Processing.NDI.Lib.h || die "ERROR: Processing.NDI.Lib.h header not found"; }
 
 enabled securetransport &&
     check_func SecIdentityCreate "-framework CoreFoundation -framework Security" &&

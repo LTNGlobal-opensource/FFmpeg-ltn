@@ -32,6 +32,8 @@ extern const AVInputFormat  ff_bktr_demuxer;
 extern const FFOutputFormat ff_caca_muxer;
 extern const AVInputFormat  ff_decklink_demuxer;
 extern const FFOutputFormat ff_decklink_muxer;
+extern const AVInputFormat  ff_libndi_newtek_demuxer;
+extern const FFOutputFormat ff_libndi_newtek_muxer;
 extern const AVInputFormat  ff_dshow_demuxer;
 extern const AVInputFormat  ff_fbdev_demuxer;
 extern const FFOutputFormat ff_fbdev_muxer;

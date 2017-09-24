@@ -159,6 +159,10 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
                    " Only AV_PIX_FMT_UYVY422 is supported.\n");
             return -1;
         }
+    } else if (c->codec_id != AV_CODEC_ID_V210) {
+        av_log(avctx, AV_LOG_ERROR, "Unsupported codec type!"
+               " Only V210 and wrapped frame with AV_PIX_FMT_UYVY422 are supported.\n");
+        return -1;
     }
 
     if (ff_decklink_set_format(avctx, c->width, c->height,

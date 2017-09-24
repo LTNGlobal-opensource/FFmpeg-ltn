@@ -33,6 +33,7 @@ extern "C" {
 extern "C" {
 #include "libavformat/avformat.h"
 #include "libavutil/imgutils.h"
+#include "avdevice.h"
 }
 
 #include "decklink_common.h"
@@ -337,7 +338,21 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
 
     /* List available devices. */
     if (ctx->list_devices) {
-        ff_decklink_list_devices(avctx);
+        struct AVDeviceInfoList *device_list = NULL;
+        int ret;
+
+        device_list = (struct AVDeviceInfoList *) av_mallocz(sizeof(AVDeviceInfoList));
+        if (!device_list)
+            return AVERROR(ENOMEM);
+
+        ret = ff_decklink_list_devices(avctx, device_list, 0, 1);
+        if (ret == 0) {
+            av_log(avctx, AV_LOG_INFO, "Blackmagic DeckLink output devices:\n");
+            for (int i = 0; i < device_list->nb_devices; i++) {
+                av_log(avctx, AV_LOG_INFO, "\t'%s'\n", device_list->devices[i]->device_name);
+            }
+        }
+        avdevice_free_list_devices(&device_list);
         return AVERROR_EXIT;
     }
 
@@ -398,6 +413,11 @@ int ff_decklink_write_packet(AVFormatContext *avctx, AVPacket *pkt)
         return decklink_write_audio_packet(avctx, pkt);
 
     return AVERROR(EIO);
+}
+
+int ff_decklink_list_output_devices(AVFormatContext *avctx, struct AVDeviceInfoList *device_list)
+{
+    return ff_decklink_list_devices(avctx, device_list, 0, 1);
 }
 
 } /* extern "C" */

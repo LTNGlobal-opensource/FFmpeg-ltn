@@ -37,6 +37,7 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/bswap.h"
+#include "avdevice.h"
 }
 
 #include "decklink_common.h"
@@ -261,24 +262,67 @@ int ff_decklink_set_format(AVFormatContext *avctx, decklink_direction_t directio
     return ff_decklink_set_format(avctx, 0, 0, 0, 0, AV_FIELD_UNKNOWN, direction, num);
 }
 
-int ff_decklink_list_devices(AVFormatContext *avctx)
+int ff_decklink_list_devices(AVFormatContext *avctx,
+			     struct AVDeviceInfoList *device_list,
+			     int show_inputs, int show_outputs)
 {
     IDeckLink *dl = NULL;
     IDeckLinkIterator *iter = CreateDeckLinkIteratorInstance();
+    int ret = 0;
+
     if (!iter) {
         av_log(avctx, AV_LOG_ERROR, "Could not create DeckLink iterator\n");
         return AVERROR(EIO);
     }
-    av_log(avctx, AV_LOG_INFO, "Blackmagic DeckLink devices:\n");
+
     while (iter->Next(&dl) == S_OK) {
+        IDeckLinkOutput *output_config;
+        IDeckLinkInput *input_config;
         const char *displayName;
+        AVDeviceInfo *new_device = NULL;
+        int add = 0;
+
         ff_decklink_get_display_name(dl, &displayName);
-        av_log(avctx, AV_LOG_INFO, "\t'%s'\n", displayName);
+
+        if (show_outputs) {
+            if (dl->QueryInterface(IID_IDeckLinkOutput, (void **)&output_config) == S_OK) {
+                output_config->Release();
+                add = 1;
+            }
+        }
+
+        if (show_inputs) {
+            if (dl->QueryInterface(IID_IDeckLinkInput, (void **)&input_config) == S_OK) {
+                input_config->Release();
+                add = 1;
+            }
+        }
+
+        if (add == 1) {
+            new_device = (AVDeviceInfo *) av_mallocz(sizeof(AVDeviceInfo));
+            if (!new_device) {
+                ret = AVERROR(ENOMEM);
+                goto next;
+            }
+            new_device->device_name = av_strdup(displayName);
+            new_device->device_description = av_strdup(displayName);
+            if (!new_device->device_description || !new_device->device_name) {
+                ret = AVERROR(ENOMEM);
+                goto next;
+            }
+
+            if ((ret = av_dynarray_add_nofree(&device_list->devices,
+                                              &device_list->nb_devices, new_device)) < 0) {
+                goto next;
+            }
+        }
+
+    next:
         av_free((void *) displayName);
         dl->Release();
     }
     iter->Release();
-    return 0;
+    return ret;
 }
 
 int ff_decklink_list_formats(AVFormatContext *avctx, decklink_direction_t direction)

@@ -38,6 +38,7 @@ extern "C" {
 #include "libavutil/time.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/reverse.h"
+#include "avdevice.h"
 #if CONFIG_LIBZVBI
 #include <libzvbi.h>
 #endif
@@ -647,7 +648,21 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
 
     /* List available devices. */
     if (ctx->list_devices) {
-        ff_decklink_list_devices(avctx);
+        struct AVDeviceInfoList *device_list = NULL;
+        int ret;
+
+        device_list = (struct AVDeviceInfoList *) av_mallocz(sizeof(AVDeviceInfoList));
+        if (!device_list)
+            return AVERROR(ENOMEM);
+
+        ret = ff_decklink_list_devices(avctx, device_list, 1, 0);
+        if (ret == 0) {
+            av_log(avctx, AV_LOG_INFO, "Blackmagic DeckLink input devices:\n");
+            for (int i = 0; i < device_list->nb_devices; i++) {
+                av_log(avctx, AV_LOG_INFO, "\t'%s'\n", device_list->devices[i]->device_name);
+            }
+        }
+        avdevice_free_list_devices(&device_list);
         return AVERROR_EXIT;
     }
 
@@ -808,6 +823,11 @@ int ff_decklink_read_packet(AVFormatContext *avctx, AVPacket *pkt)
     avpacket_queue_get(&ctx->queue, pkt, 1);
 
     return 0;
+}
+
+int ff_decklink_list_input_devices(AVFormatContext *avctx, struct AVDeviceInfoList *device_list)
+{
+    return ff_decklink_list_devices(avctx, device_list, 1, 0);
 }
 
 } /* extern "C" */

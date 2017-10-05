@@ -84,6 +84,7 @@ struct decklink_ctx {
     AVStream *audio_st;
     AVStream *video_st;
     AVStream *teletext_st;
+    uint16_t cdp_sequence_num;
 
     /* Options */
     int list_devices;

@@ -315,83 +315,28 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         int size;
         const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
         if (data) {
-            uint8_t cc_count = size / 3;
-            static uint16_t cdp_ftr_sequence_cntr = 0; /* FIXME: not threadsafe */
-
-            unsigned int num = ctx->bmd_tb_den, den = ctx->bmd_tb_num;
-            int rate;
-            if (num == 24000 && den == 1001) {
-                rate = 1;
-            } else if (num == 24 && den == 1) {
-                rate = 2;
-            } else if (num == 25 && den == 1) {
-                rate = 3;
-            } else if (num == 30000 && den == 1001) {
-                rate = 4;
-            } else if (num == 30 && den == 1) {
-                rate = 5;
-            } else if (num == 50 && den == 1) {
-                rate = 6;
-            } else if (num == 60000 && den == 1001) {
-                rate = 7;
-            } else if (num == 60 && den == 1) {
-                rate = 8;
-            } else {
-                printf("Unknown frame rate %d / %d = %.3f\n", num, den, (float)num / den);
-                return AVERROR(EINVAL);
-            }
-
-            uint8_t cdp_len = 9 /* cdp header */
-                              + 3 * cc_count /* cc_data */
-                              + 4; /* cdp footer */
-
-            uint8_t cdp_header[9] = {
-                0x96, // header id
-                0x69,
-                cdp_len,
-                (uint8_t) ((rate << 4) | 0x0f),
-                0x43, // cc_data_present | caption_service_active | reserved
-                (uint8_t) (cdp_ftr_sequence_cntr >> 8),
-                (uint8_t) (cdp_ftr_sequence_cntr & 0xff),
-                0x72, // ccdata_id
-                (uint8_t) (0xe0 | cc_count), // cc_count
-            };
-
-            uint8_t *cdp_in = new uint8_t[cdp_len];
-            memcpy(cdp_in, cdp_header, sizeof(cdp_header));
-
-            /* cdp data */
-            for (size_t i = 0; i < cc_count; i++) { // copy cc_data
-                cdp_in[9+3*i+0] = data[3*i+0] /*| 0xfc*/; // marker bits + cc_valid
-                cdp_in[9+3*i+1] = data[3*i+1];
-                cdp_in[9+3*i+2] = data[3*i+2];
-            }
-
-            /* cdp footer */
-            cdp_in[cdp_len-4] = 0x74; // footer id
-            cdp_in[cdp_len-3] = cdp_ftr_sequence_cntr >> 8;
-            cdp_in[cdp_len-2] = cdp_ftr_sequence_cntr & 0xff;
-            cdp_ftr_sequence_cntr++;
-
-            /* cdp checksum */
-            uint8_t sum = 0;
-            for (uint16_t i = 0; i < cdp_len - 1; i++) {
-                sum += cdp_in[i];
-                sum &= 0xff;
-            }
-            cdp_in[cdp_len-1] = sum ? 256 - sum : 0;
-
+            struct packet_eia_708b_s *pkt;
             uint16_t *cdp;
             uint16_t len;
-            vanc_sdi_create_payload(0x01, 0x61,
-                                    cdp_in, cdp_len,
-                                    &cdp, &len, 10);
+            uint8_t cc_count = size / 3;
 
-#ifdef DJH_DEBUG
-            for (int i = 0; i < len; i++)
-                fprintf(stderr, "%04x ", cdp[i]);
-            fprintf(stderr, "\n");
-#endif
+            klvanc_create_eia708_cdp(&pkt);
+            klvanc_set_framerate_EIA_708B(pkt, ctx->bmd_tb_num, ctx->bmd_tb_den);
+
+            /* CC data */
+            pkt->header.ccdata_present = 1;
+            pkt->ccdata.cc_count = cc_count;
+            for (size_t i = 0; i < cc_count; i++) {
+                if (data [3*i] & 0x40)
+                    pkt->ccdata.cc[i].cc_valid = 1;
+                pkt->ccdata.cc[i].cc_type = data[3*i] & 0x03;
+                pkt->ccdata.cc[i].cc_data[0] = data[3*i+1];
+                pkt->ccdata.cc[i].cc_data[1] = data[3*i+2];
+            }
+
+            klvanc_finalize_EIA_708B(pkt, ctx->cdp_sequence_num++);
+            convert_EIA_708B_to_words(pkt, &cdp, &len);
+            klvanc_destroy_eia708_cdp(pkt);
 
             vanc_line_insert(&vanc_lines, cdp, len, 11, 0);
         }

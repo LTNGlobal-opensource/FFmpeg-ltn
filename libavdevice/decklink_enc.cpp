@@ -38,16 +38,20 @@ extern "C" {
 
 #include "decklink_common.h"
 #include "decklink_enc.h"
-
+#if CONFIG_LIBKLVANC
+#include "libklvanc/vanc.h"
+#include "libklvanc/vanc-lines.h"
+#include "libklvanc/pixels.h"
+#endif
 
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame
 {
 public:
     decklink_frame(struct decklink_ctx *ctx, AVFrame *avframe, AVCodecID codec_id, int height, int width) :
-        _ctx(ctx), _avframe(avframe), _avpacket(NULL), _codec_id(codec_id), _height(height), _width(width),  _refs(1) { }
+        _ctx(ctx), _avframe(avframe), _avpacket(NULL), _codec_id(codec_id), _ancillary(NULL), _height(height), _width(width),  _refs(1) { }
     decklink_frame(struct decklink_ctx *ctx, AVPacket *avpacket, AVCodecID codec_id, int height, int width) :
-        _ctx(ctx), _avframe(NULL), _avpacket(avpacket), _codec_id(codec_id), _height(height), _width(width), _refs(1) { }
+        _ctx(ctx), _avframe(NULL), _avpacket(avpacket), _codec_id(codec_id), _ancillary(NULL), _height(height), _width(width), _refs(1) { }
 
     virtual long           STDMETHODCALLTYPE GetWidth      (void)          { return _width; }
     virtual long           STDMETHODCALLTYPE GetHeight     (void)          { return _height; }
@@ -87,8 +91,13 @@ public:
     }
 
     virtual HRESULT STDMETHODCALLTYPE GetTimecode     (BMDTimecodeFormat format, IDeckLinkTimecode **timecode) { return S_FALSE; }
-    virtual HRESULT STDMETHODCALLTYPE GetAncillaryData(IDeckLinkVideoFrameAncillary **ancillary)               { return S_FALSE; }
-
+    virtual HRESULT STDMETHODCALLTYPE GetAncillaryData(IDeckLinkVideoFrameAncillary **ancillary)
+    {
+        *ancillary = _ancillary;
+        return _ancillary ? S_OK : S_FALSE;
+    }
+    virtual HRESULT STDMETHODCALLTYPE SetAncillaryData(IDeckLinkVideoFrameAncillary
+                                                       *ancillary) { _ancillary = ancillary; return S_OK; }
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID *ppv) { return E_NOINTERFACE; }
     virtual ULONG   STDMETHODCALLTYPE AddRef(void)                            { return ++_refs; }
     virtual ULONG   STDMETHODCALLTYPE Release(void)
@@ -106,6 +115,7 @@ public:
     AVFrame *_avframe;
     AVPacket *_avpacket;
     AVCodecID _codec_id;
+    IDeckLinkVideoFrameAncillary *_ancillary;
     int _height;
     int _width;
 
@@ -169,7 +179,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
         return -1;
     }
     if (ctx->dlo->EnableVideoOutput(ctx->bmd_mode,
-                                    bmdVideoOutputFlagDefault) != S_OK) {
+                                    bmdVideoOutputVANC) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not enable video output!\n");
         return -1;
     }
@@ -265,6 +275,93 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
     return 0;
 }
 
+#if CONFIG_LIBKLVANC
+static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
+                                   decklink_frame *frame)
+{
+    struct vanc_line_set_s vanc_lines;
+    memset(&vanc_lines, 0, sizeof(vanc_lines));
+
+    int size;
+    const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
+    if (data) {
+        struct packet_eia_708b_s *pkt;
+        uint16_t *cdp;
+        uint16_t len;
+        uint8_t cc_count = size / 3;
+
+        klvanc_create_eia708_cdp(&pkt);
+        klvanc_set_framerate_EIA_708B(pkt, ctx->bmd_tb_num, ctx->bmd_tb_den);
+
+        /* CC data */
+        pkt->header.ccdata_present = 1;
+        pkt->ccdata.cc_count = cc_count;
+        for (size_t i = 0; i < cc_count; i++) {
+            if (data [3*i] & 0x40)
+                pkt->ccdata.cc[i].cc_valid = 1;
+            pkt->ccdata.cc[i].cc_type = data[3*i] & 0x03;
+            pkt->ccdata.cc[i].cc_data[0] = data[3*i+1];
+            pkt->ccdata.cc[i].cc_data[1] = data[3*i+2];
+        }
+
+        klvanc_finalize_EIA_708B(pkt, ctx->cdp_sequence_num++);
+        convert_EIA_708B_to_words(pkt, &cdp, &len);
+        klvanc_destroy_eia708_cdp(pkt);
+
+        vanc_line_insert(&vanc_lines, cdp, len, 11, 0);
+    }
+
+    IDeckLinkVideoFrameAncillary *vanc;
+    int result = ctx->dlo->CreateAncillaryData(bmdFormat10BitYUV, &vanc);
+    if (result != S_OK) {
+        fprintf(stderr, "Failed to create vanc\n");
+        return -1;
+    }
+
+    /* Now that we've got all the VANC lines in a nice orderly manner, generate the
+       final VANC sections for the Decklink output */
+    for (int i = 0; i < vanc_lines.num_lines; i++) {
+        struct vanc_line_s *line = vanc_lines.lines[i];
+        uint16_t *out_line;
+        int real_line;
+        int out_len;
+        void *buf;
+
+        if (line == NULL)
+            break;
+
+        real_line = line->line_number;
+#if 0
+        /* FIXME: include hack for certain Decklink cards which mis-represent
+           line numbers for pSF frames */
+        if (decklink_sys->b_psf_interlaced)
+            real_line = Calculate1080psfVancLine(line->line_number);
+#endif
+        result = vanc->GetBufferForVerticalBlankingLine(real_line, &buf);
+        if (result != S_OK) {
+            fprintf(stderr, "Failed to get VANC line %d: %d", real_line, result);
+            vanc_line_free(line);
+            continue;
+        }
+
+        /* Generate the full line taking into account all VANC packets on that line */
+        generate_vanc_line(line, &out_line, &out_len, ctx->bmd_width);
+
+        /* Repack the 16-bit ints into 10-bit, and push into final buffer */
+        klvanc_y10_to_v210(out_line, (uint8_t *) buf, out_len);
+        free(out_line);
+        vanc_line_free(line);
+    }
+
+    result = frame->SetAncillaryData(vanc);
+    if (result != S_OK) {
+        fprintf(stderr, "Failed to set vanc: %d", result);
+        return AVERROR(EIO);
+    }
+    return 0;
+}
+#endif
+
 static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
@@ -299,6 +396,10 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         }
 
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
+
+#if CONFIG_LIBKLVANC
+        decklink_construct_vanc(ctx, pkt, frame);
+#endif
     }
 
     if (!frame) {

@@ -102,6 +102,8 @@ static void register_all(void)
     REGISTER_FILTER(EBUR128,        ebur128,        af);
     REGISTER_FILTER(EQUALIZER,      equalizer,      af);
     REGISTER_FILTER(EXTRASTEREO,    extrastereo,    af);
+    REGISTER_FILTER(AVSYNCMEASURE,  avsyncmeasure,  af);
+    REGISTER_FILTER(AVSYNCMEASURE2,  avsyncmeasure2,vf);
     REGISTER_FILTER(FIREQUALIZER,   firequalizer,   af);
     REGISTER_FILTER(FLANGER,        flanger,        af);
     REGISTER_FILTER(HAAS,           haas,           af);

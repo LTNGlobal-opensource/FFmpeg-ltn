@@ -279,13 +279,13 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
                                    decklink_frame *frame)
 {
-    struct vanc_line_set_s vanc_lines;
+    struct klvanc_line_set_s vanc_lines;
     memset(&vanc_lines, 0, sizeof(vanc_lines));
 
     int size;
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
     if (data) {
-        struct packet_eia_708b_s *pkt;
+        struct klvanc_packet_eia_708b_s *pkt;
         uint16_t *cdp;
         uint16_t len;
         uint8_t cc_count = size / 3;
@@ -305,10 +305,10 @@ static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
         }
 
         klvanc_finalize_EIA_708B(pkt, ctx->cdp_sequence_num++);
-        convert_EIA_708B_to_words(pkt, &cdp, &len);
+        klvanc_convert_EIA_708B_to_words(pkt, &cdp, &len);
         klvanc_destroy_eia708_cdp(pkt);
 
-        vanc_line_insert(&vanc_lines, cdp, len, 11, 0);
+        klvanc_line_insert(&vanc_lines, cdp, len, 11, 0);
     }
 
     IDeckLinkVideoFrameAncillary *vanc;
@@ -321,7 +321,7 @@ static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
     /* Now that we've got all the VANC lines in a nice orderly manner, generate the
        final VANC sections for the Decklink output */
     for (int i = 0; i < vanc_lines.num_lines; i++) {
-        struct vanc_line_s *line = vanc_lines.lines[i];
+        struct klvanc_line_s *line = vanc_lines.lines[i];
         uint16_t *out_line;
         int real_line;
         int out_len;
@@ -340,17 +340,17 @@ static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
         result = vanc->GetBufferForVerticalBlankingLine(real_line, &buf);
         if (result != S_OK) {
             fprintf(stderr, "Failed to get VANC line %d: %d", real_line, result);
-            vanc_line_free(line);
+            klvanc_line_free(line);
             continue;
         }
 
         /* Generate the full line taking into account all VANC packets on that line */
-        generate_vanc_line(line, &out_line, &out_len, ctx->bmd_width);
+        klvanc_generate_vanc_line(line, &out_line, &out_len, ctx->bmd_width);
 
         /* Repack the 16-bit ints into 10-bit, and push into final buffer */
         klvanc_y10_to_v210(out_line, (uint8_t *) buf, out_len);
         free(out_line);
-        vanc_line_free(line);
+        klvanc_line_free(line);
     }
 
     result = frame->SetAncillaryData(vanc);

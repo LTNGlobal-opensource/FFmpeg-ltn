@@ -6029,7 +6029,7 @@ enabled libx264           && { use_pkg_config libx264 x264 "stdint.h x264.h" x26
 enabled libx265           && require_pkg_config libx265 x265 x265.h x265_api_get &&
                              require_cpp_condition x265.h "X265_BUILD >= 68"
 enabled libxavs           && require libxavs "stdint.h xavs.h" xavs_encoder_encode -lxavs
-enabled libklvanc         && require libklvanc libklvanc/vanc.h vanc_context_create -lklvanc
+enabled libklvanc         && require libklvanc libklvanc/vanc.h klvanc_context_create -lklvanc
 enabled libxvid           && require libxvid xvid.h xvid_global -lxvidcore
 enabled libzimg           && require_pkg_config libzimg "zimg >= 2.3.0" zimg.h zimg_get_api_version
 enabled libzmq            && require_pkg_config libzmq libzmq zmq.h zmq_ctx_new

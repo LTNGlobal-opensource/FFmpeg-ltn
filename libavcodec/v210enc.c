@@ -123,7 +123,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int aligned_width = ((avctx->width + 47) / 48) * 48;
     int stride = aligned_width * 8 / 3;
     int line_padding = stride - ((avctx->width * 8 + 11) / 12) * 4;
-    AVFrameSideData *side_data = NULL;
+    AVFrameSideData *side_data;
     int h, w, ret;
     uint8_t *dst;
 

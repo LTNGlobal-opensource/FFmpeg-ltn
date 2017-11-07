@@ -237,8 +237,12 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_A53_CC);
     if (side_data && side_data->size) {
         uint8_t* buf = av_packet_new_side_data(pkt, AV_PKT_DATA_A53_CC, side_data->size);
-        if (buf)
+        if (buf) {
             memcpy(buf, side_data->data, side_data->size);
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "Unable to allocate side data\n");
+            return AVERROR(ENOMEM);
+        }
     }
 
     pkt->flags |= AV_PKT_FLAG_KEY;

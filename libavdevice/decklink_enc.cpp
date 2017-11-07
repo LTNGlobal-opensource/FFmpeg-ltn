@@ -276,13 +276,12 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 }
 
 #if CONFIG_LIBKLVANC
-static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
-                                   decklink_frame *frame)
+static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *ctx,
+                                   AVPacket *pkt, decklink_frame *frame)
 {
-    struct klvanc_line_set_s vanc_lines;
-    memset(&vanc_lines, 0, sizeof(vanc_lines));
+    struct klvanc_line_set_s vanc_lines = { 0 };
+    int ret, size;
 
-    int size;
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
     if (data) {
         struct klvanc_packet_eia_708b_s *pkt;
@@ -290,8 +289,22 @@ static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
         uint16_t len;
         uint8_t cc_count = size / 3;
 
-        klvanc_create_eia708_cdp(&pkt);
+        ret = klvanc_create_eia708_cdp(&pkt);
+        if (ret != 0)
+            return AVERROR(ENOMEM);
+
         klvanc_set_framerate_EIA_708B(pkt, ctx->bmd_tb_num, ctx->bmd_tb_den);
+        if (ret != 0) {
+            av_log(avctx, AV_LOG_ERROR, "Invalid framerate specified: %lld/%lld\n",
+                   ctx->bmd_tb_num, ctx->bmd_tb_den);
+            klvanc_destroy_eia708_cdp(pkt);
+            return AVERROR(EINVAL);
+        }
+
+        if (cc_count > KLVANC_MAX_CC_COUNT) {
+            av_log(avctx, AV_LOG_ERROR, "Illegal cc_count received: %d\n", cc_count);
+            cc_count = KLVANC_MAX_CC_COUNT;
+        }
 
         /* CC data */
         pkt->header.ccdata_present = 1;
@@ -308,13 +321,17 @@ static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
         klvanc_convert_EIA_708B_to_words(pkt, &cdp, &len);
         klvanc_destroy_eia708_cdp(pkt);
 
-        klvanc_line_insert(&vanc_lines, cdp, len, 11, 0);
+        ret = klvanc_line_insert(&vanc_lines, cdp, len, 11, 0);
+        if (ret != 0) {
+            av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+            return AVERROR(ENOMEM);
+        }
     }
 
     IDeckLinkVideoFrameAncillary *vanc;
     int result = ctx->dlo->CreateAncillaryData(bmdFormat10BitYUV, &vanc);
     if (result != S_OK) {
-        fprintf(stderr, "Failed to create vanc\n");
+        av_log(avctx, AV_LOG_ERROR, "Failed to create vanc\n");
         return -1;
     }
 
@@ -339,13 +356,18 @@ static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
 #endif
         result = vanc->GetBufferForVerticalBlankingLine(real_line, &buf);
         if (result != S_OK) {
-            fprintf(stderr, "Failed to get VANC line %d: %d", real_line, result);
+            av_log(avctx, AV_LOG_ERROR, "Failed to get VANC line %d: %d", real_line, result);
             klvanc_line_free(line);
             continue;
         }
 
         /* Generate the full line taking into account all VANC packets on that line */
         klvanc_generate_vanc_line(line, &out_line, &out_len, ctx->bmd_width);
+        if (result != 0) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to generate VANC line\n");
+            klvanc_line_free(line);
+            continue;
+        }
 
         /* Repack the 16-bit ints into 10-bit, and push into final buffer */
         klvanc_y10_to_v210(out_line, (uint8_t *) buf, out_len);
@@ -355,7 +377,7 @@ static int decklink_construct_vanc(struct decklink_ctx *ctx, AVPacket *pkt,
 
     result = frame->SetAncillaryData(vanc);
     if (result != S_OK) {
-        fprintf(stderr, "Failed to set vanc: %d", result);
+        av_log(avctx, AV_LOG_ERROR, "Failed to set vanc: %d", result);
         return AVERROR(EIO);
     }
     return 0;
@@ -372,6 +394,9 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     decklink_frame *frame;
     buffercount_type buffered;
     HRESULT hr;
+#if CONFIG_LIBKLVANC
+    int ret;
+#endif
 
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
         if (tmp->format != AV_PIX_FMT_UYVY422 ||
@@ -398,7 +423,10 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
 
 #if CONFIG_LIBKLVANC
-        decklink_construct_vanc(ctx, pkt, frame);
+        ret = decklink_construct_vanc(avctx, ctx, pkt, frame);
+        if (ret != 0) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to construct VANC\n");
+        }
 #endif
     }
 

@@ -280,7 +280,8 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 
 #if CONFIG_LIBKLVANC
 static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *ctx,
-                                   AVPacket *pkt, decklink_frame *frame)
+                                   AVPacket *pkt, decklink_frame *frame,
+                                   AVStream *st)
 {
     struct klvanc_line_set_s vanc_lines = { 0 };
     int ret, size;
@@ -328,6 +329,42 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         klvanc_destroy_eia708_cdp(pkt);
 
         ret = klvanc_line_insert(&vanc_lines, cdp, len, 11, 0);
+        if (ret != 0) {
+            av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+            return AVERROR(ENOMEM);
+        }
+    }
+
+    data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
+    if (data) {
+        struct klvanc_packet_afd_s *pkt;
+        uint16_t *afd;
+        uint16_t len;
+
+        ret = klvanc_create_AFD(&pkt);
+        if (ret != 0)
+            return AVERROR(ENOMEM);
+
+        ret = klvanc_set_AFD_val(pkt, data[0]);
+        if (ret != 0) {
+            av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
+                   data[0]);
+            klvanc_destroy_AFD(pkt);
+            return AVERROR(EINVAL);
+        }
+
+        /* FIXME: Should really rely on the coded_width but seems like that
+           is not accessible to libavdevice outputs */
+        if ((st->codecpar->width == 1280 && st->codecpar->height == 720) ||
+            (st->codecpar->width == 1920 && st->codecpar->height == 1080))
+            pkt->aspectRatio = ASPECT_16x9;
+        else
+            pkt->aspectRatio = ASPECT_4x3;
+
+        klvanc_convert_AFD_to_words(pkt, &afd, &len);
+        klvanc_destroy_AFD(pkt);
+
+        ret = klvanc_line_insert(&vanc_lines, afd, len, 12, 0);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
@@ -429,7 +466,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
 
 #if CONFIG_LIBKLVANC
-        ret = decklink_construct_vanc(avctx, ctx, pkt, frame);
+        ret = decklink_construct_vanc(avctx, ctx, pkt, frame, st);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed to construct VANC\n");
         }

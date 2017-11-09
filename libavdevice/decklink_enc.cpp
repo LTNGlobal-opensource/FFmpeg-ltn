@@ -300,7 +300,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         if (ret != 0)
             return AVERROR(ENOMEM);
 
-        klvanc_set_framerate_EIA_708B(pkt, ctx->bmd_tb_num, ctx->bmd_tb_den);
+        ret = klvanc_set_framerate_EIA_708B(pkt, ctx->bmd_tb_num, ctx->bmd_tb_den);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "Invalid framerate specified: %lld/%lld\n",
                    ctx->bmd_tb_num, ctx->bmd_tb_den);

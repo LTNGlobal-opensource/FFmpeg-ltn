@@ -166,10 +166,13 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
                    " Only AV_PIX_FMT_UYVY422 is supported.\n");
             return -1;
         }
+        ctx->raw_format = MKBETAG('2','v','u','y');
     } else if (c->codec_id != AV_CODEC_ID_V210) {
         av_log(avctx, AV_LOG_ERROR, "Unsupported codec type!"
                " Only V210 and wrapped frame with AV_PIX_FMT_UYVY422 are supported.\n");
         return -1;
+    } else {
+        ctx->raw_format = MKBETAG('v','2','1','0');
     }
 
     if (ff_decklink_set_format(avctx, c->width, c->height,
@@ -179,7 +182,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
         return -1;
     }
     if (ctx->dlo->EnableVideoOutput(ctx->bmd_mode,
-                                    bmdVideoOutputVANC) != S_OK) {
+                                    ctx->supports_vanc ? bmdVideoOutputVANC : bmdVideoOutputFlagDefault) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not enable video output!\n");
         return -1;
     }
@@ -281,6 +284,9 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
 {
     struct klvanc_line_set_s vanc_lines = { 0 };
     int ret, size;
+
+    if (ctx->supports_vanc == 0)
+        return 0;
 
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
     if (data) {

@@ -247,10 +247,19 @@ int ff_decklink_set_format(AVFormatContext *avctx,
                                            &support, NULL) != S_OK)
             return -1;
     } else {
-        if (ctx->dlo->DoesSupportVideoMode(ctx->bmd_mode, bmdFormat8BitYUV,
-                                           bmdVideoOutputFlagDefault,
-                                           &support, NULL) != S_OK)
-        return -1;
+        ctx->supports_vanc = 1;
+        if (ctx->dlo->DoesSupportVideoMode(ctx->bmd_mode, (BMDPixelFormat) ctx->raw_format,
+                                           bmdVideoOutputVANC,
+                                           &support, NULL) != S_OK) {
+            /* Try again, but without VANC enabled */
+            if (ctx->dlo->DoesSupportVideoMode(ctx->bmd_mode, (BMDPixelFormat) ctx->raw_format,
+                                               bmdVideoOutputFlagDefault,
+                                               &support, NULL) != S_OK) {
+                return -1;
+            }
+            ctx->supports_vanc = 0;
+        }
+
     }
     if (support == bmdDisplayModeSupported)
         return 0;

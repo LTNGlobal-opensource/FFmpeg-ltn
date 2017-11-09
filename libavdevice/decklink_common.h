@@ -61,6 +61,7 @@ struct decklink_ctx {
     int bmd_width;
     int bmd_height;
     int bmd_field_dominance;
+    int supports_vanc;
 
     /* Capture buffer queue */
     AVPacketQueue queue;
@@ -89,6 +90,7 @@ struct decklink_ctx {
     DecklinkPtsSource audio_pts_source;
     DecklinkPtsSource video_pts_source;
     int draw_bars;
+    int raw_format;
 
     int frames_preroll;
     int frames_buffer;

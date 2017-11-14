@@ -3114,6 +3114,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .name      = "scte_35",
         .long_name = NULL_IF_CONFIG_SMALL("SCTE 35 Message Queue"),
     },
+    {
+        .id        = AV_CODEC_ID_SCTE_104,
+        .type      = AVMEDIA_TYPE_DATA,
+        .name      = "scte_104",
+        .long_name = NULL_IF_CONFIG_SMALL("SCTE 104 Digital Program Insertion"),
+    },
 
     /* deprecated codec ids */
 };

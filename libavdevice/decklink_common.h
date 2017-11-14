@@ -32,6 +32,10 @@
    Actual number for any particular model of card may be lower */
 #define DECKLINK_MAX_AUDIO_CHANNELS 32
 
+/* This isn't actually tied to the Blackmagic hardware - it's an arbitrary
+   number used to size the array of streams */
+#define DECKLINK_MAX_DATA_STREAMS 16
+
 class decklink_output_callback;
 class decklink_input_callback;
 
@@ -83,6 +87,8 @@ struct decklink_ctx {
     unsigned int dropped;
     AVStream *audio_st[DECKLINK_MAX_AUDIO_CHANNELS];
     int num_audio_streams;
+    AVStream *data_st[DECKLINK_MAX_DATA_STREAMS];
+    int num_data_streams;
     AVStream *video_st;
     AVStream *teletext_st;
     uint16_t cdp_sequence_num;

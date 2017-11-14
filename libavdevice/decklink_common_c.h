@@ -65,6 +65,7 @@ struct decklink_cctx {
     struct klvanc_context_s *vanc_ctx;
     uint16_t last_cdp_count;
 #endif
+    int enable_scte_104;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

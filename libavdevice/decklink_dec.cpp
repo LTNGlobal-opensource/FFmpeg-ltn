@@ -3,6 +3,7 @@
  * Copyright (c) 2013-2014 Luca Barbato, Deti Fliegl
  * Copyright (c) 2014 Rafaël Carré
  * Copyright (c) 2017 Akamai Technologies, Inc.
+ * Copyright (c) 2017 LTN Global Communications, Inc.
  *
  * This file is part of FFmpeg.
  *
@@ -669,6 +670,123 @@ error:
     return ret;
 }
 
+#if CONFIG_LIBKLVANC
+/* VANC Callbacks */
+struct vanc_cb_ctx {
+    AVFormatContext *avctx;
+    AVPacket *pkt;
+};
+static int cb_AFD(void *callback_context, struct klvanc_context_s *ctx,
+                  struct klvanc_packet_afd_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    uint8_t *afd;
+
+    afd = (uint8_t *)av_malloc(1);
+    if (afd == NULL)
+        return AVERROR(ENOMEM);
+
+    afd[0] = pkt->hdr.payload[0] >> 3;
+    if (av_packet_add_side_data(cb_ctx->pkt, AV_PKT_DATA_AFD, afd, 1) < 0)
+        av_free(afd);
+
+    return 0;
+}
+
+static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *ctx,
+                       struct klvanc_packet_eia_708b_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    decklink_cctx *cctx = (struct decklink_cctx *)cb_ctx->avctx->priv_data;
+    uint16_t expected_cdp;
+    uint8_t *cc;
+
+    if (!pkt->checksum_valid)
+        return 0;
+
+    if (!pkt->header.ccdata_present)
+        return 0;
+
+    expected_cdp = cctx->last_cdp_count + 1;
+    cctx->last_cdp_count = pkt->header.cdp_hdr_sequence_cntr;
+    if (pkt->header.cdp_hdr_sequence_cntr != expected_cdp) {
+        av_log(cb_ctx->avctx, AV_LOG_DEBUG,
+               "CDP counter inconsistent.  Received=0x%04x Expected=%04x\n",
+               pkt->header.cdp_hdr_sequence_cntr, expected_cdp);
+        return 0;
+    }
+
+    cc = (uint8_t *)av_malloc(pkt->ccdata.cc_count * 3);
+    if (cc == NULL)
+        return AVERROR(ENOMEM);
+
+    for (int i = 0; i < pkt->ccdata.cc_count; i++) {
+        cc[3*i] = 0xf8 | (pkt->ccdata.cc[i].cc_valid ? 0x04 : 0x00) |
+                  (pkt->ccdata.cc[i].cc_type & 0x03);
+        cc[3*i+1] = pkt->ccdata.cc[i].cc_data[0];
+        cc[3*i+2] = pkt->ccdata.cc[i].cc_data[1];
+    }
+
+    if (av_packet_add_side_data(cb_ctx->pkt, AV_PKT_DATA_A53_CC, cc, pkt->ccdata.cc_count * 3) < 0)
+        av_free(cc);
+
+    return 0;
+}
+
+static struct klvanc_callbacks_s callbacks =
+{
+    .afd               = cb_AFD,
+    .eia_708b          = cb_EIA_708B,
+    .eia_608           = NULL,
+    .scte_104          = NULL,
+    .all               = NULL,
+    .kl_i64le_counter  = NULL,
+};
+/* End: VANC Callbacks */
+
+/* Take one line of V210 from VANC, colorspace convert and feed it to the
+ * VANC parser. We'll expect our VANC message callbacks to happen on this
+ * same calling thread.
+ */
+static void klvanc_handle_line(AVFormatContext *avctx, struct klvanc_context_s *vanc_ctx,
+                               unsigned char *buf, unsigned int uiWidth, unsigned int lineNr,
+                               AVPacket *pkt)
+{
+    decklink_cctx *decklink_ctx = (struct decklink_cctx *)avctx->priv_data;
+
+    /* Convert the vanc line from V210 to CrCB422, then vanc parse it */
+
+    /* We need two kinds of type pointers into the source vbi buffer */
+    /* TODO: What the hell is this, two ptrs? */
+    const uint32_t *src = (const uint32_t *)buf;
+
+    /* Convert Blackmagic pixel format to nv20.
+     * src pointer gets mangled during conversion, hence we need its own
+     * ptr instead of passing vbiBufferPtr.
+     * decoded_words should be atleast 2 * uiWidth.
+     */
+    uint16_t decoded_words[16384];
+
+    /* On output each pixel will be decomposed into three 16-bit words (one for Y, U, V) */
+    memset(&decoded_words[0], 0, sizeof(decoded_words));
+    uint16_t *p_anc = decoded_words;
+    if (klvanc_v210_line_to_nv20_c(src, p_anc, sizeof(decoded_words), (uiWidth / 6) * 6) < 0)
+        return;
+
+    if (decklink_ctx->vanc_ctx) {
+        struct vanc_cb_ctx cb_ctx = {
+            .avctx = avctx,
+            .pkt = pkt
+        };
+        vanc_ctx->callback_context = &cb_ctx;
+        int ret = klvanc_packet_parse(vanc_ctx, lineNr, decoded_words, sizeof(decoded_words) / (sizeof(unsigned short)));
+        if (ret < 0) {
+            /* No VANC on this line */
+        }
+    }
+}
+#endif
+
 HRESULT decklink_input_callback::VideoInputFrameArrived(
     IDeckLinkVideoInputFrame *videoFrame, IDeckLinkAudioInputPacket *audioFrame)
 {
@@ -774,15 +892,21 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
                     for (i = vanc_line_numbers[idx].vanc_start; i <= vanc_line_numbers[idx].vanc_end; i++) {
                         uint8_t *buf;
                         if (vanc->GetBufferForVerticalBlankingLine(i, (void**)&buf) == S_OK) {
+#if CONFIG_LIBKLVANC
+                            klvanc_handle_line(avctx, cctx->vanc_ctx,
+                                               buf, videoFrame->GetWidth(), i, &pkt);
+#else
                             uint16_t luma_vanc[MAX_WIDTH_VANC];
                             extract_luma_from_v210(luma_vanc, buf, videoFrame->GetWidth());
                             txt_buf = get_metadata(avctx, luma_vanc, videoFrame->GetWidth(),
                                                    txt_buf, sizeof(txt_buf0) - (txt_buf - txt_buf0), &pkt);
+#endif
                         }
                         if (i == vanc_line_numbers[idx].field0_vanc_end)
                             i = vanc_line_numbers[idx].field1_vanc_start - 1;
                     }
                 }
+
                 vanc->Release();
                 if (txt_buf - txt_buf0 > 1) {
                     int stuffing_units = (4 - ((45 + txt_buf - txt_buf0) / 46) % 4) % 4;
@@ -1114,6 +1238,15 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
     }
 
     avpacket_queue_init (avctx, &ctx->queue);
+
+#if CONFIG_LIBKLVANC
+    if (klvanc_context_create(&cctx->vanc_ctx) < 0) {
+        av_log(avctx, AV_LOG_ERROR, "Cannot create VANC library context\n");
+    } else {
+        cctx->vanc_ctx->verbose = 0;
+        cctx->vanc_ctx->callbacks = &callbacks;
+    }
+#endif
 
     if (decklink_start_input (avctx) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Cannot start input stream\n");

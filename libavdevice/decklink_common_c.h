@@ -23,6 +23,10 @@
 #ifndef AVDEVICE_DECKLINK_COMMON_C_H
 #define AVDEVICE_DECKLINK_COMMON_C_H
 
+#if CONFIG_LIBKLVANC
+#include "libklvanc/vanc.h"
+#endif
+
 typedef enum DecklinkPtsSource {
     PTS_SRC_AUDIO     = 1,
     PTS_SRC_VIDEO     = 2,
@@ -57,6 +61,10 @@ struct decklink_cctx {
     char *format_code;
     int raw_format;
     int64_t queue_size;
+#if CONFIG_LIBKLVANC
+    struct klvanc_context_s *vanc_ctx;
+    uint16_t last_cdp_count;
+#endif
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

@@ -725,6 +725,8 @@ static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *ctx,
 {
     struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
     decklink_cctx *cctx = (struct decklink_cctx *)cb_ctx->avctx->priv_data;
+    struct decklink_ctx *decklink_ctx = (struct decklink_ctx *)cctx->ctx;
+
     uint16_t expected_cdp;
     uint8_t *cc;
 
@@ -734,8 +736,8 @@ static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *ctx,
     if (!pkt->header.ccdata_present)
         return 0;
 
-    expected_cdp = cctx->last_cdp_count + 1;
-    cctx->last_cdp_count = pkt->header.cdp_hdr_sequence_cntr;
+    expected_cdp = decklink_ctx->cdp_sequence_num + 1;
+    decklink_ctx->cdp_sequence_num = pkt->header.cdp_hdr_sequence_cntr;
     if (pkt->header.cdp_hdr_sequence_cntr != expected_cdp) {
         av_log(cb_ctx->avctx, AV_LOG_DEBUG,
                "CDP counter inconsistent.  Received=0x%04x Expected=%04x\n",
@@ -811,8 +813,6 @@ static void klvanc_handle_line(AVFormatContext *avctx, struct klvanc_context_s *
                                unsigned char *buf, unsigned int uiWidth, unsigned int lineNr,
                                AVPacket *pkt)
 {
-    decklink_cctx *decklink_ctx = (struct decklink_cctx *)avctx->priv_data;
-
     /* Convert the vanc line from V210 to CrCB422, then vanc parse it */
 
     /* We need two kinds of type pointers into the source vbi buffer */
@@ -832,7 +832,7 @@ static void klvanc_handle_line(AVFormatContext *avctx, struct klvanc_context_s *
     if (klvanc_v210_line_to_nv20_c(src, p_anc, sizeof(decoded_words), (uiWidth / 6) * 6) < 0)
         return;
 
-    if (decklink_ctx->vanc_ctx) {
+    if (vanc_ctx) {
         struct vanc_cb_ctx cb_ctx = {
             .avctx = avctx,
             .pkt = pkt
@@ -850,6 +850,7 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
     IDeckLinkVideoInputFrame *videoFrame, IDeckLinkAudioInputPacket *audioFrame)
 {
     decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     void *frameBytes;
     void *audioFrameBytes;
     BMDTimeValue frameTime;
@@ -952,7 +953,7 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
                         uint8_t *buf;
                         if (vanc->GetBufferForVerticalBlankingLine(i, (void**)&buf) == S_OK) {
 #if CONFIG_LIBKLVANC
-                            klvanc_handle_line(avctx, cctx->vanc_ctx,
+                            klvanc_handle_line(avctx, ctx->vanc_ctx,
                                                buf, videoFrame->GetWidth(), i, &pkt);
 #else
                             uint16_t luma_vanc[MAX_WIDTH_VANC];
@@ -1302,11 +1303,11 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
     avpacket_queue_init (avctx, &ctx->queue);
 
 #if CONFIG_LIBKLVANC
-    if (klvanc_context_create(&cctx->vanc_ctx) < 0) {
+    if (klvanc_context_create(&ctx->vanc_ctx) < 0) {
         av_log(avctx, AV_LOG_ERROR, "Cannot create VANC library context\n");
     } else {
-        cctx->vanc_ctx->verbose = 0;
-        cctx->vanc_ctx->callbacks = &callbacks;
+        ctx->vanc_ctx->verbose = 0;
+        ctx->vanc_ctx->callbacks = &callbacks;
     }
 #endif
 

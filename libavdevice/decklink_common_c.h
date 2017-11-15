@@ -61,10 +61,6 @@ struct decklink_cctx {
     char *format_code;
     int raw_format;
     int64_t queue_size;
-#if CONFIG_LIBKLVANC
-    struct klvanc_context_s *vanc_ctx;
-    uint16_t last_cdp_count;
-#endif
     int enable_scte_104;
 };
 

@@ -27,6 +27,9 @@
 
 #include "libavutil/thread.h"
 #include "decklink_common_c.h"
+#if CONFIG_LIBKLVANC
+#include "libklvanc/vanc.h"
+#endif
 
 /* Maximum number of channels possible across variants of Blackmagic cards.
    Actual number for any particular model of card may be lower */
@@ -110,6 +113,10 @@ struct decklink_ctx {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     int frames_buffer_available_spots;
+
+#if CONFIG_LIBKLVANC
+    struct klvanc_context_s *vanc_ctx;
+#endif
 
     int channels;
 };

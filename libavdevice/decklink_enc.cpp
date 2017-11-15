@@ -328,7 +328,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         klvanc_convert_EIA_708B_to_words(pkt, &cdp, &len);
         klvanc_destroy_eia708_cdp(pkt);
 
-        ret = klvanc_line_insert(&vanc_lines, cdp, len, 11, 0);
+        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, cdp, len, 11, 0);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
@@ -364,7 +364,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         klvanc_convert_AFD_to_words(pkt, &afd, &len);
         klvanc_destroy_AFD(pkt);
 
-        ret = klvanc_line_insert(&vanc_lines, afd, len, 12, 0);
+        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len, 12, 0);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
@@ -405,7 +405,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         }
 
         /* Generate the full line taking into account all VANC packets on that line */
-        klvanc_generate_vanc_line(line, &out_line, &out_len, ctx->bmd_width);
+        klvanc_generate_vanc_line(ctx->vanc_ctx, line, &out_line, &out_len, ctx->bmd_width);
         if (result != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed to generate VANC line\n");
             klvanc_line_free(line);
@@ -561,6 +561,9 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     ctx->list_formats = cctx->list_formats;
     ctx->preroll      = cctx->preroll;
     cctx->ctx = ctx;
+#if CONFIG_LIBKLVANC
+    klvanc_context_create(&ctx->vanc_ctx);
+#endif
 
     /* List available devices and exit. */
     if (ctx->list_devices) {

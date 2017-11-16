@@ -76,6 +76,7 @@ static const AVOption options[] = {
     { "draw_bars",     "draw bars on signal loss" , OFFSET(draw_bars),    AV_OPT_TYPE_BOOL,  { .i64 = 1}, 0, 1, DEC },
     { "queue_size",    "input queue buffer size",   OFFSET(queue_size),   AV_OPT_TYPE_INT64, { .i64 = (1024 * 1024 * 1024)}, 0, INT64_MAX, DEC },
     { "audio_depth",   "audio bitdepth (16 or 32)", OFFSET(audio_depth),  AV_OPT_TYPE_INT,   { .i64 = 16}, 16, 32, DEC },
+    { "enable_scte_104", "capture SCTE-104 VANC", OFFSET(enable_scte_104), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, DEC, "enable_scte_104"},
     { NULL },
 };
 

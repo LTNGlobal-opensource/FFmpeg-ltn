@@ -31,6 +31,10 @@
 #include "libklvanc/vanc.h"
 #endif
 
+/* Maximum number of channels possible across variants of Blackmagic cards.
+   Actual number for any particular model of card may be lower */
+#define DECKLINK_MAX_AUDIO_CHANNELS 32
+
 class decklink_output_callback;
 class decklink_input_callback;
 
@@ -65,6 +69,7 @@ struct decklink_ctx {
     int bmd_height;
     int bmd_field_dominance;
     int supports_vanc;
+    int64_t max_audio_channels;
 
     /* Capture buffer queue */
     AVPacketQueue queue;
@@ -79,7 +84,8 @@ struct decklink_ctx {
     int64_t last_pts;
     unsigned long frameCount;
     unsigned int dropped;
-    AVStream *audio_st;
+    AVStream *audio_st[DECKLINK_MAX_AUDIO_CHANNELS];
+    int num_audio_streams;
     AVStream *video_st;
     AVStream *teletext_st;
     uint16_t cdp_sequence_num;

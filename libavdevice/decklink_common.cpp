@@ -473,5 +473,14 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
         return AVERROR_EXTERNAL;
     }
 
+    if (ctx->attr->GetInt(BMDDeckLinkMaximumAudioChannels, &ctx->max_audio_channels) != S_OK) {
+        av_log(avctx, AV_LOG_WARNING, "Could not determine number of audio channels\n");
+        ctx->max_audio_channels = 0;
+    }
+    if (ctx->max_audio_channels > DECKLINK_MAX_AUDIO_CHANNELS) {
+        av_log(avctx, AV_LOG_WARNING, "Decklink card reported support for more channels than ffmpeg supports\n");
+        ctx->max_audio_channels = DECKLINK_MAX_AUDIO_CHANNELS;
+    }
+
     return 0;
 }

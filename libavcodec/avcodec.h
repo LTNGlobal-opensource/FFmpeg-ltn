@@ -1327,6 +1327,12 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_A53_CC,
 
     /**
+     * Active Format Description data consisting of a single byte as specified
+     * in ETSI TS 101 154 using AVActiveFormatDescription enum.
+     */
+    AV_PKT_DATA_AFD,
+
+    /**
      * The number of side data elements (in fact a bit more than it).
      * This is not part of the public API/ABI in the sense that it may
      * change when new side data types are added.

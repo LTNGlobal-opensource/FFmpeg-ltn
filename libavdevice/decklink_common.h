@@ -27,6 +27,9 @@
 
 #include "libavutil/thread.h"
 #include "decklink_common_c.h"
+#if CONFIG_LIBKLVANC
+#include "libklvanc/vanc.h"
+#endif
 
 class decklink_output_callback;
 class decklink_input_callback;
@@ -61,6 +64,7 @@ struct decklink_ctx {
     int bmd_width;
     int bmd_height;
     int bmd_field_dominance;
+    int supports_vanc;
 
     /* Capture buffer queue */
     AVPacketQueue queue;
@@ -78,6 +82,7 @@ struct decklink_ctx {
     AVStream *audio_st;
     AVStream *video_st;
     AVStream *teletext_st;
+    uint16_t cdp_sequence_num;
 
     /* Options */
     int list_devices;
@@ -88,6 +93,7 @@ struct decklink_ctx {
     DecklinkPtsSource audio_pts_source;
     DecklinkPtsSource video_pts_source;
     int draw_bars;
+    int raw_format;
 
     int frames_preroll;
     int frames_buffer;
@@ -95,6 +101,10 @@ struct decklink_ctx {
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     int frames_buffer_available_spots;
+
+#if CONFIG_LIBKLVANC
+    struct klvanc_context_s *vanc_ctx;
+#endif
 
     int channels;
     int audio_depth;

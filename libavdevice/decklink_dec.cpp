@@ -627,9 +627,54 @@ static int64_t get_pkt_pts(IDeckLinkVideoInputFrame *videoFrame,
     return pts;
 }
 
+static int setup_audio(AVFormatContext *avctx)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+    AVStream *st;
+    int ret = 0;
+
+    if (cctx->audio_mode == AUDIO_MODE_DISCRETE) {
+        st = avformat_new_stream(avctx, NULL);
+        if (!st) {
+            av_log(avctx, AV_LOG_ERROR, "Cannot add stream\n");
+            ret = AVERROR(ENOMEM);
+            goto error;
+        }
+        st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
+        st->codecpar->codec_id    = ctx->audio_depth == 32 ? AV_CODEC_ID_PCM_S32LE : AV_CODEC_ID_PCM_S16LE;
+        st->codecpar->sample_rate = bmdAudioSampleRate48kHz;
+        st->codecpar->channels    = cctx->audio_channels;
+        avpriv_set_pts_info(st, 64, 1, 1000000);  /* 64 bits pts in us */
+        ctx->audio_st[0] = st;
+        ctx->num_audio_streams++;
+    } else {
+        for (int i = 0; i < ctx->max_audio_channels / 2; i++) {
+            st = avformat_new_stream(avctx, NULL);
+            if (!st) {
+                av_log(avctx, AV_LOG_ERROR, "Cannot add stream %d\n", i);
+                ret = AVERROR(ENOMEM);
+                goto error;
+            }
+            st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
+            st->codecpar->codec_id    = ctx->audio_depth == 32 ? AV_CODEC_ID_PCM_S32LE : AV_CODEC_ID_PCM_S16LE;
+            st->codecpar->sample_rate = bmdAudioSampleRate48kHz;
+            st->codecpar->channels    = 2;
+            avpriv_set_pts_info(st, 64, 1, 1000000);  /* 64 bits pts in us */
+            ctx->audio_st[i] = st;
+            ctx->num_audio_streams++;
+        }
+        cctx->audio_channels = ctx->max_audio_channels;
+    }
+
+error:
+    return ret;
+}
+
 HRESULT decklink_input_callback::VideoInputFrameArrived(
     IDeckLinkVideoInputFrame *videoFrame, IDeckLinkAudioInputPacket *audioFrame)
 {
+    decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     void *frameBytes;
     void *audioFrameBytes;
     BMDTimeValue frameTime;
@@ -777,24 +822,57 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
 
     // Handle Audio Frame
     if (audioFrame) {
-        AVPacket pkt;
-        BMDTimeValue audio_pts;
-        av_init_packet(&pkt);
-
-        //hack among hacks
-        pkt.size = audioFrame->GetSampleFrameCount() * ctx->audio_st->codecpar->channels * (ctx->audio_depth / 8);
         audioFrame->GetBytes(&audioFrameBytes);
-        audioFrame->GetPacketTime(&audio_pts, ctx->audio_st->time_base.den);
-        pkt.pts = get_pkt_pts(videoFrame, audioFrame, wallclock, ctx->audio_pts_source, ctx->audio_st->time_base, &initial_audio_pts);
-        pkt.dts = pkt.pts;
 
-        //fprintf(stderr,"Audio Frame size %d ts %d\n", pkt.size, pkt.pts);
-        pkt.flags       |= AV_PKT_FLAG_KEY;
-        pkt.stream_index = ctx->audio_st->index;
-        pkt.data         = (uint8_t *)audioFrameBytes;
+        if (cctx->audio_mode == AUDIO_MODE_DISCRETE) {
+            AVPacket pkt;
+            BMDTimeValue audio_pts;
+            av_init_packet(&pkt);
 
-        if (avpacket_queue_put(&ctx->queue, &pkt) < 0) {
-            ++ctx->dropped;
+            //hack among hacks
+            pkt.size = audioFrame->GetSampleFrameCount() * ctx->audio_st[0]->codecpar->channels * (ctx->audio_depth / 8);
+            audioFrame->GetBytes(&audioFrameBytes);
+            audioFrame->GetPacketTime(&audio_pts, ctx->audio_st[0]->time_base.den);
+            pkt.pts = get_pkt_pts(videoFrame, audioFrame, wallclock, ctx->audio_pts_source, ctx->audio_st[0]->time_base, &initial_audio_pts);
+            pkt.dts = pkt.pts;
+
+            pkt.flags       |= AV_PKT_FLAG_KEY;
+            pkt.stream_index = ctx->audio_st[0]->index;
+            pkt.data         = (uint8_t *)audioFrameBytes;
+
+            if (avpacket_queue_put(&ctx->queue, &pkt) < 0) {
+                ++ctx->dropped;
+            }
+        } else {
+            /* Need to deinterleave audio */
+            int audio_offset = 0;
+            int audio_stride = cctx->audio_channels * ctx->audio_depth / 8;
+            for (int i = 0; i < ctx->num_audio_streams; i++) {
+                int sample_size = ctx->audio_st[i]->codecpar->channels *
+                                  ctx->audio_st[i]->codecpar->bits_per_coded_sample / 8;
+                AVPacket pkt;
+                int ret = av_new_packet(&pkt, audioFrame->GetSampleFrameCount() * sample_size);
+                if (ret != 0)
+                    continue;
+
+                pkt.pts = get_pkt_pts(videoFrame, audioFrame, wallclock, ctx->audio_pts_source,
+                                      ctx->audio_st[i]->time_base, &initial_audio_pts);
+                pkt.dts          = pkt.pts;
+                pkt.flags       |= AV_PKT_FLAG_KEY;
+                pkt.stream_index = ctx->audio_st[i]->index;
+
+                uint8_t *audio_in = ((uint8_t *) audioFrameBytes) + audio_offset;
+                for (int x = 0; x < pkt.size; x += sample_size) {
+                    memcpy(&pkt.data[x], audio_in, sample_size);
+                    audio_in += audio_stride;
+                }
+
+                if (avpacket_queue_put(&ctx->queue, &pkt) < 0)
+                    ++ctx->dropped;
+
+                av_packet_unref(&pkt);
+                audio_offset += sample_size;
+            }
         }
     }
 
@@ -999,18 +1077,7 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
 #endif
 
     /* Setup streams. */
-    st = avformat_new_stream(avctx, NULL);
-    if (!st) {
-        av_log(avctx, AV_LOG_ERROR, "Cannot add stream\n");
-        ret = AVERROR(ENOMEM);
-        goto error;
-    }
-    st->codecpar->codec_type  = AVMEDIA_TYPE_AUDIO;
-    st->codecpar->codec_id    = cctx->audio_depth == 32 ? AV_CODEC_ID_PCM_S32LE : AV_CODEC_ID_PCM_S16LE;
-    st->codecpar->sample_rate = bmdAudioSampleRate48kHz;
-    st->codecpar->channels    = cctx->audio_channels;
-    avpriv_set_pts_info(st, 64, 1, 1000000);  /* 64 bits pts in us */
-    ctx->audio_st=st;
+    setup_audio(avctx);
 
     st = avformat_new_stream(avctx, NULL);
     if (!st) {
@@ -1096,8 +1163,17 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
         ctx->teletext_st = st;
     }
 
-    av_log(avctx, AV_LOG_VERBOSE, "Using %d input audio channels\n", ctx->audio_st->codecpar->channels);
-    result = ctx->dli->EnableAudioInput(bmdAudioSampleRate48kHz, cctx->audio_depth == 32 ? bmdAudioSampleType32bitInteger : bmdAudioSampleType16bitInteger, ctx->audio_st->codecpar->channels);
+    if (cctx->audio_mode == AUDIO_MODE_DISCRETE) {
+        av_log(avctx, AV_LOG_VERBOSE, "Using %d input audio channels\n", ctx->audio_st[0]->codecpar->channels);
+        result = ctx->dli->EnableAudioInput(bmdAudioSampleRate48kHz,
+                                            ctx->audio_depth == 32 ? bmdAudioSampleType32bitInteger : bmdAudioSampleType16bitInteger,
+                                            ctx->audio_st[0]->codecpar->channels);
+    } else {
+        av_log(avctx, AV_LOG_VERBOSE, "Using %d input audio channels\n", (int)ctx->max_audio_channels);
+        result = ctx->dli->EnableAudioInput(bmdAudioSampleRate48kHz,
+                                            ctx->audio_depth == 32 ? bmdAudioSampleType32bitInteger : bmdAudioSampleType16bitInteger,
+                                            ctx->max_audio_channels);
+    }
 
     if (result != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Cannot enable audio input\n");

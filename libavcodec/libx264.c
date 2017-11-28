@@ -86,6 +86,7 @@ typedef struct X264Context {
     int forced_idr;
     int coder;
     int a53_cc;
+    int afd;
     int b_frame_strategy;
     int chroma_offset;
     int scenechange_threshold;
@@ -275,6 +276,7 @@ static int X264_frame(AVCodecContext *ctx, AVPacket *pkt, const AVFrame *frame,
     x264_nal_t *nal;
     int nnal, i, ret;
     x264_picture_t pic_out = {0};
+    int num_payloads = 0;
     int pict_type;
 
     x264_picture_init( &x4->pic );
@@ -323,10 +325,46 @@ static int X264_frame(AVCodecContext *ctx, AVPacket *pkt, const AVFrame *frame,
                 } else {
                     x4->pic.extra_sei.sei_free = av_free;
 
-                    x4->pic.extra_sei.payloads[0].payload_size = sei_size;
-                    x4->pic.extra_sei.payloads[0].payload = sei_data;
-                    x4->pic.extra_sei.num_payloads = 1;
-                    x4->pic.extra_sei.payloads[0].payload_type = 4;
+                    x4->pic.extra_sei.payloads[num_payloads].payload_size = sei_size;
+                    x4->pic.extra_sei.payloads[num_payloads].payload = sei_data;
+                    x4->pic.extra_sei.payloads[num_payloads].payload_type = 4;
+                    x4->pic.extra_sei.num_payloads++;
+                    num_payloads++;
+                }
+            }
+        }
+
+        /* Active Format Description */
+        if (x4->afd) {
+            void *sei_data;
+            size_t sei_size;
+
+            ret = ff_alloc_afd_sei(frame, 0, &sei_data, &sei_size);
+            if (ret < 0) {
+                for (i = 0; i < num_payloads; i++)
+                    av_free(x4->pic.extra_sei.payloads[i].payload);
+                av_free(x4->pic.extra_sei.payloads);
+                return AVERROR(ENOMEM);
+            } else if (sei_data) {
+                x264_sei_payload_t *payloads;
+                payloads = av_realloc(x4->pic.extra_sei.payloads,
+                                      sizeof(x4->pic.extra_sei.payloads[0]) * (num_payloads + 1));
+                if (payloads == NULL) {
+                    av_log(ctx, AV_LOG_ERROR, "Not enough memory for AFD, skipping\n");
+                    for (i = 0; i < num_payloads; i++)
+                        av_free(x4->pic.extra_sei.payloads[i].payload);
+                    av_free(x4->pic.extra_sei.payloads);
+                    av_free(sei_data);
+                    return AVERROR(ENOMEM);
+                } else {
+                    x4->pic.extra_sei.payloads = payloads;
+                    x4->pic.extra_sei.sei_free = av_free;
+
+                    x4->pic.extra_sei.payloads[num_payloads].payload_size = sei_size;
+                    x4->pic.extra_sei.payloads[num_payloads].payload = sei_data;
+                    x4->pic.extra_sei.payloads[num_payloads].payload_type = 4;
+                    x4->pic.extra_sei.num_payloads++;
+                    num_payloads++;
                 }
             }
         }
@@ -892,6 +930,7 @@ static const AVOption options[] = {
     {"passlogfile", "Filename for 2 pass stats", OFFSET(stats), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     {"wpredp", "Weighted prediction for P-frames", OFFSET(wpredp), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     {"a53cc",          "Use A53 Closed Captions (if available)",          OFFSET(a53_cc),        AV_OPT_TYPE_BOOL,   {.i64 = 1}, 0, 1, VE},
+    {"afd",            "Use Active Format Description (AFD) (if available)",OFFSET(afd),        AV_OPT_TYPE_BOOL,   {.i64 = 1}, 0, 1, VE},
     {"x264opts", "x264 options", OFFSET(x264opts), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     { "crf",           "Select the quality for constant quality mode",    OFFSET(crf),           AV_OPT_TYPE_FLOAT,  {.dbl = -1 }, -1, FLT_MAX, VE },
     { "crf_max",       "In CRF mode, prevents VBV from lowering quality beyond this point.",OFFSET(crf_max), AV_OPT_TYPE_FLOAT, {.dbl = -1 }, -1, FLT_MAX, VE },

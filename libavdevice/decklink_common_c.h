@@ -58,6 +58,7 @@ struct decklink_cctx {
     char *format_code;
     int raw_format;
     int64_t queue_size;
+    int enable_scte_104;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

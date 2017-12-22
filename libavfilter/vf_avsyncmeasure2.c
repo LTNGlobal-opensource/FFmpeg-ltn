@@ -38,6 +38,7 @@
 #include <sys/time.h>
 
 extern struct timeval avsyncmeasure_tv;
+extern uint64_t avsyncmeasure_tv_pts;
 
 typedef struct BurnContext
 {
@@ -123,6 +124,7 @@ static void analyzeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_
 #endif
 
         if (count > 5) {
+#if 0
             /* Found black video */
             gettimeofday(&tv, NULL);
 //            int microseconds = (avsyncmeasure_tv.tv_sec - tv.tv_sec) * 1000000 + ((int) avsyncmeasure_tv.tv_usec - (int)tv.tv_usec);
@@ -130,9 +132,13 @@ static void analyzeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_
             struct timeval tv3;
             tv3.tv_sec = microseconds/1000000;
             tv3.tv_usec = microseconds%1000000;
-            printf("%ld.%06d black frame hit audio=%ld.%06d delta=%ld.%06d.\n", tv.tv_sec, tv.tv_usec,
+            printf("%ld.%06d black frame hit audio=%ld.%06d delta=%ld.%06d. pts=%lld\n", tv.tv_sec, tv.tv_usec,
                    avsyncmeasure_tv.tv_sec, avsyncmeasure_tv.tv_usec,
-                    tv3.tv_sec, tv3.tv_usec);
+                   tv3.tv_sec, tv3.tv_usec, av_rescale(frame->pts, 1000000, 90000));
+#else
+            printf("black frame hit audio=%lld delta=%lld\n", avsyncmeasure_tv_pts,
+                   avsyncmeasure_tv_pts - av_rescale(frame->pts, 1000000, 90000));
+#endif
         }
 
         return;

@@ -26,6 +26,7 @@
 #include <sys/time.h>
 
 struct timeval avsyncmeasure_tv;
+uint64_t avsyncmeasure_tv_pts;
 
 typedef struct AvSyncMeasureContext {
     const AVClass *class;
@@ -84,7 +85,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (src[0] != 0.0 || src[1] != 0.0 || src[2] != 0.0 || src[3] != 0.0) {
 //        printf("%ld.%06d %f %f %f %f\n", avsyncmeasure_tv.tv_sec, avsyncmeasure_tv.tv_usec, src[0], src[1], src[2], src[3]);
         gettimeofday(&avsyncmeasure_tv, NULL);
-        printf("%ld.%06d audio\n", avsyncmeasure_tv.tv_sec, avsyncmeasure_tv.tv_usec);
+        avsyncmeasure_tv_pts = av_rescale(in->pts, 1000000, 48000);
+        printf("%ld.%06d audio pts=%lld\n", avsyncmeasure_tv.tv_sec, avsyncmeasure_tv.tv_usec, avsyncmeasure_tv_pts);
     }
 
     for (n = 0; n < in->nb_samples; n++) {

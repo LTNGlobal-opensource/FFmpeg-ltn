@@ -29,7 +29,14 @@ extern "C" {
 #ifdef _WIN32
 #include <DeckLinkAPI_i.c>
 #else
+/* The file provided by the SDK is known to be missing prototypes, which doesn't
+   cause issues with GCC since the warning doesn't apply to C++ files.  However
+   Clang does complain (and warnings are treated as errors), so suppress the
+   warning just for this one file */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
 #include <DeckLinkAPIDispatch.cpp>
+#pragma clang diagnostic pop
 #endif
 
 extern "C" {

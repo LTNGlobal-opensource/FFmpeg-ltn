@@ -2403,6 +2403,42 @@ int ff_alloc_a53_sei(const AVFrame *frame, size_t prefix_len,
     return 0;
 }
 
+/* Defined in SCTE 128-1 2013 Sec 8.1 */
+int ff_alloc_afd_sei(const AVFrame *frame, size_t prefix_len,
+                     void **data, size_t *sei_size)
+{
+    AVFrameSideData *side_data = NULL;
+    uint8_t *sei_data;
+
+    if (frame)
+        side_data = av_frame_get_side_data(frame, AV_FRAME_DATA_AFD);
+
+    if (!side_data) {
+        *data = NULL;
+        return 0;
+    }
+
+    *sei_size = 9;
+    *data = av_mallocz(*sei_size + prefix_len);
+    if (!*data)
+        return AVERROR(ENOMEM);
+    sei_data = (uint8_t*)*data + prefix_len;
+
+    /* country code (SCTE 128-1 Sec 8.1.1) */
+    sei_data[0] = 181;
+    sei_data[1] = 0;
+    sei_data[2] = 49;
+
+    /* country code (SCTE 128-1 Sec 8.1.2) */
+    AV_WL32(sei_data + 3, MKTAG('D', 'T', 'G', '1'));
+
+    /* country code (SCTE 128-1 Sec 8.2.5) */
+    sei_data[7] = 0x41;
+    sei_data[8] = 0xf0 | side_data->data[0];
+
+    return 0;
+}
+
 int64_t ff_guess_coded_bitrate(AVCodecContext *avctx)
 {
     AVRational framerate = avctx->framerate;

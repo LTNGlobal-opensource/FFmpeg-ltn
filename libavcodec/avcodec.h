@@ -668,6 +668,7 @@ enum AVCodecID {
     AV_CODEC_ID_TTF = 0x18000,
 
     AV_CODEC_ID_SCTE_35, ///< Contain timestamp estimated through PCR of program stream.
+    AV_CODEC_ID_SCTE_104,
     AV_CODEC_ID_BINTEXT    = 0x18800,
     AV_CODEC_ID_XBIN,
     AV_CODEC_ID_IDF,
@@ -1326,6 +1327,12 @@ enum AVPacketSideDataType {
      * The number of bytes of CC data is AVPacketSideData.size.
      */
     AV_PKT_DATA_A53_CC,
+
+    /**
+     * Active Format Description data consisting of a single byte as specified
+     * in ETSI TS 101 154 using AVActiveFormatDescription enum.
+     */
+    AV_PKT_DATA_AFD,
 
     /**
      * The number of side data types.

@@ -27,12 +27,23 @@
 
 #include "libavutil/thread.h"
 #include "decklink_common_c.h"
+#if CONFIG_LIBKLVANC
+#include "libklvanc/vanc.h"
+#endif
 
 #ifdef _WIN32
 #define DECKLINK_BOOL BOOL
 #else
 #define DECKLINK_BOOL bool
 #endif
+
+/* Maximum number of channels possible across variants of Blackmagic cards.
+   Actual number for any particular model of card may be lower */
+#define DECKLINK_MAX_AUDIO_CHANNELS 32
+
+/* This isn't actually tied to the Blackmagic hardware - it's an arbitrary
+   number used to size the array of streams */
+#define DECKLINK_MAX_DATA_STREAMS 16
 
 class decklink_output_callback;
 class decklink_input_callback;
@@ -67,6 +78,8 @@ struct decklink_ctx {
     int bmd_width;
     int bmd_height;
     int bmd_field_dominance;
+    int supports_vanc;
+    int64_t max_audio_channels;
 
     /* Capture buffer queue */
     AVPacketQueue queue;
@@ -81,9 +94,13 @@ struct decklink_ctx {
     int64_t last_pts;
     unsigned long frameCount;
     unsigned int dropped;
-    AVStream *audio_st;
+    AVStream *audio_st[DECKLINK_MAX_AUDIO_CHANNELS];
+    int num_audio_streams;
+    AVStream *data_st[DECKLINK_MAX_DATA_STREAMS];
+    int num_data_streams;
     AVStream *video_st;
     AVStream *teletext_st;
+    uint16_t cdp_sequence_num;
 
     /* Options */
     int list_devices;
@@ -94,6 +111,7 @@ struct decklink_ctx {
     DecklinkPtsSource audio_pts_source;
     DecklinkPtsSource video_pts_source;
     int draw_bars;
+    BMDPixelFormat raw_format;
 
     int frames_preroll;
     int frames_buffer;
@@ -102,6 +120,10 @@ struct decklink_ctx {
     pthread_cond_t cond;
     int frames_buffer_available_spots;
     int autodetect;
+
+#if CONFIG_LIBKLVANC
+    struct klvanc_context_s *vanc_ctx;
+#endif
 
     int channels;
     int audio_depth;
@@ -127,7 +149,9 @@ static const BMDAudioConnection decklink_audio_connection_map[] = {
     bmdAudioConnectionAnalog,
     bmdAudioConnectionAnalogXLR,
     bmdAudioConnectionAnalogRCA,
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a050000
     bmdAudioConnectionMicrophone,
+#endif
 };
 
 static const BMDVideoConnection decklink_video_connection_map[] = {

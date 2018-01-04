@@ -5805,7 +5805,7 @@ done
 enabled cuda_sdk          && require cuda_sdk cuda.h cuCtxCreate -lcuda
 enabled chromaprint       && require chromaprint chromaprint.h chromaprint_get_version -lchromaprint
 enabled decklink          && { require_header DeckLinkAPI.h &&
-                               { check_cpp_condition DeckLinkAPIVersion.h "BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100" || die "ERROR: Decklink API version must be >= 10.6.1."; } }
+                               { check_cpp_condition DeckLinkAPIVersion.h "BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a010000" || die "ERROR: Decklink API version must be >= 10.1.1."; } }
 enabled libndi_newtek     && require_header Processing.NDI.Lib.h
 enabled frei0r            && require_header frei0r.h
 enabled gmp               && require gmp gmp.h mpz_export -lgmp

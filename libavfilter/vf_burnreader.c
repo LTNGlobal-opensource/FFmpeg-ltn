@@ -99,22 +99,26 @@ static int query_formats(AVFilterContext *ctx)
 
 static void analyzeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_t sizeBytes)
 {       
+        char t[160]; 
         uint32_t bits = 0;
+        time_t now;
+        uint8_t *x;
+        int startline, c;
+        FILE *fh;
 
 	/* Figure out where the vertical center of row of digits should be */
-	int startline = ctx->line + (ctx->bitheight / 2);
-	uint8_t *x = pic + (startline * frame->width);
+	startline = ctx->line + (ctx->bitheight / 2);
+	x = pic + (startline * frame->width);
 
 	/* Decode 32 bits */
-	for (int c = 31; c >= 0; c--) {
+	for (c = 31; c >= 0; c--) {
 		x += (ctx->bitwidth / 2);
 		if (*x > 0x80)
 			bits |= (1 << c);
 		x += (ctx->bitwidth / 2);
 	}
 
-        char t[160]; 
-        time_t now = time(0);
+        now = time(0);
         sprintf(t, "%s", ctime(&now));
         t[strlen(t) - 1] = 0;
         
@@ -141,14 +145,14 @@ static void analyzeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_
 	if (ctx->snapshot) {
 		char fn[64];
 		sprintf(fn, "snapshot-frame%010d-counter%010d.yuv420p", ctx->framesProcessed, (uint32_t)ctx->framecnt);
-		FILE *fh = fopen(fn, "wb");
+		fh = fopen(fn, "wb");
 		if (fh) {
 			fwrite(pic, 1, sizeBytes, fh);
 			fclose(fh);
 		}
 	}
-	printf("%s: Frame %dx%d fmt:%s buf:%p bytes:%d burned-in-frame#%08d totalframes#%08d totalErrors#%" PRIu64 "\n",
-		t, frame->width, frame->height, av_get_pix_fmt_name(frame->format), pic, sizeBytes,
+	printf("%s: Frame %dx%d fmt:%s bytes:%d burned-in-frame#%08d totalframes#%08d totalErrors#%" PRIu64 "\n",
+		t, frame->width, frame->height, av_get_pix_fmt_name(frame->format), sizeBytes,
 		bits, ctx->framesProcessed, ctx->totalErrors);
 }
 

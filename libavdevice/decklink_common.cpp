@@ -469,6 +469,10 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     IDeckLink *dl = NULL;
     IDeckLinkIterator *iter = CreateDeckLinkIteratorInstance();
+
+    av_log(avctx, AV_LOG_VERBOSE, "Using BlackMagic SDK version %s\n",
+           BLACKMAGIC_DECKLINK_API_VERSION_STRING);
+
     if (!iter) {
         av_log(avctx, AV_LOG_ERROR, "Could not create DeckLink iterator\n");
         return AVERROR_EXTERNAL;

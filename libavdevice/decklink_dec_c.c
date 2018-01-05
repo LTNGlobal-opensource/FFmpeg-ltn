@@ -44,6 +44,9 @@ static const AVOption options[] = {
     { "standard",     NULL,                                           0,  AV_OPT_TYPE_CONST, { .i64 = 0x7fff9fffeLL}, 0, 0,    DEC, "teletext_lines"},
     { "all",          NULL,                                           0,  AV_OPT_TYPE_CONST, { .i64 = 0x7ffffffffLL}, 0, 0,    DEC, "teletext_lines"},
     { "channels",     "number of audio channels", OFFSET(audio_channels), AV_OPT_TYPE_INT , { .i64 = 2   }, 2, 16, DEC },
+    { "audio_mode",   "audio mode",               OFFSET(audio_mode),     AV_OPT_TYPE_INT,   { .i64 = AUDIO_MODE_DISCRETE}, 0, 1,    DEC, "audio_mode"},
+    { "discrete",     NULL,                                           0,  AV_OPT_TYPE_CONST, { .i64 = AUDIO_MODE_DISCRETE}, 0, 0,    DEC, "audio_mode"},
+    { "pairs",        NULL,                                           0,  AV_OPT_TYPE_CONST, { .i64 = AUDIO_MODE_PAIRS}, 0, 0,    DEC, "audio_mode"},
     { "duplex_mode",  "duplex mode",              OFFSET(duplex_mode),    AV_OPT_TYPE_INT,   { .i64 = 0}, 0, 2,    DEC, "duplex_mode"},
     { "unset",         NULL,                                          0,  AV_OPT_TYPE_CONST, { .i64 = 0}, 0, 0,    DEC, "duplex_mode"},
     { "half",          NULL,                                          0,  AV_OPT_TYPE_CONST, { .i64 = 1}, 0, 0,    DEC, "duplex_mode"},
@@ -73,6 +76,7 @@ static const AVOption options[] = {
     { "draw_bars",     "draw bars on signal loss" , OFFSET(draw_bars),    AV_OPT_TYPE_BOOL,  { .i64 = 1}, 0, 1, DEC },
     { "queue_size",    "input queue buffer size",   OFFSET(queue_size),   AV_OPT_TYPE_INT64, { .i64 = (1024 * 1024 * 1024)}, 0, INT64_MAX, DEC },
     { "audio_depth",   "audio bitdepth (16 or 32)", OFFSET(audio_depth),  AV_OPT_TYPE_INT,   { .i64 = 16}, 16, 32, DEC },
+    { "enable_scte_104", "capture SCTE-104 VANC", OFFSET(enable_scte_104), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, DEC, "enable_scte_104"},
     { NULL },
 };
 

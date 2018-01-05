@@ -149,7 +149,9 @@ static const BMDAudioConnection decklink_audio_connection_map[] = {
     bmdAudioConnectionAnalog,
     bmdAudioConnectionAnalogXLR,
     bmdAudioConnectionAnalogRCA,
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a050000
     bmdAudioConnectionMicrophone,
+#endif
 };
 
 static const BMDVideoConnection decklink_video_connection_map[] = {

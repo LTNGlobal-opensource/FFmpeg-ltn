@@ -29,7 +29,18 @@ extern "C" {
 #ifdef _WIN32
 #include <DeckLinkAPI_i.c>
 #else
+/* The file provided by the SDK is known to be missing prototypes, which doesn't
+   cause issues with GCC since the warning doesn't apply to C++ files.  However
+   Clang does complain (and warnings are treated as errors), so suppress the
+   warning just for this one file */
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+#endif
 #include <DeckLinkAPIDispatch.cpp>
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 #endif
 
 extern "C" {
@@ -107,9 +118,15 @@ static int decklink_select_input(AVFormatContext *avctx, BMDDeckLinkConfiguratio
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a030000
     BMDDeckLinkAttributeID attr_id = (cfg_id == bmdDeckLinkConfigAudioInputConnection) ? BMDDeckLinkAudioInputConnections : BMDDeckLinkVideoInputConnections;
     int64_t bmd_input              = (cfg_id == bmdDeckLinkConfigAudioInputConnection) ? (int64_t)ctx->audio_input : (int64_t)ctx->video_input;
     const char *type_name          = (cfg_id == bmdDeckLinkConfigAudioInputConnection) ? "audio" : "video";
+#else
+    BMDDeckLinkAttributeID attr_id = BMDDeckLinkVideoInputConnections;
+    int64_t bmd_input              = (int64_t)ctx->video_input;
+    const char *type_name          = "video";
+#endif
     int64_t supported_connections = 0;
     HRESULT res;
 
@@ -149,10 +166,11 @@ int ff_decklink_set_configs(AVFormatContext *avctx,
                             decklink_direction_t direction) {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
-    HRESULT res;
 
     if (ctx->duplex_mode) {
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100
         DECKLINK_BOOL duplex_supported = false;
+        HRESULT res;
 
         if (ctx->attr->GetFlag(BMDDeckLinkSupportsDuplexModeConfiguration, &duplex_supported) != S_OK)
             duplex_supported = false;
@@ -166,12 +184,17 @@ int ff_decklink_set_configs(AVFormatContext *avctx,
         } else {
             av_log(avctx, AV_LOG_WARNING, "Unable to set duplex mode, because it is not supported.\n");
         }
+#else
+        av_log(avctx, AV_LOG_WARNING, "Unable to set duplex mode, because it is not supported by this version of the BlackMagic SDK.\n");
+#endif
     }
     if (direction == DIRECTION_IN) {
         int ret;
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a030000
         ret = decklink_select_input(avctx, bmdDeckLinkConfigAudioInputConnection);
         if (ret < 0)
             return ret;
+#endif
         ret = decklink_select_input(avctx, bmdDeckLinkConfigVideoInputConnection);
         if (ret < 0)
             return ret;
@@ -385,9 +408,11 @@ int ff_decklink_list_formats(AVFormatContext *avctx, decklink_direction_t direct
 
     if (direction == DIRECTION_IN) {
         int ret;
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a030000
         ret = decklink_select_input(avctx, bmdDeckLinkConfigAudioInputConnection);
         if (ret < 0)
             return ret;
+#endif
         ret = decklink_select_input(avctx, bmdDeckLinkConfigVideoInputConnection);
         if (ret < 0)
             return ret;
@@ -448,6 +473,10 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     IDeckLink *dl = NULL;
     IDeckLinkIterator *iter = CreateDeckLinkIteratorInstance();
+
+    av_log(avctx, AV_LOG_VERBOSE, "Using BlackMagic SDK version %s\n",
+           BLACKMAGIC_DECKLINK_API_VERSION_STRING);
+
     if (!iter) {
         av_log(avctx, AV_LOG_ERROR, "Could not create DeckLink iterator\n");
         return AVERROR_EXTERNAL;

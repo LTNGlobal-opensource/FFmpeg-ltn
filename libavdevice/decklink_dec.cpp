@@ -1127,7 +1127,9 @@ av_cold int ff_decklink_read_close(AVFormatContext *avctx)
 
     ff_decklink_cleanup(avctx);
     avpacket_queue_end(&ctx->queue);
+#if CONFIG_LIBKLVANC
     klvanc_context_destroy(ctx->vanc_ctx);
+#endif
 
     av_freep(&cctx->ctx);
 

@@ -278,9 +278,15 @@ For SD sources, ffmpeg needs to be compiled with @code{--enable-libzvbi}. For
 HD sources, on older (pre-4K) DeckLink card models you have to capture in 10
 bit mode.
 
+@item audio_mode
+Defines whether to capture a bundle of audio channels (the number of which is determined
+by the channels argument), or whether to capture a number of audio pairs (the number of
+which is determined by the maximum number of pairs supported by the card).  Must be
+@samp{bundled} or @samp{pairs}.  Defaults to @samp{bundled}.
+
 @item channels
 Defines number of audio channels to capture. Must be @samp{2}, @samp{8} or @samp{16}.
-Defaults to @samp{2}.
+Defaults to @samp{2}.  This parameter is ignored if audio_mode is set to pairs.
 
 @item duplex_mode
 Sets the decklink device duplex mode. Must be @samp{unset}, @samp{half} or @samp{full}.

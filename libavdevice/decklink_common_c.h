@@ -30,6 +30,11 @@ typedef enum DecklinkPtsSource {
     PTS_SRC_WALLCLOCK = 4,
 } DecklinkPtsSource;
 
+typedef enum DecklinkAudioMode {
+    AUDIO_MODE_BUNDLED = 0,
+    AUDIO_MODE_PAIRS = 1,
+} DecklinkAudioMode;
+
 struct decklink_cctx {
     const AVClass *cclass;
 
@@ -42,6 +47,7 @@ struct decklink_cctx {
     double preroll;
     int v210;
     int audio_channels;
+    int audio_mode;
     int audio_depth;
     int duplex_mode;
     DecklinkPtsSource audio_pts_source;

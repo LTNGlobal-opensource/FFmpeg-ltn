@@ -446,6 +446,7 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     IDeckLink *dl = NULL;
+    int64_t maxAudioChannels;
     IDeckLinkIterator *iter = CreateDeckLinkIteratorInstance();
     if (!iter) {
         av_log(avctx, AV_LOG_ERROR, "Could not create DeckLink iterator\n");
@@ -477,6 +478,17 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
         av_log(avctx, AV_LOG_ERROR, "Could not get attributes interface for '%s'\n", name);
         ff_decklink_cleanup(avctx);
         return AVERROR_EXTERNAL;
+    }
+
+    if (ctx->attr->GetInt(BMDDeckLinkMaximumAudioChannels, &maxAudioChannels) != S_OK) {
+        av_log(avctx, AV_LOG_WARNING, "Could not determine number of audio channels\n");
+        ctx->max_audio_channels = 0;
+    } else {
+        ctx->max_audio_channels = maxAudioChannels;
+    }
+    if (ctx->max_audio_channels > DECKLINK_MAX_AUDIO_CHANNELS) {
+        av_log(avctx, AV_LOG_WARNING, "Decklink card reported support for more channels than ffmpeg supports\n");
+        ctx->max_audio_channels = DECKLINK_MAX_AUDIO_CHANNELS;
     }
 
     return 0;

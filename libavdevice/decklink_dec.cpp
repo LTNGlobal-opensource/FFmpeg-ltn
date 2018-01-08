@@ -674,6 +674,30 @@ error:
     return ret;
 }
 
+static int setup_data(AVFormatContext *avctx)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+    AVStream *st;
+
+    if (cctx->enable_scte_104) {
+        st = avformat_new_stream(avctx, NULL);
+        if (!st) {
+            av_log(avctx, AV_LOG_ERROR, "Cannot add data stream\n");
+            return AVERROR(ENOMEM);
+        }
+        st->codecpar->codec_type  = AVMEDIA_TYPE_DATA;
+        st->time_base.den         = ctx->bmd_tb_den;
+        st->time_base.num         = ctx->bmd_tb_num;
+        st->codecpar->codec_id    = AV_CODEC_ID_SCTE_104;
+        avpriv_set_pts_info(st, 64, 1, 1000000);  /* 64 bits pts in us */
+        ctx->data_st[ctx->num_data_streams] = st;
+        ctx->num_data_streams++;
+    }
+
+    return 0;
+}
+
 #if CONFIG_LIBKLVANC
 /* VANC Callbacks */
 struct vanc_cb_ctx {
@@ -733,12 +757,44 @@ static int cb_EIA_708B(void *callback_context, struct klvanc_context_s *ctx,
     return 0;
 }
 
+static int cb_SCTE_104(void *callback_context, struct klvanc_context_s *ctx,
+                       struct klvanc_packet_scte_104_s *pkt)
+{
+    struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
+    decklink_cctx *decklink_cctx = (struct decklink_cctx *)cb_ctx->avctx->priv_data;
+    struct decklink_ctx *decklink_ctx = (struct decklink_ctx *)decklink_cctx->ctx;
+    AVPacket avpkt;
+    av_init_packet(&avpkt);
+
+    avpkt.stream_index = -1;
+    for (int i = 0; i < decklink_ctx->num_data_streams; i++) {
+        if (decklink_ctx->data_st[i]->codecpar->codec_id = AV_CODEC_ID_SCTE_104) {
+            avpkt.stream_index = decklink_ctx->data_st[i]->index;
+            break;
+        }
+    }
+    if (avpkt.stream_index == -1) {
+        /* SCTE-104 packet received but forwarding is disabled */
+        return 0;
+    }
+
+    avpkt.pts = cb_ctx->pkt->pts;
+    avpkt.dts = cb_ctx->pkt->dts;
+    avpkt.data = pkt->payload;
+    avpkt.size = pkt->payloadLengthBytes;
+    if (avpacket_queue_put(&decklink_ctx->queue, &avpkt) < 0) {
+        ++decklink_ctx->dropped;
+    }
+
+    return 0;
+}
+
 static struct klvanc_callbacks_s callbacks =
 {
     cb_AFD,
     cb_EIA_708B,
     NULL,
-    NULL,
+    cb_SCTE_104,
     NULL,
     NULL,
 };
@@ -1288,6 +1344,9 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
         avpriv_set_pts_info(st, 64, 1, 1000000);  /* 64 bits pts in us */
         ctx->teletext_st = st;
     }
+
+    /* Setup streams. */
+    setup_data(avctx);
 
     if (cctx->audio_mode == AUDIO_MODE_BUNDLED) {
         av_log(avctx, AV_LOG_VERBOSE, "Using %d input audio channels\n", ctx->audio_st[0]->codecpar->channels);

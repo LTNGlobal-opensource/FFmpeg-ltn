@@ -323,6 +323,10 @@ Defaults to @samp{1073741824}.
 Sets the audio sample bit depth. Must be @samp{16} or @samp{32}.
 Defaults to @samp{16}.
 
+@item enable_scte_104
+If set to @samp{true}, enables capture of SCTE-104 packets over SDI and
+creation of the corresponding stream at startup.  Defaults to @samp{false}.
+
 @end table
 
 @subsection Examples

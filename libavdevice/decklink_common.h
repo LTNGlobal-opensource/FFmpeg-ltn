@@ -59,6 +59,13 @@ typedef struct AVPacketQueue {
     int64_t max_q_size;
 } AVPacketQueue;
 
+void avpacket_queue_init(AVFormatContext *avctx, AVPacketQueue *q);
+void avpacket_queue_flush(AVPacketQueue *q);
+void avpacket_queue_end(AVPacketQueue *q);
+unsigned long long avpacket_queue_size(AVPacketQueue *q);
+int avpacket_queue_put(AVPacketQueue *q, AVPacket *pkt);
+int avpacket_queue_get(AVPacketQueue *q, AVPacket *pkt, int block);
+
 struct decklink_ctx {
     /* DeckLink SDK interfaces */
     IDeckLink *dl;
@@ -127,6 +134,7 @@ struct decklink_ctx {
 
     int channels;
     int audio_depth;
+    int64_t queue_size;
 };
 
 typedef enum { DIRECTION_IN, DIRECTION_OUT} decklink_direction_t;

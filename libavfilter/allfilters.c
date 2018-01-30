@@ -54,6 +54,7 @@ static void register_all(void)
     REGISTER_FILTER(AFIR,           afir,           af);
     REGISTER_FILTER(AFORMAT,        aformat,        af);
     REGISTER_FILTER(AGATE,          agate,          af);
+    REGISTER_FILTER(AIIR,           aiir,           af);
     REGISTER_FILTER(AINTERLEAVE,    ainterleave,    af);
     REGISTER_FILTER(ALIMITER,       alimiter,       af);
     REGISTER_FILTER(ALLPASS,        allpass,        af);
@@ -137,6 +138,7 @@ static void register_all(void)
     REGISTER_FILTER(ANOISESRC,      anoisesrc,      asrc);
     REGISTER_FILTER(ANULLSRC,       anullsrc,       asrc);
     REGISTER_FILTER(FLITE,          flite,          asrc);
+    REGISTER_FILTER(HILBERT,        hilbert,        asrc);
     REGISTER_FILTER(SINE,           sine,           asrc);
 
     REGISTER_FILTER(ANULLSINK,      anullsink,      asink);
@@ -177,6 +179,7 @@ static void register_all(void)
     REGISTER_FILTER(DCTDNOIZ,       dctdnoiz,       vf);
     REGISTER_FILTER(DEBAND,         deband,         vf);
     REGISTER_FILTER(DECIMATE,       decimate,       vf);
+    REGISTER_FILTER(DECONVOLVE,     deconvolve,     vf);
     REGISTER_FILTER(DEFLATE,        deflate,        vf);
     REGISTER_FILTER(DEFLICKER,      deflicker,      vf);
     REGISTER_FILTER(DEINTERLACE_QSV,deinterlace_qsv,vf);
@@ -195,6 +198,7 @@ static void register_all(void)
     REGISTER_FILTER(DRAWTEXT,       drawtext,       vf);
     REGISTER_FILTER(EDGEDETECT,     edgedetect,     vf);
     REGISTER_FILTER(ELBG,           elbg,           vf);
+    REGISTER_FILTER(ENTROPY,        entropy,        vf);
     REGISTER_FILTER(EQ,             eq,             vf);
     REGISTER_FILTER(EROSION,        erosion,        vf);
     REGISTER_FILTER(EXTRACTPLANES,  extractplanes,  vf);
@@ -204,6 +208,7 @@ static void register_all(void)
     REGISTER_FILTER(FIELDHINT,      fieldhint,      vf);
     REGISTER_FILTER(FIELDMATCH,     fieldmatch,     vf);
     REGISTER_FILTER(FIELDORDER,     fieldorder,     vf);
+    REGISTER_FILTER(FILLBORDERS,    fillborders,    vf);
     REGISTER_FILTER(FIND_RECT,      find_rect,      vf);
     REGISTER_FILTER(FLOODFILL,      floodfill,      vf);
     REGISTER_FILTER(FORMAT,         format,         vf);
@@ -310,6 +315,7 @@ static void register_all(void)
     REGISTER_FILTER(SETDAR,         setdar,         vf);
     REGISTER_FILTER(SETFIELD,       setfield,       vf);
     REGISTER_FILTER(SETPTS,         setpts,         vf);
+    REGISTER_FILTER(SETRANGE,       setrange,       vf);
     REGISTER_FILTER(SETSAR,         setsar,         vf);
     REGISTER_FILTER(SETTB,          settb,          vf);
     REGISTER_FILTER(SHOWINFO,       showinfo,       vf);

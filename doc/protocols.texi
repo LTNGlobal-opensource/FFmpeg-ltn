@@ -321,6 +321,9 @@ Sets the maximum delay in seconds after which to give up reconnecting
 @item mime_type
 Export the MIME type.
 
+@item http_version
+Exports the HTTP response version number. Usually "1.0" or "1.1".
+
 @item icy
 If set to 1 request ICY (SHOUTcast) metadata from the server. If the server
 supports this, the metadata has to be retrieved by the application by reading
@@ -1286,7 +1289,7 @@ If enabled, try to verify the peer that we are communicating with.
 Note, if using OpenSSL, this currently only makes sure that the
 peer certificate is signed by one of the root certificates in the CA
 database, but it does not validate that the certificate actually
-matches the host name we are trying to connect to. (With GnuTLS,
+matches the host name we are trying to connect to. (With other backends,
 the host name is validated as well.)
 
 This is disabled by default since it requires a CA database to be

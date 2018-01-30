@@ -926,6 +926,7 @@ afftfilt="1-clip((b/nb)*b,0,1)"
 @end example
 @end itemize
 
+@anchor{afir}
 @section afir
 
 Apply an arbitrary Frequency Impulse Response filter.
@@ -1059,6 +1060,41 @@ the reduction.
 Default is @code{average}. Can be @code{average} or @code{maximum}.
 @end table
 
+@section aiir
+
+Apply an arbitrary Infinite Impulse Response filter.
+
+It accepts the following parameters:
+
+@table @option
+@item a
+Set denominator/poles coefficients.
+
+@item b
+Set nominator/zeros coefficients.
+
+@item dry_gain
+Set input gain.
+
+@item wet_gain
+Set output gain.
+@end table
+
+Coefficients are separated by spaces and are in ascending order.
+Different coefficients can be provided for every channel, in such case
+use '|' to separate coefficients. Last provided coefficients will be
+used for all remaining channels.
+
+@subsection Examples
+
+@itemize
+@item
+Apply 2 pole elliptic notch at arround 5000Hz for 48000 Hz sample rate:
+@example
+aiir=b=7.957584807809675810E-1 -2.575128568908332300 3.674839853930788710 -2.57512875289799137 7.957586296317130880E-1:a=1 -2.86950072432325953 3.63022088054647218 -2.28075678147272232 6.361362326477423500E-1
+@end example
+@end itemize
+
 @section alimiter
 
 The limiter prevents an input signal from rising over a desired threshold.
@@ -1127,6 +1163,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -1134,6 +1172,23 @@ Specify the band-width of a filter in width_type units.
 
 @item channels, c
 Specify which channels to filter, by default all available are filtered.
+@end table
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change allpass frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change allpass width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change allpass width.
+Syntax for the command is : "@var{width}"
 @end table
 
 @section aloop
@@ -1867,6 +1922,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -1874,6 +1931,23 @@ Specify the band-width of a filter in width_type units.
 
 @item channels, c
 Specify which channels to filter, by default all available are filtered.
+@end table
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change bandpass frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change bandpass width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change bandpass width.
+Syntax for the command is : "@var{width}"
 @end table
 
 @section bandreject
@@ -1899,6 +1973,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -1906,6 +1982,23 @@ Specify the band-width of a filter in width_type units.
 
 @item channels, c
 Specify which channels to filter, by default all available are filtered.
+@end table
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change bandreject frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change bandreject width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change bandreject width.
+Syntax for the command is : "@var{width}"
 @end table
 
 @section bass
@@ -1938,6 +2031,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -1947,6 +2042,27 @@ Determine how steep is the filter's shelf transition.
 Specify which channels to filter, by default all available are filtered.
 @end table
 
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change bass frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change bass width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change bass width.
+Syntax for the command is : "@var{width}"
+
+@item gain, g
+Change bass gain.
+Syntax for the command is : "@var{gain}"
+@end table
+
 @section biquad
 
 Apply a biquad IIR filter with the given coefficients.
@@ -1954,6 +2070,20 @@ Where @var{b0}, @var{b1}, @var{b2} and @var{a0}, @var{a1}, @var{a2}
 are the numerator and denominator coefficients respectively.
 and @var{channels}, @var{c} specify which channels to filter, by default all
 available are filtered.
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item a0
+@item a1
+@item a2
+@item b0
+@item b1
+@item b2
+Change biquad parameter.
+Syntax for the command is : "@var{value}"
+@end table
 
 @section bs2b
 Bauer stereo to binaural transformation, which improves headphone listening of
@@ -2556,6 +2686,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -2583,6 +2715,27 @@ Apply 2 dB gain at 1000 Hz with Q 1 and attenuate 5 dB at 100 Hz with Q 2:
 equalizer=f=1000:t=q:w=1:g=2,equalizer=f=100:t=q:w=2:g=-5
 @end example
 @end itemize
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change equalizer frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change equalizer width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change equalizer width.
+Syntax for the command is : "@var{width}"
+
+@item gain, g
+Change equalizer gain.
+Syntax for the command is : "@var{gain}"
+@end table
 
 @section extrastereo
 
@@ -2972,6 +3125,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -2981,6 +3136,23 @@ The default is 0.707q and gives a Butterworth response.
 
 @item channels, c
 Specify which channels to filter, by default all available are filtered.
+@end table
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change highpass frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change highpass width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change highpass width.
+Syntax for the command is : "@var{width}"
 @end table
 
 @section join
@@ -3261,6 +3433,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -3280,6 +3454,23 @@ Lowpass only LFE channel, it LFE is not present it does nothing:
 lowpass=c=LFE
 @end example
 @end itemize
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change lowpass frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change lowpass width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change lowpass width.
+Syntax for the command is : "@var{width}"
+@end table
 
 @section lv2
 
@@ -4153,6 +4344,8 @@ Q-Factor
 octave
 @item s
 slope
+@item k
+kHz
 @end table
 
 @item width, w
@@ -4160,6 +4353,27 @@ Determine how steep is the filter's shelf transition.
 
 @item channels, c
 Specify which channels to filter, by default all available are filtered.
+@end table
+
+@subsection Commands
+
+This filter supports the following commands:
+@table @option
+@item frequency, f
+Change treble frequency.
+Syntax for the command is : "@var{frequency}"
+
+@item width_type, t
+Change treble width_type.
+Syntax for the command is : "@var{width_type}"
+
+@item width, w
+Change treble width.
+Syntax for the command is : "@var{width}"
+
+@item gain, g
+Change treble gain.
+Syntax for the command is : "@var{gain}"
 @end table
 
 @section tremolo
@@ -4694,6 +4908,33 @@ Generate 60 seconds of pink noise, with a 44.1 kHz sampling rate and an amplitud
 anoisesrc=d=60:c=pink:r=44100:a=0.5
 @end example
 @end itemize
+
+@section hilbert
+
+Generate odd-tap Hilbert transform FIR coefficients.
+
+The resulting stream can be used with @ref{afir} filter for phase-shifting
+the signal by 90 degrees.
+
+This is used in many matrix coding schemes and for analytic signal generation.
+The process is often written as a multiplication by i (or j), the imaginary unit.
+
+The filter accepts the following options:
+
+@table @option
+
+@item sample_rate, s
+Set sample rate, default is 44100.
+
+@item taps, t
+Set length of FIR filter, default is 22051.
+
+@item nb_samples, n
+Set number of samples per each frame.
+
+@item win_func, w
+Set window function to be used when generating FIR coefficients.
+@end table
 
 @section sine
 
@@ -6025,7 +6266,7 @@ colorspace=smpte240m
 
 @section convolution
 
-Apply convolution 3x3 or 5x5 filter.
+Apply convolution 3x3, 5x5 or 7x7 filter.
 
 The filter accepts the following options:
 
@@ -6035,7 +6276,7 @@ The filter accepts the following options:
 @item 2m
 @item 3m
 Set matrix for each plane.
-Matrix is sequence of 9 or 25 signed integers.
+Matrix is sequence of 9, 25 or 49 signed integers.
 
 @item 0rdiv
 @item 1rdiv
@@ -6759,6 +7000,29 @@ Set whether or not chroma is considered in the metric calculations. Default is
 @code{1}.
 @end table
 
+@section deconvolve
+
+Apply 2D deconvolution of video stream in frequency domain using second stream
+as impulse.
+
+The filter accepts the following options:
+
+@table @option
+@item planes
+Set which planes to process.
+
+@item impulse
+Set which impulse video frames will be processed, can be @var{first}
+or @var{all}. Default is @var{all}.
+
+@item noise
+Set noise when doing divisions. Default is @var{0.0000001}. Useful when width
+and height are not same and not power of 2 or if stream prior to convolving
+had noise.
+@end table
+
+The @code{deconvolve} filter also supports the @ref{framesync} options.
+
 @section deflate
 
 Apply deflate effect to the video.
@@ -7142,9 +7406,15 @@ value @code{invert} is used, the box edge color is the same as the
 video with inverted luma.
 
 @item thickness, t
-The expression which sets the thickness of the box edge. Default value is @code{3}.
+The expression which sets the thickness of the box edge.
+A value of @code{fill} will create a filled box. Default value is @code{3}.
 
 See below for the list of accepted constants.
+
+@item replace
+Applicable if the input has alpha. With value @code{1}, the pixels of the painted box
+will overwrite the video's color and alpha pixels.
+Default is @code{0}, which composites the box onto the input, leaving the video's alpha intact.
 @end table
 
 The parameters for @var{x}, @var{y}, @var{w} and @var{h} and @var{t} are expressions containing the
@@ -7205,7 +7475,7 @@ drawbox=x=10:y=20:w=200:h=60:color=red@@0.5
 @item
 Fill the box with pink color:
 @example
-drawbox=x=10:y=10:w=100:h=100:color=pink@@0.5:t=max
+drawbox=x=10:y=10:w=100:h=100:color=pink@@0.5:t=fill
 @end example
 
 @item
@@ -7242,6 +7512,11 @@ video with inverted luma.
 The expression which sets the thickness of the grid line. Default value is @code{1}.
 
 See below for the list of accepted constants.
+
+@item replace
+Applicable if the input has alpha. With @code{1} the pixels of the painted grid
+will overwrite the video's color and alpha pixels.
+Default is @code{0}, which composites the grid onto the input, leaving the video's alpha intact.
 @end table
 
 The parameters for @var{x}, @var{y}, @var{w} and @var{h} and @var{t} are expressions containing the
@@ -8008,6 +8283,20 @@ Set pal8 output pixel format. This option does not work with codebook
 length greater than 256.
 @end table
 
+@section entropy
+
+Measure graylevel entropy in histogram of color channels of video frames.
+
+It accepts the following parameters:
+
+@table @option
+@item mode
+Can be either @var{normal} or @var{diff}. Default is @var{normal}.
+
+@var{diff} mode measures entropy of histogram delta values, absolute differences
+between neighbour histogram values.
+@end table
+
 @section fade
 
 Apply a fade-in/out effect to the input video.
@@ -8609,6 +8898,48 @@ framework.
 
 It does not take parameters.
 
+@section fillborders
+
+Fill borders of the input video, without changing video stream dimensions.
+Sometimes video can have garbage at the four edges and you may not want to
+crop video input to keep size multiple of some number.
+
+This filter accepts the following options:
+
+@table @option
+@item left
+Number of pixels to fill from left border.
+
+@item right
+Number of pixels to fill from right border.
+
+@item top
+Number of pixels to fill from top border.
+
+@item bottom
+Number of pixels to fill from bottom border.
+
+@item mode
+Set fill mode.
+
+It accepts the following values:
+@table @samp
+@item smear
+fill pixels using outermost pixels
+
+@item mirror
+fill pixels using mirroring
+
+@item fixed
+fill pixels with constant value
+@end table
+
+Default is @var{smear}.
+
+@item color
+Set color for pixels in fixed mode. Default is @var{black}.
+@end table
+
 @section find_rect
 
 Find a rectangular object
@@ -8890,7 +9221,7 @@ Specify the level at which a scene change is detected as a value between
 0 and 100 to indicate a new scene; a low value reflects a low
 probability for the current frame to introduce a new scene, while a higher
 value means the current frame is more likely to be one.
-The default is @code{7}.
+The default is @code{8.2}.
 
 @item flags
 Specify flags influencing the filter process.
@@ -11285,6 +11616,10 @@ Default value is @samp{yuv420}.
 
 @item repeatlast
 See @ref{framesync}.
+
+@item alpha
+Set format of alpha of the overlaid video, it can be @var{straight} or
+@var{premultiplied}. Default is @var{straight}.
 @end table
 
 The @option{x}, and @option{y} expressions can contain the following
@@ -13043,13 +13378,13 @@ a specific value used for the output and encoder. If not specified, the
 range depends on the pixel format. Possible values:
 
 @table @samp
-@item auto
+@item auto/unknown
 Choose automatically.
 
 @item jpeg/full/pc
 Set full range (0-255 in case of 8-bit luma).
 
-@item mpeg/tv
+@item mpeg/limited/tv
 Set "MPEG" range (16-235 in case of 8-bit luma).
 @end table
 
@@ -14635,6 +14970,11 @@ is "black".
 
 @item overlap
 Set the number of frames to overlap when tiling several successive frames together.
+The value must be between @code{0} and @var{nb_frames - 1}.
+
+@item init_padding
+Set the number of frames to initially be empty before displaying first output frame.
+This controls how soon will one get first output frame.
 The value must be between @code{0} and @var{nb_frames - 1}.
 @end table
 
@@ -17051,28 +17391,24 @@ The sources accept the following parameters:
 
 @table @option
 
-@item alpha
-Specify the alpha (opacity) of the background, only available in the
-@code{testsrc2} source. The value must be between 0 (fully transparent) and
-255 (fully opaque, the default).
-
-@item color, c
-Specify the color of the source, only available in the @code{color}
-source. For the syntax of this option, check the "Color" section in the
-ffmpeg-utils manual.
-
 @item level
 Specify the level of the Hald CLUT, only available in the @code{haldclutsrc}
 source. A level of @code{N} generates a picture of @code{N*N*N} by @code{N*N*N}
 pixels to be used as identity matrix for 3D lookup tables. Each component is
 coded on a @code{1/(N*N)} scale.
 
+@item color, c
+Specify the color of the source, only available in the @code{color}
+source. For the syntax of this option, check the "Color" section in the
+ffmpeg-utils manual.
+
 @item size, s
 Specify the size of the sourced video. For the syntax of this option, check the
 @ref{video size syntax,,"Video size" section in the ffmpeg-utils manual,ffmpeg-utils}.
 The default value is @code{320x240}.
 
-This option is not available with the @code{haldclutsrc} filter.
+This option is not available with the @code{allrgb}, @code{allyuv}, and
+@code{haldclutsrc} filters.
 
 @item rate, r
 Specify the frame rate of the sourced video, as the number of frames
@@ -17081,9 +17417,6 @@ generated per second. It has to be a string in the format
 number or a valid video frame rate abbreviation. The default value is
 "25".
 
-@item sar
-Set the sample aspect ratio of the sourced video.
-
 @item duration, d
 Set the duration of the sourced video. See
 @ref{time duration syntax,,the Time duration section in the ffmpeg-utils(1) manual,ffmpeg-utils}
@@ -17091,6 +17424,14 @@ for the accepted syntax.
 
 If not specified, or the expressed duration is negative, the video is
 supposed to be generated forever.
+
+@item sar
+Set the sample aspect ratio of the sourced video.
+
+@item alpha
+Specify the alpha (opacity) of the background, only available in the
+@code{testsrc2} source. The value must be between 0 (fully transparent) and
+255 (fully opaque, the default).
 
 @item decimals, n
 Set the number of decimals to show in the timestamp, only available in the
@@ -17101,27 +17442,32 @@ timestamp value multiplied by the power of 10 of the specified
 value. Default value is 0.
 @end table
 
-For example the following:
+@subsection Examples
+
+@itemize
+@item
+Generate a video with a duration of 5.3 seconds, with size
+176x144 and a frame rate of 10 frames per second:
 @example
 testsrc=duration=5.3:size=qcif:rate=10
 @end example
 
-will generate a video with a duration of 5.3 seconds, with size
-176x144 and a frame rate of 10 frames per second.
-
+@item
 The following graph description will generate a red source
 with an opacity of 0.2, with size "qcif" and a frame rate of 10
-frames per second.
+frames per second:
 @example
 color=c=red@@0.2:s=qcif:r=10
 @end example
 
+@item
 If the input content is to be ignored, @code{nullsrc} can be used. The
 following command generates noise in the luminance plane by employing
 the @code{geq} filter:
 @example
 nullsrc=s=256x256, geq=random(1)*255:128:128
 @end example
+@end itemize
 
 @subsection Commands
 
@@ -18447,6 +18793,37 @@ asetpts=N/SR/TB
 @end example
 
 @end itemize
+
+@section setrange
+
+Force color range for the output video frame.
+
+The @code{setrange} filter marks the color range property for the
+output frames. It does not change the input frame, but only sets the
+corresponding property, which affects how the frame is treated by
+following filters.
+
+The filter accepts the following options:
+
+@table @option
+
+@item range
+Available values are:
+
+@table @samp
+@item auto
+Keep the same color range property.
+
+@item unspecified, unknown
+Set the color range as unspecified.
+
+@item limited, tv, mpeg
+Set the color range as limited.
+
+@item full, pc, jpeg
+Set the color range as full.
+@end table
+@end table
 
 @section settb, asettb
 

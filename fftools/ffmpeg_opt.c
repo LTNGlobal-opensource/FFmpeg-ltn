@@ -702,7 +702,8 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         AVStream *st = ic->streams[i];
         AVCodecParameters *par = st->codecpar;
         InputStream *ist = av_mallocz(sizeof(*ist));
-        char *framerate = NULL, *hwaccel = NULL, *hwaccel_device = NULL;
+        char *framerate = NULL, *hwaccel_device = NULL;
+        const char *hwaccel = NULL;
         char *hwaccel_output_format = NULL;
         char *codec_tag = NULL;
         char *next;
@@ -1160,7 +1161,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
     f->loop = o->loop;
     f->duration = 0;
     f->time_base = (AVRational){ 1, 1 };
-#if HAVE_PTHREADS
+#if HAVE_THREADS
     f->thread_queue_size = o->thread_queue_size > 0 ? o->thread_queue_size : 8;
 #endif
 

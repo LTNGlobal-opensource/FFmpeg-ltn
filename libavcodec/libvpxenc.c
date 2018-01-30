@@ -110,6 +110,7 @@ typedef struct VPxEncoderContext {
     float level;
     int row_mt;
     int tune_content;
+    int corpus_complexity;
 } VPxContext;
 
 /** String mappings for enum vp8e_enc_control_id */
@@ -213,6 +214,10 @@ static av_cold void dump_enc_cfg(AVCodecContext *avctx,
            width, "rc_2pass_vbr_bias_pct:",       cfg->rc_2pass_vbr_bias_pct,
            width, "rc_2pass_vbr_minsection_pct:", cfg->rc_2pass_vbr_minsection_pct,
            width, "rc_2pass_vbr_maxsection_pct:", cfg->rc_2pass_vbr_maxsection_pct);
+#if VPX_ENCODER_ABI_VERSION >= 14
+    av_log(avctx, level, "  %*s%u\n",
+           width, "rc_2pass_vbr_corpus_complexity:", cfg->rc_2pass_vbr_corpus_complexity);
+#endif
     av_log(avctx, level, "keyframing settings\n"
            "  %*s%d\n  %*s%u\n  %*s%u\n",
            width, "kf_mode:",     cfg->kf_mode,
@@ -565,6 +570,14 @@ FF_ENABLE_DEPRECATION_WARNINGS
     if (avctx->rc_max_rate)
         enccfg.rc_2pass_vbr_maxsection_pct =
             avctx->rc_max_rate * 100LL / avctx->bit_rate;
+#if CONFIG_LIBVPX_VP9_ENCODER
+    if (avctx->codec_id == AV_CODEC_ID_VP9) {
+#if VPX_ENCODER_ABI_VERSION >= 14
+        if (ctx->corpus_complexity >= 0)
+            enccfg.rc_2pass_vbr_corpus_complexity = ctx->corpus_complexity;
+#endif
+    }
+#endif
 
     if (avctx->rc_buffer_size)
         enccfg.rc_buf_sz         =
@@ -1141,6 +1154,9 @@ static const AVOption vp9_options[] = {
     { "film",            "Film content; improves grain retention", 0, AV_OPT_TYPE_CONST, {.i64 = 2}, 0, 0, VE, "tune_content" },
 #endif
 #endif
+#if VPX_ENCODER_ABI_VERSION >= 14
+    { "corpus-complexity", "corpus vbr complexity midpoint", OFFSET(corpus_complexity), AV_OPT_TYPE_INT, {.i64 = -1}, -1, 10000, VE },
+#endif
     LEGACY_OPTIONS
     { NULL }
 };
@@ -1183,6 +1199,7 @@ AVCodec ff_libvpx_vp8_encoder = {
     .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUVA420P, AV_PIX_FMT_NONE },
     .priv_class     = &class_vp8,
     .defaults       = defaults,
+    .wrapper_name   = "libvpx",
 };
 #endif /* CONFIG_LIBVPX_VP8_ENCODER */
 
@@ -1213,5 +1230,6 @@ AVCodec ff_libvpx_vp9_encoder = {
     .priv_class     = &class_vp9,
     .defaults       = defaults,
     .init_static_data = ff_vp9_init_static,
+    .wrapper_name   = "libvpx",
 };
 #endif /* CONFIG_LIBVPX_VP9_ENCODER */

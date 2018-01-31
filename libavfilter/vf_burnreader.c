@@ -58,7 +58,7 @@ typedef struct BurnContext
 static const AVOption burnreader_options[] = {
 
 	/* pixel row/line at which to the top of the digit box begins. */
-	{ "line", "set line", OFFSET(line), AV_OPT_TYPE_INT, {.i64=200}, 1, 1080, FLAGS, "line" },
+	{ "line", "set line", OFFSET(line), AV_OPT_TYPE_INT, {.i64=1}, 1, 1080, FLAGS, "line" },
 	{ "snapshot", "extract each frame to disk as YUV420P", OFFSET(snapshot), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS, "snapshot" },
 
 	/* With and height of each bit in pixels, usually digits are 30x30 pixels. */

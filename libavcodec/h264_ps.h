@@ -71,18 +71,38 @@ typedef struct SPS {
     int vui_parameters_present_flag;
     AVRational sar;
     int video_signal_type_present_flag;
+    int video_format;
+    int aspect_ratio_info_present_flag;
+    int aspect_ratio_idc;
+    int overscan_info_present_flag;
+    int overscan_appropriate_flag;
     int full_range;
     int colour_description_present_flag;
     enum AVColorPrimaries color_primaries;
     enum AVColorTransferCharacteristic color_trc;
     enum AVColorSpace colorspace;
+    int chroma_location_info_present_flag;
     int timing_info_present_flag;
     uint32_t num_units_in_tick;
     uint32_t time_scale;
     int fixed_frame_rate_flag;
+
+    int bit_rate_scale;
+    int bit_rate_value[16];
+    int cpb_size_scale;
+    int cpb_size_value[16];
+    int cbr_flag[16];
+
     short offset_for_ref_frame[256]; // FIXME dyn aloc?
     int bitstream_restriction_flag;
+    int motion_vectors_over_pic_boundaries_flag;
+    int max_bytes_per_pic_denom;
+    int max_bits_per_mb_denom;
+    int log2_max_mv_length_horizontal;
+    int log2_max_mv_length_vertical;
     int num_reorder_frames;
+    int max_dec_frame_buffering;
+
     int scaling_matrix_present;
     uint8_t scaling_matrix4[6][16];
     uint8_t scaling_matrix8[6][64];
@@ -162,4 +182,5 @@ int ff_h264_decode_picture_parameter_set(GetBitContext *gb, AVCodecContext *avct
  */
 void ff_h264_ps_uninit(H264ParamSets *ps);
 
+void ltn_display_ps(H264ParamSets *ps);
 #endif /* AVCODEC_H264_PS_H */

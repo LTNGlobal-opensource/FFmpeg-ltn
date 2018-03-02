@@ -116,12 +116,12 @@ static inline int decode_hrd_parameters(GetBitContext *gb, AVCodecContext *avctx
         return AVERROR_INVALIDDATA;
     }
 
-    get_bits(gb, 4); /* bit_rate_scale */
-    get_bits(gb, 4); /* cpb_size_scale */
+    sps->bit_rate_scale = get_bits(gb, 4); /* bit_rate_scale */
+    sps->cpb_size_scale = get_bits(gb, 4); /* cpb_size_scale */
     for (i = 0; i < cpb_count; i++) {
-        get_ue_golomb_long(gb); /* bit_rate_value_minus1 */
-        get_ue_golomb_long(gb); /* cpb_size_value_minus1 */
-        get_bits1(gb);          /* cbr_flag */
+        sps->bit_rate_value[i] = get_ue_golomb_long(gb); /* bit_rate_value_minus1 */
+        sps->cpb_size_value[i] = get_ue_golomb_long(gb); /* cpb_size_value_minus1 */
+        sps->cbr_flag[i] = get_bits1(gb);          /* cbr_flag */
     }
     sps->initial_cpb_removal_delay_length = get_bits(gb, 5) + 1;
     sps->cpb_removal_delay_length         = get_bits(gb, 5) + 1;
@@ -134,18 +134,15 @@ static inline int decode_hrd_parameters(GetBitContext *gb, AVCodecContext *avctx
 static inline int decode_vui_parameters(GetBitContext *gb, AVCodecContext *avctx,
                                         SPS *sps)
 {
-    int aspect_ratio_info_present_flag;
-    unsigned int aspect_ratio_idc;
+    sps->aspect_ratio_info_present_flag = get_bits1(gb);
 
-    aspect_ratio_info_present_flag = get_bits1(gb);
-
-    if (aspect_ratio_info_present_flag) {
-        aspect_ratio_idc = get_bits(gb, 8);
-        if (aspect_ratio_idc == EXTENDED_SAR) {
+    if (sps->aspect_ratio_info_present_flag) {
+        sps->aspect_ratio_idc = get_bits(gb, 8);
+        if (sps->aspect_ratio_idc == EXTENDED_SAR) {
             sps->sar.num = get_bits(gb, 16);
             sps->sar.den = get_bits(gb, 16);
-        } else if (aspect_ratio_idc < FF_ARRAY_ELEMS(ff_h264_pixel_aspect)) {
-            sps->sar = ff_h264_pixel_aspect[aspect_ratio_idc];
+        } else if (sps->aspect_ratio_idc < FF_ARRAY_ELEMS(ff_h264_pixel_aspect)) {
+            sps->sar = ff_h264_pixel_aspect[sps->aspect_ratio_idc];
         } else {
             av_log(avctx, AV_LOG_ERROR, "illegal aspect ratio\n");
             return AVERROR_INVALIDDATA;
@@ -155,12 +152,13 @@ static inline int decode_vui_parameters(GetBitContext *gb, AVCodecContext *avctx
         sps->sar.den = 0;
     }
 
-    if (get_bits1(gb))      /* overscan_info_present_flag */
-        get_bits1(gb);      /* overscan_appropriate_flag */
+    sps->overscan_info_present_flag = get_bits1(gb);
+    if (sps->overscan_info_present_flag)
+        sps->overscan_appropriate_flag = get_bits1(gb);
 
     sps->video_signal_type_present_flag = get_bits1(gb);
     if (sps->video_signal_type_present_flag) {
-        get_bits(gb, 3);                 /* video_format */
+        sps->video_format = get_bits(gb, 3);
         sps->full_range = get_bits1(gb); /* video_full_range_flag */
 
         sps->colour_description_present_flag = get_bits1(gb);
@@ -180,7 +178,8 @@ static inline int decode_vui_parameters(GetBitContext *gb, AVCodecContext *avctx
     }
 
     /* chroma_location_info_present_flag */
-    if (get_bits1(gb)) {
+    sps->chroma_location_info_present_flag = get_bits1(gb);
+    if (sps->chroma_location_info_present_flag) {
         /* chroma_sample_location_type_top_field */
         avctx->chroma_sample_location = get_ue_golomb(gb) + 1;
         get_ue_golomb(gb);  /* chroma_sample_location_type_bottom_field */
@@ -223,13 +222,13 @@ static inline int decode_vui_parameters(GetBitContext *gb, AVCodecContext *avctx
         return 0;
     sps->bitstream_restriction_flag = get_bits1(gb);
     if (sps->bitstream_restriction_flag) {
-        get_bits1(gb);     /* motion_vectors_over_pic_boundaries_flag */
-        get_ue_golomb(gb); /* max_bytes_per_pic_denom */
-        get_ue_golomb(gb); /* max_bits_per_mb_denom */
-        get_ue_golomb(gb); /* log2_max_mv_length_horizontal */
-        get_ue_golomb(gb); /* log2_max_mv_length_vertical */
+        sps->motion_vectors_over_pic_boundaries_flag = get_bits1(gb);     /* motion_vectors_over_pic_boundaries_flag */
+        sps->max_bytes_per_pic_denom = get_ue_golomb(gb); /* max_bytes_per_pic_denom */
+        sps->max_bits_per_mb_denom = get_ue_golomb(gb); /* max_bits_per_mb_denom */
+        sps->log2_max_mv_length_horizontal = get_ue_golomb(gb); /* log2_max_mv_length_horizontal */
+        sps->log2_max_mv_length_vertical = get_ue_golomb(gb); /* log2_max_mv_length_vertical */
         sps->num_reorder_frames = get_ue_golomb(gb);
-        get_ue_golomb(gb); /*max_dec_frame_buffering*/
+        sps->max_dec_frame_buffering = get_ue_golomb(gb); /*max_dec_frame_buffering*/
 
         if (get_bits_left(gb) < 0) {
             sps->num_reorder_frames         = 0;
@@ -861,4 +860,144 @@ int ff_h264_decode_picture_parameter_set(GetBitContext *gb, AVCodecContext *avct
 fail:
     av_buffer_unref(&pps_buf);
     return ret;
+}
+
+
+void ltn_display_ps(H264ParamSets *ps)
+{
+    if (!ps)
+        return;
+
+    const SPS *sps = ps->sps;
+    if (!sps)
+        return;
+
+    printf("sps %p\n", sps);
+    printf("\tprofile_idc               = %d\n", sps->profile_idc);
+    printf("\tconstraint_set0_flag      = %d\n", sps->constraint_set_flags & (1 << 0));
+    printf("\tconstraint_set1_flag      = %d\n", sps->constraint_set_flags & (1 << 1));
+    printf("\tconstraint_set2_flag      = %d\n", sps->constraint_set_flags & (1 << 2));
+    printf("\tconstraint_set3_flag      = %d\n", sps->constraint_set_flags & (1 << 3));
+    printf("\tconstraint_set4_flag      = %d\n", sps->constraint_set_flags & (1 << 4));
+    printf("\tconstraint_set5_flag      = %d\n", sps->constraint_set_flags & (1 << 5));
+    printf("\tlevel_idc                 = %d\n", sps->level_idc);
+    printf("\tsequence_parameter_set_id = %d\n", sps->sps_id);
+    if (sps->profile_idc == 100 || sps->profile_idc == 110 || sps->profile_idc == 122 || sps->profile_idc == 244 ||
+        sps->profile_idc == 44 || sps->profile_idc == 83 || sps->profile_idc == 86 || sps->profile_idc == 118 ||
+        sps->profile_idc == 128 || sps->profile_idc == 138 || sps->profile_idc == 139 || sps->profile_idc == 134)
+    {
+        printf("\tchroma_format_idc         = %d\n", sps->chroma_format_idc);
+        if (sps->chroma_format_idc == 3) {
+            printf("\tresidual_color_transform_flag = %d\n", sps->residual_color_transform_flag);
+        }
+        printf("\tbit_depth_luma            = %d\n", sps->bit_depth_luma);
+        printf("\tbit_depth_chroma          = %d\n", sps->bit_depth_chroma);
+        printf("\tbit_depth_chroma          = %d\n", sps->bit_depth_chroma);
+    }
+    printf("\tlog2_max_frame_num        = %d\n", sps->log2_max_frame_num);
+    printf("\tpic_order_cnt_type        = %d\n", sps->poc_type);
+    if (sps->poc_type == 0) {
+        printf("\tlog2_max_pic_order_cnt_lsb_minus4 = %d\n", sps->log2_max_poc_lsb - 4);
+    } else
+    if (sps->poc_type == 1) {
+        printf("\tdelta_pic_order_always_zero_flag = %d\n", sps->delta_pic_order_always_zero_flag);
+        printf("\toffset_for_non_ref_pic           = %d\n", sps->offset_for_non_ref_pic);
+        printf("\toffset_for_top_to_bottom_field   = %d\n", sps->offset_for_top_to_bottom_field);
+        printf("\tnum_ref_frames_in_pic_order_cnt_cycle = %d\n", sps->poc_cycle_length);
+        for (int i = 0; i < sps->poc_cycle_length; i++)
+            printf("\toffset_for_ref_frame[%d]              = %d\n", i, sps->offset_for_ref_frame[i]);
+    }
+    printf("\tmax_num_ref_frames        = %d\n", sps->ref_frame_count);
+    printf("\tgaps_in_frame_num_value_allowed_flag = %d\n", sps->gaps_in_frame_num_allowed_flag);
+    printf("\tpic_width_in_mbs_minus1   = %d [%d]\n", sps->mb_width - 1, (sps->mb_width * 16));
+    printf("\tpic_height_in_map_units_minus1 = %d [%d]\n", sps->mb_height - 1,
+        ((sps->mb_height * 1) + sps->gaps_in_frame_num_allowed_flag) * 16);
+    printf("\tframe_mbs_only_flag       = %d\n", sps->frame_mbs_only_flag);
+
+    printf("\tframe_cropping_flag       = %d\n", sps->crop);
+    if (sps->frame_mbs_only_flag) {
+        /* avcodec mangles and adjusts these fields, they're not a perfect stream match. */
+        printf("\tframe_crop_left_offset    = %d\n", sps->crop_left);
+        printf("\tframe_crop_right_offset   = %d\n", sps->crop_right);
+        printf("\tframe_crop_top_offset     = %d\n", sps->crop_top);
+        printf("\tframe_crop_bottom_offset  = %d\n", sps->crop_bottom);
+    }
+
+    printf("\tvui_parameters_present_flag = %d\n", sps->vui_parameters_present_flag);
+    if (sps->vui_parameters_present_flag) {
+        /* */
+        printf("\taspect_ratio_info_present_flag = %d\n", sps->aspect_ratio_info_present_flag);
+        if (sps->aspect_ratio_info_present_flag) {
+            printf("\taspect_ratio_idc          = %d\n", sps->aspect_ratio_idc);
+            if (sps->aspect_ratio_idc == EXTENDED_SAR) {
+                printf("\tsar_width                 = %d\n", sps->sar.num);
+                printf("\tsar_height                = %d\n", sps->sar.den);
+            }
+        }
+        printf("\toverscan_info_present_flag = %d\n", sps->overscan_info_present_flag);
+        if (sps->overscan_info_present_flag) {
+            printf("\toverscan_appropriate_flag  = %d\n", sps->overscan_appropriate_flag);
+        }
+
+        printf("\tvideo_signal_type_present_flag = %d\n", sps->video_signal_type_present_flag);
+        if (sps->video_signal_type_present_flag) {
+            printf("\tvideo_format                   = %d\n", sps->video_format);
+            printf("\tvideo_full_range_flag          = %d\n", sps->full_range);
+            printf("\tcolor_description_present_flag = %d\n", sps->colour_description_present_flag);
+            if (sps->colour_description_present_flag) {
+                printf("\tcolor_primaries                = %d\n", sps->color_primaries);
+                printf("\ttransfer_characteristics       = %d\n", sps->color_trc);
+                printf("\tmatrix_coefficients            = %d\n", sps->colorspace);
+            }
+        }
+
+        printf("\tchroma_loc_info_present_flag   = %d\n", sps->chroma_location_info_present_flag);
+        if (sps->chroma_location_info_present_flag) {
+            /* Some parser changes required here to gather this. */
+        }
+
+        printf("\ttiming_info_present_flag       = %d\n", sps->timing_info_present_flag);
+        if (sps->timing_info_present_flag) {
+            printf("\tnum_units_in_tick              = %d\n", sps->num_units_in_tick);
+            printf("\ttime_scale                     = %d\n", sps->time_scale);
+            printf("\tfixed_frame_rate_flag          = %d\n", sps->fixed_frame_rate_flag);
+        }
+
+        printf("\tnal_hrd_parameters_present_flag    = %d\n", sps->nal_hrd_parameters_present_flag);
+        if (sps->nal_hrd_parameters_present_flag) {
+            printf("\tcpb_count                          = %d\n", sps->cpb_cnt);
+            printf("\tbit_rate_scale                     = %d\n", sps->bit_rate_scale);
+            printf("\tcpb_size_scale                     = %d\n", sps->cpb_size_scale);
+            for (int i = 0; i < sps->cpb_cnt; i++) {
+              printf("\tbit_rate_value[%2d]                = %d\n", i, sps->bit_rate_value[i]);
+              printf("\tcpb_size_value[%2d]                = %d\n", i, sps->cpb_size_value[i]);
+              printf("\tcbr_flag[%2d]                      = %d\n", i, sps->cbr_flag[i]);
+            }
+            printf("\tinitial_cpb_removal_delay_length_minus1 = %d\n", sps->initial_cpb_removal_delay_length - 1);
+            printf("\tcpb_removal_delay_length_minus1         = %d\n", sps->cpb_removal_delay_length - 1);
+            printf("\tdpb_output_delay_length_minus1          = %d\n", sps->dpb_output_delay_length - 1);
+            printf("\ttime_offset_length                      = %d\n", sps->time_offset_length);
+        }
+
+        printf("\tsps->vcl_hrd_parameters_present_flag = %d\n", sps->vcl_hrd_parameters_present_flag);
+        if (sps->vcl_hrd_parameters_present_flag) {
+            /* TODO: A single decode func uses sahred vars, we'd need to split these. */
+        }
+
+        printf("\tsps->sps->pic_struct_present_flag    = %d\n", sps->pic_struct_present_flag);
+        if (sps->pic_struct_present_flag) {
+            /* Nothing to do according to the spec. */
+        }
+
+        printf("\tsps->bitstream_restriction_flag      = %d\n", sps->bitstream_restriction_flag);
+        if (sps->bitstream_restriction_flag) {
+            printf("\tmotion_vectors_over_pic_boundaries_flag = %d\n", sps->motion_vectors_over_pic_boundaries_flag);
+            printf("\tmax_bytes_per_pic_denom                 = %d\n", sps->max_bytes_per_pic_denom);
+            printf("\tmax_bits_per_mb_denom                   = %d\n", sps->max_bits_per_mb_denom);
+            printf("\tlog2_max_mv_length_horizontal           = %d\n", sps->log2_max_mv_length_horizontal);
+            printf("\tlog2_max_mv_length_vertical             = %d\n", sps->log2_max_mv_length_vertical);
+            printf("\tnum_reorder_frames                      = %d\n", sps->num_reorder_frames);
+            printf("\tmax_dec_frame_buffering                 = %d\n", sps->max_dec_frame_buffering);
+        }
+    } /* VUI present */
 }

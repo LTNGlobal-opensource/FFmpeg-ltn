@@ -507,3 +507,63 @@ const char *ff_h264_sei_stereo_mode(const H264SEIFramePacking *h)
         return NULL;
     }
 }
+
+#if 0
+typedef struct H264SEIContext {
+    H264SEIPictureTiming picture_timing;
+    H264SEIAFD afd;
+    H264SEIA53Caption a53_caption;
+    H264SEIUnregistered unregistered;
+    H264SEIRecoveryPoint recovery_point;
+    H264SEIBufferingPeriod buffering_period;
+    H264SEIFramePacking frame_packing;
+    H264SEIDisplayOrientation display_orientation;
+    H264SEIGreenMetaData green_metadata;
+} H264SEIContext;
+#endif
+
+void ltn_sei_display(H264SEIContext *s)
+{
+    if (s->afd.present) {
+        printf("sei.afd.active_format_description = 0x%x\n", s->afd.active_format_description);
+    }
+    if (s->recovery_point.recovery_frame_cnt != -1) {
+        printf("sei.recovery_point.recovery_frame_cnt = %d\n", s->recovery_point.recovery_frame_cnt);
+    }
+    if (s->alternative_transfer.present) {
+        printf("sei.alternative_transfer.preferred_transfer_characteristics = 0x%x\n", s->alternative_transfer.preferred_transfer_characteristics);
+    }
+    if (s->display_orientation.present) {
+        printf("sei.display_orientation.anticlockwise_rotation = %d\n", s->display_orientation.anticlockwise_rotation);
+        printf("sei.display_orientation.hflip = %d\n", s->display_orientation.hflip);
+        printf("sei.display_orientation.vflip = %d\n", s->display_orientation.vflip);
+    }
+    if (s->buffering_period.present) {
+        printf("sei.buffering_period.initial_cpb_removal_delay = ");
+        for (int i = 0; i < 32; i++) {
+            printf("%02x ", s->buffering_period.initial_cpb_removal_delay[i]);
+        }
+        printf("\n");
+    }
+    if (s->picture_timing.present) {
+        printf("sei.picture_timing.pic_struct = %d\n", s->picture_timing.pic_struct);
+        printf("sei.picture_timing.ct_type = %d\n", s->picture_timing.ct_type);
+        printf("sei.picture_timing.dpb_output_delay = %d\n", s->picture_timing.dpb_output_delay);
+        printf("sei.picture_timing.cpb_removal_delay = %d\n", s->picture_timing.cpb_removal_delay);
+    }
+    if (s->a53_caption.a53_caption_size) {
+        printf("sei.a53_caption = ");
+        for (int i = 0; i < s->a53_caption.a53_caption_size; i++)
+            printf("%02x ", s->a53_caption.a53_caption[i]);
+        printf("\n");
+    }
+    if (s->frame_packing.present) {
+        printf("sei.frame_packing.arrangement_id = %d\n", s->frame_packing.arrangement_id);
+        printf("sei.frame_packing.arrangement_cancel_flag = %d\n", s->frame_packing.arrangement_cancel_flag);
+        printf("sei.frame_packing.arrangement_type = %d\n", s->frame_packing.arrangement_type);
+        printf("sei.frame_packing.arrangement_repetition_period = %d\n", s->frame_packing.arrangement_repetition_period);
+        printf("sei.frame_packing.content_interpretation_type = %d\n", s->frame_packing.content_interpretation_type);
+        printf("sei.frame_packing.quincunx_sampling_flag = %d\n", s->frame_packing.quincunx_sampling_flag);
+        printf("sei.frame_packing.current_frame_is_frame0_flag = %d\n", s->frame_packing.current_frame_is_frame0_flag);
+    }
+}

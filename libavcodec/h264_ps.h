@@ -182,5 +182,7 @@ int ff_h264_decode_picture_parameter_set(GetBitContext *gb, AVCodecContext *avct
  */
 void ff_h264_ps_uninit(H264ParamSets *ps);
 
-void ltn_display_ps(H264ParamSets *ps);
+void ltn_display_sps(H264ParamSets *ps);
+void ltn_display_pps(H264ParamSets *ps);
+
 #endif /* AVCODEC_H264_PS_H */

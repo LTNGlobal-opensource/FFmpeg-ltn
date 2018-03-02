@@ -180,4 +180,6 @@ void ff_h264_sei_uninit(H264SEIContext *h);
  */
 const char *ff_h264_sei_stereo_mode(const H264SEIFramePacking *h);
 
+void ltn_sei_display(H264SEIContext *s);
+
 #endif /* AVCODEC_H264_SEI_H */

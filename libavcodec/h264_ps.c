@@ -863,7 +863,7 @@ fail:
 }
 
 
-void ltn_display_ps(H264ParamSets *ps)
+void ltn_display_sps(H264ParamSets *ps)
 {
     if (!ps)
         return;
@@ -1001,3 +1001,46 @@ void ltn_display_ps(H264ParamSets *ps)
         }
     } /* VUI present */
 }
+
+void ltn_display_pps(H264ParamSets *ps)
+{
+    if (!ps)
+        return;
+
+    const PPS *pps = ps->pps;
+    if (!pps)
+        return;
+
+    printf("pps %p\n", pps);
+    //printf("\tpic_parameter_set_id      = %d\n", pps->pic_parameter_set_id);
+    printf("\tseq_parameter_set_id      = %d\n", pps->sps_id);
+    printf("\tentropy_coding_mode_flag  = %d (check this)\n", pps->cabac);
+    printf("\tnum_slice_groups_minus1   = %d\n", pps->slice_group_count - 1);
+    if (pps->slice_group_count > 0) {
+        printf("\tslice_group_map_type      = %d\n", pps->mb_slice_group_map_type);
+        if (pps->mb_slice_group_map_type == 0) {
+            /* TODO: not in struct */
+        } else
+        if (pps->mb_slice_group_map_type == 2) {
+            /* TODO: not in struct */
+        } else
+        if ((pps->mb_slice_group_map_type == 3) || (pps->mb_slice_group_map_type == 4) || (pps->mb_slice_group_map_type == 5)) {
+            /* TODO: not in struct */
+        } else
+        if (pps->mb_slice_group_map_type == 6) {
+            /* TODO: not in struct */
+        }
+    }
+    printf("\tnum_ref_idx_l0_default_active_minus1 = %d\n", pps->ref_count[0]);
+    printf("\tnum_ref_idx_l1_default_active_minus1 = %d\n", pps->ref_count[1]);
+    printf("\tweighted_pred_flag                   = %d\n", pps->weighted_pred);
+    printf("\tweighted_bipred_idc                  = %d\n", pps->weighted_bipred_idc);
+    printf("\tpic_init_qp_minus26                  = %d\n", pps->init_qp - 26);
+    printf("\tpic_init_qs_minus26                  = %d\n", pps->init_qs - 26);
+    printf("\tchroma_qp_index_offset               = %d (check this)\n", pps->chroma_qp_index_offset[0]);
+    printf("\tdeblocking_filter_control_present_flag = %d\n", pps->deblocking_filter_parameters_present);
+    printf("\tconstrained_intra_pred_flag            = %d\n", pps->constrained_intra_pred);
+    printf("\tredundant_pic_cnt_present_flag         = %d\n", pps->redundant_pic_cnt_present);
+    printf("\tredundant_pic_cnt_present_flag         = %d\n", pps->redundant_pic_cnt_present);
+}
+

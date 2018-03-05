@@ -465,6 +465,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     int ret;
 #endif
 
+    ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
+
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
         if (tmp->format != AV_PIX_FMT_UYVY422 ||
             tmp->width  != ctx->bmd_width ||
@@ -702,8 +704,6 @@ int ff_decklink_write_packet(AVFormatContext *avctx, AVPacket *pkt)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     AVStream *st = avctx->streams[pkt->stream_index];
-
-    ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
 
     if      (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
         return decklink_write_video_packet(avctx, pkt);

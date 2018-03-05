@@ -134,7 +134,6 @@ struct decklink_ctx {
 
     int channels;
     int audio_depth;
-    int64_t queue_size;
 };
 
 typedef enum { DIRECTION_IN, DIRECTION_OUT} decklink_direction_t;

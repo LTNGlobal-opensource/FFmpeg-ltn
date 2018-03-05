@@ -524,15 +524,11 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
 void avpacket_queue_init(AVFormatContext *avctx, AVPacketQueue *q)
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
-    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     memset(q, 0, sizeof(AVPacketQueue));
     pthread_mutex_init(&q->mutex, NULL);
     pthread_cond_init(&q->cond, NULL);
     q->avctx = avctx;
-    if (avctx->iformat)
-        q->max_q_size = cctx->queue_size;
-    else
-        q->max_q_size = ctx->queue_size;
+    q->max_q_size = cctx->queue_size;
 }
 
 void avpacket_queue_flush(AVPacketQueue *q)

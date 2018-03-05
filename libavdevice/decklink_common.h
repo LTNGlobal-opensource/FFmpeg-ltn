@@ -90,6 +90,7 @@ struct decklink_ctx {
 
     /* Capture buffer queue */
     AVPacketQueue queue;
+    AVPacketQueue vanc_queue;
 
     /* Streams present */
     int audio;

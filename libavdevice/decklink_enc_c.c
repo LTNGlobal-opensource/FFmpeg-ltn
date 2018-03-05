@@ -49,6 +49,9 @@ AVOutputFormat ff_decklink_muxer = {
     .audio_codec    = AV_CODEC_ID_PCM_S16LE,
     .video_codec    = AV_CODEC_ID_WRAPPED_AVFRAME,
     .subtitle_codec = AV_CODEC_ID_NONE,
+#if CONFIG_LIBKLVANC
+    .data_codec     = AV_CODEC_ID_SMPTE_2038,
+#endif
     .flags          = AVFMT_NOFILE,
     .get_device_list = ff_decklink_list_output_devices,
     .priv_class     = &decklink_muxer_class,

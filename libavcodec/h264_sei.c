@@ -522,48 +522,55 @@ typedef struct H264SEIContext {
 } H264SEIContext;
 #endif
 
-void ltn_sei_display(H264SEIContext *s)
+void ltn_sei_display(const H264SEIContext *s, const char *indent)
 {
     if (s->afd.present) {
-        printf("sei.afd.active_format_description = 0x%x\n", s->afd.active_format_description);
+        printf("%safd\n", indent);
+        printf("%s\tactive_format_description = 0x%x\n", indent, s->afd.active_format_description);
     }
     if (s->recovery_point.recovery_frame_cnt != -1) {
-        printf("sei.recovery_point.recovery_frame_cnt = %d\n", s->recovery_point.recovery_frame_cnt);
+        printf("%srecovery_point()\n", indent);
+        printf("%s\trecovery_frame_cnt = %d\n", indent, s->recovery_point.recovery_frame_cnt);
     }
     if (s->alternative_transfer.present) {
-        printf("sei.alternative_transfer.preferred_transfer_characteristics = 0x%x\n", s->alternative_transfer.preferred_transfer_characteristics);
+        printf("%salternative_transfer\n", indent);
+        printf("%s\tpreferred_transfer_characteristics = 0x%x\n", indent, s->alternative_transfer.preferred_transfer_characteristics);
     }
     if (s->display_orientation.present) {
-        printf("sei.display_orientation.anticlockwise_rotation = %d\n", s->display_orientation.anticlockwise_rotation);
-        printf("sei.display_orientation.hflip = %d\n", s->display_orientation.hflip);
-        printf("sei.display_orientation.vflip = %d\n", s->display_orientation.vflip);
+        printf("%sdisplay_orientation()\n", indent);
+        printf("%s\tanticlockwise_rotation = %d\n", indent, s->display_orientation.anticlockwise_rotation);
+        printf("%s\thor_flip = %d\n", indent, s->display_orientation.hflip);
+        printf("%s\tver_flip = %d\n", indent, s->display_orientation.vflip);
     }
     if (s->buffering_period.present) {
-        printf("sei.buffering_period.initial_cpb_removal_delay = ");
+        printf("%sbuffering_period()\n", indent);
+        printf("%s\tinitial_cpb_removal_delay = ", indent);
         for (int i = 0; i < 32; i++) {
             printf("%02x ", s->buffering_period.initial_cpb_removal_delay[i]);
         }
         printf("\n");
     }
     if (s->picture_timing.present) {
-        printf("sei.picture_timing.pic_struct = %d\n", s->picture_timing.pic_struct);
-        printf("sei.picture_timing.ct_type = %d\n", s->picture_timing.ct_type);
-        printf("sei.picture_timing.dpb_output_delay = %d\n", s->picture_timing.dpb_output_delay);
-        printf("sei.picture_timing.cpb_removal_delay = %d\n", s->picture_timing.cpb_removal_delay);
+        printf("%spic_timing()\n", indent);
+        printf("%s\tpic_struct = %d\n", indent, s->picture_timing.pic_struct);
+        printf("%s\tct_type = %d\n", indent, s->picture_timing.ct_type);
+        printf("%s\tdpb_output_delay = %d\n", indent, s->picture_timing.dpb_output_delay);
+        printf("%s\tcpb_removal_delay = %d\n", indent, s->picture_timing.cpb_removal_delay);
     }
     if (s->a53_caption.a53_caption_size) {
-        printf("sei.a53_caption = ");
+        printf("%sa53_caption = ", indent);
         for (int i = 0; i < s->a53_caption.a53_caption_size; i++)
             printf("%02x ", s->a53_caption.a53_caption[i]);
         printf("\n");
     }
     if (s->frame_packing.present) {
-        printf("sei.frame_packing.arrangement_id = %d\n", s->frame_packing.arrangement_id);
-        printf("sei.frame_packing.arrangement_cancel_flag = %d\n", s->frame_packing.arrangement_cancel_flag);
-        printf("sei.frame_packing.arrangement_type = %d\n", s->frame_packing.arrangement_type);
-        printf("sei.frame_packing.arrangement_repetition_period = %d\n", s->frame_packing.arrangement_repetition_period);
-        printf("sei.frame_packing.content_interpretation_type = %d\n", s->frame_packing.content_interpretation_type);
-        printf("sei.frame_packing.quincunx_sampling_flag = %d\n", s->frame_packing.quincunx_sampling_flag);
-        printf("sei.frame_packing.current_frame_is_frame0_flag = %d\n", s->frame_packing.current_frame_is_frame0_flag);
+        printf("%sframe_packing_arrangement()\n", indent);
+        printf("%s\tarrangement_id = %d\n", indent, s->frame_packing.arrangement_id);
+        printf("%s\tarrangement_cancel_flag = %d\n", indent, s->frame_packing.arrangement_cancel_flag);
+        printf("%s\tarrangement_type = %d\n", indent, s->frame_packing.arrangement_type);
+        printf("%s\tarrangement_repetition_period = %d\n", indent, s->frame_packing.arrangement_repetition_period);
+        printf("%s\tcontent_interpretation_type = %d\n", indent, s->frame_packing.content_interpretation_type);
+        printf("%s\tquincunx_sampling_flag = %d\n", indent, s->frame_packing.quincunx_sampling_flag);
+        printf("%s\tcurrent_frame_is_frame0_flag = %d\n", indent, s->frame_packing.current_frame_is_frame0_flag);
     }
 }

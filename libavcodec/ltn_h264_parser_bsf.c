@@ -29,6 +29,7 @@
 #include "avcodec.h"
 #include "bsf.h"
 #include "h264_parser.h"
+#include "internal.h"
 
 #include <sys/time.h>
 
@@ -38,6 +39,51 @@ typedef struct ReaderContext
     AVCodecParserContext *parser;
     AVCodecContext *c;
 } ReaderContext;
+
+static const char *slice_type_description(uint32_t type)
+{
+	/* Specification table 7-6 */
+	switch (type) {
+	case 0:	 return "P";
+	case 1:	 return "B";
+	case 2:	 return "I";
+	case 3:	 return "SP";
+	case 4:	 return "SI";
+	case 5:	 return "P";
+	case 6:	 return "B";
+	case 7:	 return "I";
+	case 8:	 return "SP";
+	case 9:	 return "SI";
+	default: return "UNDEFINED";
+	}
+}
+
+static const char *primary_pic_type_description(uint32_t type)
+{
+	/* Specification table 7-5 */
+	switch (type) {
+	case 0:	 return "I";
+	case 1:	 return "P, I";
+	case 2:	 return "P, B, I";
+	case 3:	 return "SI";
+	case 4:	 return "SP, SI";
+	case 5:	 return "I, SI";
+	case 6:	 return "P, I, SP, SI";
+	case 7:	 return "P, B, I, SP, SI";
+	default: return "UNDEFINED";
+	}
+};
+
+#define decode_slice_header()											\
+{														\
+            uint32_t first_mb_in_slice = get_ue_golomb_long(&nal->gb); 						\
+            uint32_t slice_type = get_ue_golomb_31(&nal->gb);							\
+            uint32_t pic_parameter_set_id = get_ue_golomb(&nal->gb);						\
+            printf("\t\tslice_header()\n");									\
+            printf("\t\t\tfirst_mb_in_slice    = %d\n", first_mb_in_slice);					\
+            printf("\t\t\tslice_type           = %d [%s]\n", slice_type, slice_type_description(slice_type));	\
+            printf("\t\t\tpic_parameter_set_id = %d\n", pic_parameter_set_id);					\
+};
 
 static int ltn_h264_parser_filter(AVBSFContext *ctx, AVPacket *out)
 {
@@ -94,51 +140,101 @@ static int ltn_h264_parser_filter(AVBSFContext *ctx, AVPacket *out)
     for (i = 0; i < pkt.nb_nals; i++) {
         H2645NAL *nal = &pkt.nals[i];
 
-printf("nal type 0x%02x\n", nal->type);
+	printf("\n");
 
         switch (nal->type) {
         case H264_NAL_IDR_SLICE:
-            printf("H264_NAL_IDR_SLICE\n");
-            if ((nal->data[1] & 0xFC) == 0x98) {
-                fprintf(stderr, "Invalid inter IDR frame\n");
-            }
+            printf("nal_type = %02x = H264_NAL_IDR_SLICE (Coded slice of an IDR Picture) -- %d bytes\n", nal->type,
+                nal->size_bits / 8);
+            printf("\tslice_layer_without_partitioning_rbsp()\n");
+
+            decode_slice_header();
+
             break;
         case H264_NAL_SLICE:
-            printf("H264_NAL_SLICE\n");
+            printf("nal_type = %02x = H264_NAL_SLICE (Coded Slice of a non-IDR Picture) -- %d bytes\n", nal->type,
+                nal->size_bits / 8);
+            printf("\tslice_layer_without_partitioning_rbsp()\n");
+
+            decode_slice_header();
+
             break;
         case H264_NAL_DPA:
+            printf("nal_type = %02x = H264_NAL_DPA (Coded Slice Data Partition A)\n", nal->type);
+            break;
         case H264_NAL_DPB:
+            printf("nal_type = %02x = H264_NAL_DPB (Coded Slice Data Partition B)\n", nal->type);
+            break;
         case H264_NAL_DPC:
-            printf("H264_NAL_DP[AC]\n");
+            printf("nal_type = %02x = H264_NAL_DPC (Coded Slice Data Partition C)\n", nal->type);
             break;
         case H264_NAL_SEI:
+            printf("nal_type = %02x = H264_NAL_SEI (Supplemental Enhancement Information)\n", nal->type);
+            printf("\tsei_rbsp()\n");
             ret = ff_h264_sei_decode(&sei, &nal->gb, &ps, s->c);
-            ltn_sei_display(&sei);
+            ltn_sei_display(&sei, "\t\t");
             break;
         case H264_NAL_SPS: {
+            printf("nal_type = %02x = H264_NAL_SPS (Sequence Parameter Set)\n", nal->type);
+            printf("\tseq_parameter_set_rbps()\n");
+
+            printf("\t");
+            for (int i = 0; i < nal->size_bits / 8; i++) {
+                printf("%02x ", nal->data[i]);
+            }
+            printf("\n");
+
             GetBitContext tmp_gb = nal->gb;
 
             if (ff_h264_decode_seq_parameter_set(&tmp_gb, s->c, &ps, 0) < 0)
                 break;
             ps.sps = (const SPS *)ps.sps_list[0]->data;
-            ltn_display_sps(&ps);
+            ltn_display_sps(&ps, "\t\t");
             break;
         }
         case H264_NAL_PPS:
+            printf("nal_type = %02x = H264_NAL_PPS (Picture Parameter Set)\n", nal->type);
+            printf("\tpic_parameter_set_rbps()\n");
+
+            printf("\t");
+            for (int i = 0; i < nal->size_bits / 8; i++) {
+                printf("%02x ", nal->data[i]);
+            }
+            printf("\n");
+
             ret = ff_h264_decode_picture_parameter_set(&nal->gb, s->c, &ps, nal->size_bits);
             ps.pps = (const PPS *)ps.pps_list[0]->data;
-            ltn_display_pps(&ps);
+            ltn_display_pps(&ps, "\t\t");
             break;
         case H264_NAL_AUD:
+            printf("nal_type = %02x = H264_NAL_AUD (Access Unit Delimiter)\n", nal->type);
+            printf("\taccess_unit_delimiter_rbsp()\n");
+            uint8_t primary_pic_type = get_bits(&nal->gb, 3);
+            printf("\t\tprimary_pic_type = 0x%x [%s]\n",
+                primary_pic_type,
+                primary_pic_type_description(primary_pic_type));
+            break;
         case H264_NAL_END_SEQUENCE:
+            printf("nal_type = %02x = H264_NAL_END_SEQUENCE (End of Sequence)\n", nal->type);
+            printf("\tend_of_seq_rbsp()\n");
+            break;
         case H264_NAL_END_STREAM:
+            printf("nal_type = %02x = H264_NAL_END_STREAM (End of Stream)\n", nal->type);
+            printf("\tend_of_stream_rbsp()\n");
+            break;
         case H264_NAL_FILLER_DATA:
+            printf("nal_type = %02x = H264_NAL_FILLER_DATA (Filler Data0\n", nal->type);
+            printf("\tfiller_data()\n");
+            break;
         case H264_NAL_SPS_EXT:
+            printf("nal_type = %02x = H264_NAL_SPS_EXT (Sequence Parameter Set Extension)\n", nal->type);
+            printf("\tseq_parameter_set_extension_rbsp()\n");
+            break;
         case H264_NAL_AUXILIARY_SLICE:
-            printf("H264_NAL_OTHER\n");
+            printf("nal_type = %02x = H264_NAL_AUXILIARY_SLICE\n", nal->type);
             break;
         default:
-            fprintf(stderr, "Unknown NAL code: %d (%d bits)\n", nal->type, nal->size_bits);
+            fprintf(stderr, "nal_type = %02x = UNKNOWN (%d bits)\n", nal->type, nal->size_bits);
         }
     }
 

@@ -863,7 +863,7 @@ fail:
 }
 
 
-void ltn_display_sps(H264ParamSets *ps)
+void ltn_display_sps(const H264ParamSets *ps, const char *indent)
 {
     if (!ps)
         return;
@@ -872,137 +872,136 @@ void ltn_display_sps(H264ParamSets *ps)
     if (!sps)
         return;
 
-    printf("sps %p\n", sps);
-    printf("\tprofile_idc               = %d\n", sps->profile_idc);
-    printf("\tconstraint_set0_flag      = %d\n", sps->constraint_set_flags & (1 << 0));
-    printf("\tconstraint_set1_flag      = %d\n", sps->constraint_set_flags & (1 << 1));
-    printf("\tconstraint_set2_flag      = %d\n", sps->constraint_set_flags & (1 << 2));
-    printf("\tconstraint_set3_flag      = %d\n", sps->constraint_set_flags & (1 << 3));
-    printf("\tconstraint_set4_flag      = %d\n", sps->constraint_set_flags & (1 << 4));
-    printf("\tconstraint_set5_flag      = %d\n", sps->constraint_set_flags & (1 << 5));
-    printf("\tlevel_idc                 = %d\n", sps->level_idc);
-    printf("\tsequence_parameter_set_id = %d\n", sps->sps_id);
+    printf("%sprofile_idc               = %d\n", indent, sps->profile_idc);
+    printf("%sconstraint_set0_flag      = %d\n", indent, sps->constraint_set_flags & (1 << 0));
+    printf("%sconstraint_set1_flag      = %d\n", indent, sps->constraint_set_flags & (1 << 1));
+    printf("%sconstraint_set2_flag      = %d\n", indent, sps->constraint_set_flags & (1 << 2));
+    printf("%sconstraint_set3_flag      = %d\n", indent, sps->constraint_set_flags & (1 << 3));
+    printf("%sconstraint_set4_flag      = %d\n", indent, sps->constraint_set_flags & (1 << 4));
+    printf("%sconstraint_set5_flag      = %d\n", indent, sps->constraint_set_flags & (1 << 5));
+    printf("%slevel_idc                 = %d\n", indent, sps->level_idc);
+    printf("%ssequence_parameter_set_id = %d\n", indent, sps->sps_id);
     if (sps->profile_idc == 100 || sps->profile_idc == 110 || sps->profile_idc == 122 || sps->profile_idc == 244 ||
         sps->profile_idc == 44 || sps->profile_idc == 83 || sps->profile_idc == 86 || sps->profile_idc == 118 ||
         sps->profile_idc == 128 || sps->profile_idc == 138 || sps->profile_idc == 139 || sps->profile_idc == 134)
     {
-        printf("\tchroma_format_idc         = %d\n", sps->chroma_format_idc);
+        printf("%schroma_format_idc         = %d\n", indent, sps->chroma_format_idc);
         if (sps->chroma_format_idc == 3) {
-            printf("\tresidual_color_transform_flag = %d\n", sps->residual_color_transform_flag);
+            printf("%sresidual_color_transform_flag = %d\n", indent, sps->residual_color_transform_flag);
         }
-        printf("\tbit_depth_luma            = %d\n", sps->bit_depth_luma);
-        printf("\tbit_depth_chroma          = %d\n", sps->bit_depth_chroma);
-        printf("\tbit_depth_chroma          = %d\n", sps->bit_depth_chroma);
+        printf("%sbit_depth_luma            = %d\n", indent, sps->bit_depth_luma);
+        printf("%sbit_depth_chroma          = %d\n", indent, sps->bit_depth_chroma);
+        printf("%sbit_depth_chroma          = %d\n", indent, sps->bit_depth_chroma);
     }
-    printf("\tlog2_max_frame_num        = %d\n", sps->log2_max_frame_num);
-    printf("\tpic_order_cnt_type        = %d\n", sps->poc_type);
+    printf("%slog2_max_frame_num        = %d\n", indent, sps->log2_max_frame_num);
+    printf("%spic_order_cnt_type        = %d\n", indent, sps->poc_type);
     if (sps->poc_type == 0) {
-        printf("\tlog2_max_pic_order_cnt_lsb_minus4 = %d\n", sps->log2_max_poc_lsb - 4);
+        printf("%slog2_max_pic_order_cnt_lsb_minus4 = %d\n", indent, sps->log2_max_poc_lsb - 4);
     } else
     if (sps->poc_type == 1) {
-        printf("\tdelta_pic_order_always_zero_flag = %d\n", sps->delta_pic_order_always_zero_flag);
-        printf("\toffset_for_non_ref_pic           = %d\n", sps->offset_for_non_ref_pic);
-        printf("\toffset_for_top_to_bottom_field   = %d\n", sps->offset_for_top_to_bottom_field);
-        printf("\tnum_ref_frames_in_pic_order_cnt_cycle = %d\n", sps->poc_cycle_length);
+        printf("%sdelta_pic_order_always_zero_flag = %d\n", indent, sps->delta_pic_order_always_zero_flag);
+        printf("%soffset_for_non_ref_pic           = %d\n", indent, sps->offset_for_non_ref_pic);
+        printf("%soffset_for_top_to_bottom_field   = %d\n", indent, sps->offset_for_top_to_bottom_field);
+        printf("%snum_ref_frames_in_pic_order_cnt_cycle = %d\n", indent, sps->poc_cycle_length);
         for (int i = 0; i < sps->poc_cycle_length; i++)
-            printf("\toffset_for_ref_frame[%d]              = %d\n", i, sps->offset_for_ref_frame[i]);
+            printf("%soffset_for_ref_frame[%d]              = %d\n", indent, i, sps->offset_for_ref_frame[i]);
     }
-    printf("\tmax_num_ref_frames        = %d\n", sps->ref_frame_count);
-    printf("\tgaps_in_frame_num_value_allowed_flag = %d\n", sps->gaps_in_frame_num_allowed_flag);
-    printf("\tpic_width_in_mbs_minus1   = %d [%d]\n", sps->mb_width - 1, (sps->mb_width * 16));
-    printf("\tpic_height_in_map_units_minus1 = %d [%d]\n", sps->mb_height - 1,
+    printf("%smax_num_ref_frames        = %d\n", indent, sps->ref_frame_count);
+    printf("%sgaps_in_frame_num_value_allowed_flag = %d\n", indent, sps->gaps_in_frame_num_allowed_flag);
+    printf("%spic_width_in_mbs_minus1   = %d [%d]\n", indent, sps->mb_width - 1, (sps->mb_width * 16));
+    printf("%spic_height_in_map_units_minus1 = %d [%d]\n", indent, sps->mb_height - 1,
         ((sps->mb_height * 1) + sps->gaps_in_frame_num_allowed_flag) * 16);
-    printf("\tframe_mbs_only_flag       = %d\n", sps->frame_mbs_only_flag);
+    printf("%sframe_mbs_only_flag       = %d\n", indent, sps->frame_mbs_only_flag);
 
-    printf("\tframe_cropping_flag       = %d\n", sps->crop);
+    printf("%sframe_cropping_flag       = %d\n", indent, sps->crop);
     if (sps->frame_mbs_only_flag) {
         /* avcodec mangles and adjusts these fields, they're not a perfect stream match. */
-        printf("\tframe_crop_left_offset    = %d\n", sps->crop_left);
-        printf("\tframe_crop_right_offset   = %d\n", sps->crop_right);
-        printf("\tframe_crop_top_offset     = %d\n", sps->crop_top);
-        printf("\tframe_crop_bottom_offset  = %d\n", sps->crop_bottom);
+        printf("%sframe_crop_left_offset    = %d\n", indent, sps->crop_left);
+        printf("%sframe_crop_right_offset   = %d\n", indent, sps->crop_right);
+        printf("%sframe_crop_top_offset     = %d\n", indent, sps->crop_top);
+        printf("%sframe_crop_bottom_offset  = %d\n", indent, sps->crop_bottom);
     }
 
-    printf("\tvui_parameters_present_flag = %d\n", sps->vui_parameters_present_flag);
+    printf("%svui_parameters_present_flag = %d\n", indent, sps->vui_parameters_present_flag);
     if (sps->vui_parameters_present_flag) {
         /* */
-        printf("\taspect_ratio_info_present_flag = %d\n", sps->aspect_ratio_info_present_flag);
+        printf("%saspect_ratio_info_present_flag = %d\n", indent, sps->aspect_ratio_info_present_flag);
         if (sps->aspect_ratio_info_present_flag) {
-            printf("\taspect_ratio_idc          = %d\n", sps->aspect_ratio_idc);
+            printf("%saspect_ratio_idc          = %d\n", indent, sps->aspect_ratio_idc);
             if (sps->aspect_ratio_idc == EXTENDED_SAR) {
-                printf("\tsar_width                 = %d\n", sps->sar.num);
-                printf("\tsar_height                = %d\n", sps->sar.den);
+                printf("%ssar_width                 = %d\n", indent, sps->sar.num);
+                printf("%ssar_height                = %d\n", indent, sps->sar.den);
             }
         }
-        printf("\toverscan_info_present_flag = %d\n", sps->overscan_info_present_flag);
+        printf("%soverscan_info_present_flag = %d\n", indent, sps->overscan_info_present_flag);
         if (sps->overscan_info_present_flag) {
-            printf("\toverscan_appropriate_flag  = %d\n", sps->overscan_appropriate_flag);
+            printf("%soverscan_appropriate_flag  = %d\n", indent, sps->overscan_appropriate_flag);
         }
 
-        printf("\tvideo_signal_type_present_flag = %d\n", sps->video_signal_type_present_flag);
+        printf("%svideo_signal_type_present_flag = %d\n", indent, sps->video_signal_type_present_flag);
         if (sps->video_signal_type_present_flag) {
-            printf("\tvideo_format                   = %d\n", sps->video_format);
-            printf("\tvideo_full_range_flag          = %d\n", sps->full_range);
-            printf("\tcolor_description_present_flag = %d\n", sps->colour_description_present_flag);
+            printf("%svideo_format                   = %d\n", indent, sps->video_format);
+            printf("%svideo_full_range_flag          = %d\n", indent, sps->full_range);
+            printf("%scolor_description_present_flag = %d\n", indent, sps->colour_description_present_flag);
             if (sps->colour_description_present_flag) {
-                printf("\tcolor_primaries                = %d\n", sps->color_primaries);
-                printf("\ttransfer_characteristics       = %d\n", sps->color_trc);
-                printf("\tmatrix_coefficients            = %d\n", sps->colorspace);
+                printf("%scolor_primaries                = %d\n", indent, sps->color_primaries);
+                printf("%stransfer_characteristics       = %d\n", indent, sps->color_trc);
+                printf("%smatrix_coefficients            = %d\n", indent, sps->colorspace);
             }
         }
 
-        printf("\tchroma_loc_info_present_flag   = %d\n", sps->chroma_location_info_present_flag);
+        printf("%schroma_loc_info_present_flag   = %d\n", indent, sps->chroma_location_info_present_flag);
         if (sps->chroma_location_info_present_flag) {
             /* Some parser changes required here to gather this. */
         }
 
-        printf("\ttiming_info_present_flag       = %d\n", sps->timing_info_present_flag);
+        printf("%stiming_info_present_flag       = %d\n", indent, sps->timing_info_present_flag);
         if (sps->timing_info_present_flag) {
-            printf("\tnum_units_in_tick              = %d\n", sps->num_units_in_tick);
-            printf("\ttime_scale                     = %d\n", sps->time_scale);
-            printf("\tfixed_frame_rate_flag          = %d\n", sps->fixed_frame_rate_flag);
+            printf("%snum_units_in_tick              = %d\n", indent, sps->num_units_in_tick);
+            printf("%stime_scale                     = %d\n", indent, sps->time_scale);
+            printf("%sfixed_frame_rate_flag          = %d\n", indent, sps->fixed_frame_rate_flag);
         }
 
-        printf("\tnal_hrd_parameters_present_flag    = %d\n", sps->nal_hrd_parameters_present_flag);
+        printf("%snal_hrd_parameters_present_flag    = %d\n", indent, sps->nal_hrd_parameters_present_flag);
         if (sps->nal_hrd_parameters_present_flag) {
-            printf("\tcpb_count                          = %d\n", sps->cpb_cnt);
-            printf("\tbit_rate_scale                     = %d\n", sps->bit_rate_scale);
-            printf("\tcpb_size_scale                     = %d\n", sps->cpb_size_scale);
+            printf("%scpb_count                          = %d\n", indent, sps->cpb_cnt);
+            printf("%sbit_rate_scale                     = %d\n", indent, sps->bit_rate_scale);
+            printf("%scpb_size_scale                     = %d\n", indent, sps->cpb_size_scale);
             for (int i = 0; i < sps->cpb_cnt; i++) {
-              printf("\tbit_rate_value[%2d]                = %d\n", i, sps->bit_rate_value[i]);
-              printf("\tcpb_size_value[%2d]                = %d\n", i, sps->cpb_size_value[i]);
-              printf("\tcbr_flag[%2d]                      = %d\n", i, sps->cbr_flag[i]);
+              printf("%sbit_rate_value[%2d]                = %d\n", indent, i, sps->bit_rate_value[i]);
+              printf("%scpb_size_value[%2d]                = %d\n", indent, i, sps->cpb_size_value[i]);
+              printf("%scbr_flag[%2d]                      = %d\n", indent, i, sps->cbr_flag[i]);
             }
-            printf("\tinitial_cpb_removal_delay_length_minus1 = %d\n", sps->initial_cpb_removal_delay_length - 1);
-            printf("\tcpb_removal_delay_length_minus1         = %d\n", sps->cpb_removal_delay_length - 1);
-            printf("\tdpb_output_delay_length_minus1          = %d\n", sps->dpb_output_delay_length - 1);
-            printf("\ttime_offset_length                      = %d\n", sps->time_offset_length);
+            printf("%sinitial_cpb_removal_delay_length_minus1 = %d\n", indent, sps->initial_cpb_removal_delay_length - 1);
+            printf("%scpb_removal_delay_length_minus1         = %d\n", indent, sps->cpb_removal_delay_length - 1);
+            printf("%sdpb_output_delay_length_minus1          = %d\n", indent, sps->dpb_output_delay_length - 1);
+            printf("%stime_offset_length                      = %d\n", indent, sps->time_offset_length);
         }
 
-        printf("\tsps->vcl_hrd_parameters_present_flag = %d\n", sps->vcl_hrd_parameters_present_flag);
+        printf("%ssps->vcl_hrd_parameters_present_flag = %d\n", indent, sps->vcl_hrd_parameters_present_flag);
         if (sps->vcl_hrd_parameters_present_flag) {
             /* TODO: A single decode func uses sahred vars, we'd need to split these. */
         }
 
-        printf("\tsps->sps->pic_struct_present_flag    = %d\n", sps->pic_struct_present_flag);
+        printf("%ssps->sps->pic_struct_present_flag    = %d\n", indent, sps->pic_struct_present_flag);
         if (sps->pic_struct_present_flag) {
             /* Nothing to do according to the spec. */
         }
 
-        printf("\tsps->bitstream_restriction_flag      = %d\n", sps->bitstream_restriction_flag);
+        printf("%ssps->bitstream_restriction_flag      = %d\n", indent, sps->bitstream_restriction_flag);
         if (sps->bitstream_restriction_flag) {
-            printf("\tmotion_vectors_over_pic_boundaries_flag = %d\n", sps->motion_vectors_over_pic_boundaries_flag);
-            printf("\tmax_bytes_per_pic_denom                 = %d\n", sps->max_bytes_per_pic_denom);
-            printf("\tmax_bits_per_mb_denom                   = %d\n", sps->max_bits_per_mb_denom);
-            printf("\tlog2_max_mv_length_horizontal           = %d\n", sps->log2_max_mv_length_horizontal);
-            printf("\tlog2_max_mv_length_vertical             = %d\n", sps->log2_max_mv_length_vertical);
-            printf("\tnum_reorder_frames                      = %d\n", sps->num_reorder_frames);
-            printf("\tmax_dec_frame_buffering                 = %d\n", sps->max_dec_frame_buffering);
+            printf("%smotion_vectors_over_pic_boundaries_flag = %d\n", indent, sps->motion_vectors_over_pic_boundaries_flag);
+            printf("%smax_bytes_per_pic_denom                 = %d\n", indent, sps->max_bytes_per_pic_denom);
+            printf("%smax_bits_per_mb_denom                   = %d\n", indent, sps->max_bits_per_mb_denom);
+            printf("%slog2_max_mv_length_horizontal           = %d\n", indent, sps->log2_max_mv_length_horizontal);
+            printf("%slog2_max_mv_length_vertical             = %d\n", indent, sps->log2_max_mv_length_vertical);
+            printf("%snum_reorder_frames                      = %d\n", indent, sps->num_reorder_frames);
+            printf("%smax_dec_frame_buffering                 = %d\n", indent, sps->max_dec_frame_buffering);
         }
     } /* VUI present */
 }
 
-void ltn_display_pps(H264ParamSets *ps)
+void ltn_display_pps(const H264ParamSets *ps, const char *indent)
 {
     if (!ps)
         return;
@@ -1011,13 +1010,12 @@ void ltn_display_pps(H264ParamSets *ps)
     if (!pps)
         return;
 
-    printf("pps %p\n", pps);
-    //printf("\tpic_parameter_set_id      = %d\n", pps->pic_parameter_set_id);
-    printf("\tseq_parameter_set_id      = %d\n", pps->sps_id);
-    printf("\tentropy_coding_mode_flag  = %d (check this)\n", pps->cabac);
-    printf("\tnum_slice_groups_minus1   = %d\n", pps->slice_group_count - 1);
+    //printf("%spic_parameter_set_id      = %d\n", indent, pps->pic_parameter_set_id);
+    printf("%sseq_parameter_set_id      = %d\n", indent, pps->sps_id);
+    printf("%sentropy_coding_mode_flag  = %d (check this)\n", indent, pps->cabac);
+    printf("%snum_slice_groups_minus1   = %d\n", indent, pps->slice_group_count - 1);
     if (pps->slice_group_count > 0) {
-        printf("\tslice_group_map_type      = %d\n", pps->mb_slice_group_map_type);
+        printf("%sslice_group_map_type      = %d\n", indent, pps->mb_slice_group_map_type);
         if (pps->mb_slice_group_map_type == 0) {
             /* TODO: not in struct */
         } else
@@ -1031,16 +1029,16 @@ void ltn_display_pps(H264ParamSets *ps)
             /* TODO: not in struct */
         }
     }
-    printf("\tnum_ref_idx_l0_default_active_minus1 = %d\n", pps->ref_count[0]);
-    printf("\tnum_ref_idx_l1_default_active_minus1 = %d\n", pps->ref_count[1]);
-    printf("\tweighted_pred_flag                   = %d\n", pps->weighted_pred);
-    printf("\tweighted_bipred_idc                  = %d\n", pps->weighted_bipred_idc);
-    printf("\tpic_init_qp_minus26                  = %d\n", pps->init_qp - 26);
-    printf("\tpic_init_qs_minus26                  = %d\n", pps->init_qs - 26);
-    printf("\tchroma_qp_index_offset               = %d (check this)\n", pps->chroma_qp_index_offset[0]);
-    printf("\tdeblocking_filter_control_present_flag = %d\n", pps->deblocking_filter_parameters_present);
-    printf("\tconstrained_intra_pred_flag            = %d\n", pps->constrained_intra_pred);
-    printf("\tredundant_pic_cnt_present_flag         = %d\n", pps->redundant_pic_cnt_present);
-    printf("\tredundant_pic_cnt_present_flag         = %d\n", pps->redundant_pic_cnt_present);
+    printf("%snum_ref_idx_l0_default_active_minus1 = %d\n", indent, pps->ref_count[0]);
+    printf("%snum_ref_idx_l1_default_active_minus1 = %d\n", indent, pps->ref_count[1]);
+    printf("%sweighted_pred_flag                   = %d\n", indent, pps->weighted_pred);
+    printf("%sweighted_bipred_idc                  = %d\n", indent, pps->weighted_bipred_idc);
+    printf("%spic_init_qp_minus26                  = %d\n", indent, pps->init_qp - 26);
+    printf("%spic_init_qs_minus26                  = %d\n", indent, pps->init_qs - 26);
+    printf("%schroma_qp_index_offset               = %d (check this)\n", indent, pps->chroma_qp_index_offset[0]);
+    printf("%sdeblocking_filter_control_present_flag = %d\n", indent, pps->deblocking_filter_parameters_present);
+    printf("%sconstrained_intra_pred_flag            = %d\n", indent, pps->constrained_intra_pred);
+    printf("%sredundant_pic_cnt_present_flag         = %d\n", indent, pps->redundant_pic_cnt_present);
+    printf("%sredundant_pic_cnt_present_flag         = %d\n", indent, pps->redundant_pic_cnt_present);
 }
 

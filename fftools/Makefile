@@ -18,7 +18,7 @@ ifndef CONFIG_VIDEOTOOLBOX
 OBJS-ffmpeg-$(CONFIG_VDA)          += fftools/ffmpeg_videotoolbox.o
 endif
 OBJS-ffmpeg-$(CONFIG_VIDEOTOOLBOX) += fftools/ffmpeg_videotoolbox.o
-OBJS-ltndecoder                    += fftools/ffmpeg_opt.o fftools/ffmpeg_filter.o fftools/ffmpeg_hw.o
+OBJS-ltndecoder                    += fftools/ltndecoder_opt.o fftools/ffmpeg_filter.o fftools/ffmpeg_hw.o
 OBJS-ltndecoder-$(CONFIG_CUVID)        += fftools/ffmpeg_cuvid.o
 OBJS-ltndecoder-$(CONFIG_LIBMFX)       += fftools/ffmpeg_qsv.o
 ifndef CONFIG_VIDEOTOOLBOX

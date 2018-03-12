@@ -2298,13 +2298,15 @@ static int open_output_file(OptionsContext *o, const char *filename)
                     }
                 }
         }
-        /* Data only if codec id match */
+        /* Data only if explicitly enabled through LTN environment variables */
         if (!o->data_disable ) {
             enum AVCodecID codec_id = av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_DATA);
             for (i = 0; codec_id != AV_CODEC_ID_NONE && i < nb_input_streams; i++) {
-                if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_DATA
-                    && input_streams[i]->st->codecpar->codec_id == codec_id )
-                    new_data_stream(o, oc, i);
+                if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+                    if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
+                        && getenv("LTN_ENABLE_SMPTE2038") != NULL)
+                        new_data_stream(o, oc, i);
+                }
             }
         }
     } else {

@@ -206,6 +206,7 @@ typedef struct HLSContext {
     int http_persistent;
     AVIOContext *m3u8_out;
     AVIOContext *sub_m3u8_out;
+    int64_t timeout;
 } HLSContext;
 
 static int mkdir_p(const char *path) {
@@ -287,7 +288,8 @@ static void set_http_options(AVFormatContext *s, AVDictionary **options, HLSCont
         av_dict_set(options, "user_agent", c->user_agent, 0);
     if (c->http_persistent)
         av_dict_set_int(options, "multiple_requests", 1, 0);
-
+    if (c->timeout >= 0)
+        av_dict_set_int(options, "timeout", c->timeout, 0);
 }
 
 static int replace_int_data_in_filename(char *buf, int buf_size, const char *filename, char placeholder, int64_t number)
@@ -2539,6 +2541,7 @@ static const AVOption options[] = {
     {"master_pl_name", "Create HLS master playlist with this name", OFFSET(master_pl_name), AV_OPT_TYPE_STRING, {.str = NULL},  0, 0,    E},
     {"master_pl_publish_rate", "Publish master play list every after this many segment intervals", OFFSET(master_publish_rate), AV_OPT_TYPE_INT, {.i64 = 0}, 0, UINT_MAX, E},
     {"http_persistent", "Use persistent HTTP connections", OFFSET(http_persistent), AV_OPT_TYPE_BOOL, {.i64 = 0 }, 0, 1, E },
+    {"timeout", "set timeout for socket I/O operations", OFFSET(timeout), AV_OPT_TYPE_DURATION, { .i64 = -1 }, -1, INT_MAX, .flags = E },
     { NULL },
 };
 

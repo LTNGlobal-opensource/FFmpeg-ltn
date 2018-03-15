@@ -31,6 +31,7 @@ static const AVOption options[] = {
     { "list_devices", "list available devices"  , OFFSET(list_devices), AV_OPT_TYPE_INT   , { .i64 = 0   }, 0, 1, ENC },
     { "list_formats", "list supported formats"  , OFFSET(list_formats), AV_OPT_TYPE_INT   , { .i64 = 0   }, 0, 1, ENC },
     { "preroll"     , "video preroll in seconds", OFFSET(preroll     ), AV_OPT_TYPE_DOUBLE, { .dbl = 0.5 }, 0, 5, ENC },
+    { "queue_size",   "output queue buffer size", OFFSET(queue_size  ), AV_OPT_TYPE_INT64, { .i64 = (1024 * 1024 * 1024)}, 0, INT64_MAX, ENC },
     { NULL },
 };
 
@@ -48,6 +49,9 @@ AVOutputFormat ff_decklink_muxer = {
     .audio_codec    = AV_CODEC_ID_PCM_S16LE,
     .video_codec    = AV_CODEC_ID_WRAPPED_AVFRAME,
     .subtitle_codec = AV_CODEC_ID_NONE,
+#if CONFIG_LIBKLVANC
+    .data_codec     = AV_CODEC_ID_SMPTE_2038,
+#endif
     .flags          = AVFMT_NOFILE,
     .get_device_list = ff_decklink_list_output_devices,
     .priv_class     = &decklink_muxer_class,

@@ -395,53 +395,53 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
         }
+    }
 
-        /* See if there any pending data packets to process */
-        int dequeue_size = avpacket_queue_size(&ctx->vanc_queue);
-        while (dequeue_size > 0) {
-            AVStream *vanc_st;
-            AVPacket vanc_pkt;
+    /* See if there any pending data packets to process */
+    int dequeue_size = avpacket_queue_size(&ctx->vanc_queue);
+    while (dequeue_size > 0) {
+        AVStream *vanc_st;
+        AVPacket vanc_pkt;
 
-            avpacket_queue_get(&ctx->vanc_queue, &vanc_pkt, 1);
-            dequeue_size -= (vanc_pkt.size + sizeof(AVPacketList));
-            if (vanc_pkt.pts + 1 < ctx->last_pts) {
-                av_log(avctx, AV_LOG_WARNING, "VANC packet too old, throwing away\n");
+        avpacket_queue_get(&ctx->vanc_queue, &vanc_pkt, 1);
+        dequeue_size -= (vanc_pkt.size + sizeof(AVPacketList));
+        if (vanc_pkt.pts + 1 < ctx->last_pts) {
+            av_log(avctx, AV_LOG_WARNING, "VANC packet too old, throwing away\n");
+            av_packet_unref(&vanc_pkt);
+            continue;
+        }
+
+        vanc_st = avctx->streams[vanc_pkt.stream_index];
+
+        if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038) {
+            struct klvanc_smpte2038_anc_data_packet_s *pkt_2038 = 0;
+
+            klvanc_smpte2038_parse_pes_payload(vanc_pkt.data, vanc_pkt.size, &pkt_2038);
+            if (pkt_2038 == NULL) {
+                av_log(avctx, AV_LOG_ERROR, "failed to decode SMPTE 2038 PES packet");
                 av_packet_unref(&vanc_pkt);
                 continue;
             }
+            for (int i = 0; i < pkt_2038->lineCount; i++) {
+                struct klvanc_smpte2038_anc_data_line_s *l = &pkt_2038->lines[i];
+                uint16_t *vancWords = NULL;
+                uint16_t vancWordCount;
 
-            vanc_st = avctx->streams[vanc_pkt.stream_index];
+                if (klvanc_smpte2038_convert_line_to_words(l, &vancWords,
+                                                           &vancWordCount) < 0)
+                    break;
 
-            if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038) {
-                struct klvanc_smpte2038_anc_data_packet_s *pkt_2038 = 0;
-
-                klvanc_smpte2038_parse_pes_payload(vanc_pkt.data, vanc_pkt.size, &pkt_2038);
-                if (pkt_2038 == NULL) {
-                    av_log(avctx, AV_LOG_ERROR, "failed to decode SMPTE 2038 PES packet");
-                    av_packet_unref(&vanc_pkt);
-                    continue;
+                ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, vancWords,
+                                         vancWordCount, l->line_number, 0);
+                free(vancWords);
+                if (ret != 0) {
+                    av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+                    break;
                 }
-                for (int i = 0; i < pkt_2038->lineCount; i++) {
-                    struct klvanc_smpte2038_anc_data_line_s *l = &pkt_2038->lines[i];
-                    uint16_t *vancWords = NULL;
-                    uint16_t vancWordCount;
-
-                    if (klvanc_smpte2038_convert_line_to_words(l, &vancWords,
-                                                               &vancWordCount) < 0)
-                        break;
-
-                    ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, vancWords,
-                                             vancWordCount, l->line_number, 0);
-                    free(vancWords);
-                    if (ret != 0) {
-                        av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
-                        break;
-                    }
-                }
-                klvanc_smpte2038_anc_data_packet_free(pkt_2038);
             }
-            av_packet_unref(&vanc_pkt);
+            klvanc_smpte2038_anc_data_packet_free(pkt_2038);
         }
+        av_packet_unref(&vanc_pkt);
     }
 
     IDeckLinkVideoFrameAncillary *vanc;

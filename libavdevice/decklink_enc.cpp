@@ -269,6 +269,24 @@ static int decklink_setup_audio(AVFormatContext *avctx, AVStream *st)
     return 0;
 }
 
+static int decklink_setup_data(AVFormatContext *avctx, AVStream *st)
+{
+    int ret = -1;
+
+    switch(st->codecpar->codec_id) {
+#if CONFIG_LIBKLVANC
+    case AV_CODEC_ID_SMPTE_2038:
+    case AV_CODEC_ID_SCTE_104:
+        /* No specific setup required */
+        ret = 0;
+        break;
+#endif
+    default:
+        av_log(avctx, AV_LOG_ERROR, "Unsupported data codec specified\n");
+    }
+    return ret;
+}
+
 av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
@@ -440,6 +458,24 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
                 }
             }
             klvanc_smpte2038_anc_data_packet_free(pkt_2038);
+        } else if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SCTE_104) {
+            /* Generate a VANC line for SCTE104 message */
+            uint16_t *vancWords = NULL;
+            uint16_t vancWordCount;
+            ret = klvanc_sdi_create_payload(0x07, 0x41, vanc_pkt.data, vanc_pkt.size,
+                                            &vancWords, &vancWordCount, 10);
+            if (ret != 0) {
+                av_log(avctx, AV_LOG_ERROR, "Error creating SCTE-104 VANC payload, ret=%d\n",
+                       ret);
+                break;
+            }
+            ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, vancWords,
+                                     vancWordCount, 13, 0);
+            free(vancWords);
+            if (ret != 0) {
+                av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+                break;
+            }
         }
         av_packet_unref(&vanc_pkt);
     }
@@ -749,7 +785,8 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
             if (decklink_setup_video(avctx, st))
                 goto error;
         } else if (c->codec_type == AVMEDIA_TYPE_DATA) {
-            /* No actual setup required */
+            if (decklink_setup_data(avctx, st))
+                goto error;
         } else {
             av_log(avctx, AV_LOG_ERROR, "Unsupported stream type.\n");
             goto error;

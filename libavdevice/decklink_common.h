@@ -104,6 +104,7 @@ struct decklink_ctx {
     unsigned int dropped;
     AVStream *audio_st[DECKLINK_MAX_AUDIO_CHANNELS];
     int num_audio_streams;
+    unsigned char *audio_buf;
     AVStream *data_st[DECKLINK_MAX_DATA_STREAMS];
     int num_data_streams;
     AVStream *video_st;

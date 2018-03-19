@@ -222,32 +222,45 @@ static int decklink_setup_audio(AVFormatContext *avctx, AVStream *st)
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     AVCodecParameters *c = st->codecpar;
 
-    if (ctx->audio) {
-        av_log(avctx, AV_LOG_ERROR, "Only one audio stream is supported!\n");
-        return -1;
-    }
-
     if (st->codecpar->codec_id == AV_CODEC_ID_AC3) {
         /* Regardless of the number of channels in the codec, we're only
            using 2 SDI audio channels at 48000Hz */
-        ctx->channels = 2;
+        ctx->channels += 2;
     } else if (st->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE) {
-        if (c->channels != 2 && c->channels != 8 && c->channels != 16) {
-            av_log(avctx, AV_LOG_ERROR, "Unsupported number of channels!"
-                   " Only 2, 8 or 16 channels are supported.\n");
-            return -1;
-        }
         if (c->sample_rate != bmdAudioSampleRate48kHz) {
             av_log(avctx, AV_LOG_ERROR, "Unsupported sample rate!"
                    " Only 48kHz is supported.\n");
             return -1;
         }
-        ctx->channels = c->channels;
+        ctx->channels += c->channels;
     } else {
         av_log(avctx, AV_LOG_ERROR, "Unsupported codec specified!"
                " Only PCM_S16LE and AC-3 are supported.\n");
         return -1;
     }
+
+    /* The device expects the sample rate to be fixed. */
+    avpriv_set_pts_info(st, 64, 1, bmdAudioSampleRate48kHz);
+
+    ctx->audio++;
+
+    return 0;
+}
+
+static int decklink_enable_audio(AVFormatContext *avctx)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+
+    /* Round up total channel count to that supported by decklink.  This
+       means we may need to pad the output buffer when interleaving the
+       audio packet data... */
+    if (ctx->channels <= 2)
+        ctx->channels = 2;
+    else if (ctx->channels <= 8)
+        ctx->channels = 8;
+    else if (ctx->channels <= 16)
+        ctx->channels = 16;
 
     if (ctx->dlo->EnableAudioOutput(bmdAudioSampleRate48kHz,
                                     bmdAudioSampleType16bitInteger,
@@ -260,11 +273,6 @@ static int decklink_setup_audio(AVFormatContext *avctx, AVStream *st)
         av_log(avctx, AV_LOG_ERROR, "Could not begin audio preroll!\n");
         return -1;
     }
-
-    /* The device expects the sample rate to be fixed. */
-    avpriv_set_pts_info(st, 64, 1, bmdAudioSampleRate48kHz);
-
-    ctx->audio = 1;
 
     return 0;
 }
@@ -627,7 +635,6 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     /* Preroll video frames. */
     if (!ctx->playback_started && pkt->pts > ctx->frames_preroll) {
-        av_log(avctx, AV_LOG_DEBUG, "Ending audio preroll.\n");
         if (ctx->audio && ctx->dlo->EndAudioPreroll() != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not end audio preroll!\n");
             return AVERROR(EIO);
@@ -688,10 +695,14 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     AVStream *st = avctx->streams[pkt->stream_index];
+    AVCodecParameters *c = st->codecpar;
     int sample_count;
     buffercount_type buffered;
     uint8_t *outbuf = NULL;
-    int ret = 0;
+    int i, ret = 0;
+    int offset = 0;
+    int first_audio_index = -1;
+    int sample_offset, sample_size;
 
     ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
     if (pkt->pts > 1 && !buffered)
@@ -704,16 +715,56 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
                                   &outbuf, &sample_count);
         if (ret != 0)
             goto done;
+        sample_size = 4;
     } else {
-        sample_count = pkt->size / (ctx->channels << 1);
+        sample_count = pkt->size / (c->channels << 1);
+        sample_size = st->codecpar->channels * 2;
         outbuf = pkt->data;
     }
 
-    if (ctx->dlo->ScheduleAudioSamples(outbuf, sample_count, pkt->pts,
-                                       bmdAudioSampleRate48kHz, NULL) != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not schedule audio samples.\n");
-        ret = AVERROR(EIO);
-        goto done;
+    /* Find the first audio stream */
+    for (i = 0; i <= pkt->stream_index; i++) {
+        AVStream *audio_st = avctx->streams[i];
+        if (audio_st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            first_audio_index = i;
+            break;
+        }
+    }
+
+    /* Figure out the interleaving offset */
+    for (i = 0; i < pkt->stream_index; i++) {
+        AVStream *audio_st = avctx->streams[i];
+        if (audio_st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+            if (audio_st->codecpar->codec_id == AV_CODEC_ID_AC3)
+                offset += 2;
+            else
+                offset += audio_st->codecpar->channels;
+    }
+
+    if (pkt->stream_index == first_audio_index) {
+        /* Send the completed buffer if present, and create a new one */
+        if (ctx->audio_buf) {
+            if (ctx->dlo->ScheduleAudioSamples(ctx->audio_buf, sample_count, pkt->pts,
+                                               bmdAudioSampleRate48kHz, NULL) != S_OK) {
+                av_log(avctx, AV_LOG_ERROR, "Could not schedule audio samples.\n");
+                ret = AVERROR(EIO);
+                goto done;
+            }
+        }
+        free(ctx->audio_buf);
+        ctx->audio_buf = (unsigned char *) av_mallocz(2 * sample_count * ctx->channels);
+    }
+
+    if (ctx->audio_buf == NULL) {
+        /* No buffer to interleave into, either because stream 0 has never been
+           received or because out of memory */
+        return 0;
+    }
+
+    sample_offset = offset * 2;
+    for (i = 0; i < sample_count; i++) {
+        memcpy(&ctx->audio_buf[sample_offset], &outbuf[i * sample_size], sample_size);
+        sample_offset += (ctx->channels * 2);
     }
 
 done:
@@ -808,6 +859,12 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         if (c->codec_type == AVMEDIA_TYPE_DATA)
             avpriv_set_pts_info(st, 64, ctx->bmd_tb_num, ctx->bmd_tb_den);
     }
+
+    if (ctx->audio > 0) {
+        if (decklink_enable_audio(avctx))
+            goto error;
+    }
+
     return 0;
 
 error:

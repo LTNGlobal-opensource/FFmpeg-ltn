@@ -288,6 +288,7 @@ static int decklink_setup_data(AVFormatContext *avctx, AVStream *st)
         /* No specific setup required */
         ret = 0;
         break;
+    case AV_CODEC_ID_SCTE_35:
 #if CONFIG_SCTE35TOSCTE104_BSF
         if (ff_stream_add_bitstream_filter(st, "scte35toscte104", NULL) > 0) {
             st->codecpar->codec_id = AV_CODEC_ID_SCTE_104;
@@ -296,6 +297,7 @@ static int decklink_setup_data(AVFormatContext *avctx, AVStream *st)
 #else
         av_log(avctx, AV_LOG_ERROR, "SCTE-35 requires scte35toscte104 BSF to be available\n");
 #endif
+        break;
 #endif
     default:
         av_log(avctx, AV_LOG_ERROR, "Unsupported data codec specified\n");

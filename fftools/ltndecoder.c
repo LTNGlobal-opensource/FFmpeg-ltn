@@ -3292,6 +3292,7 @@ static int init_output_stream_encode(OutputStream *ost)
     AVCodecContext *enc_ctx = ost->enc_ctx;
     AVCodecContext *dec_ctx = NULL;
     AVFormatContext *oc = output_files[ost->file_index]->ctx;
+    int interlaced, tff;
     int j, ret;
 
     set_encoder_id(output_files[ost->file_index], ost);
@@ -3377,6 +3378,18 @@ static int init_output_stream_encode(OutputStream *ost)
 
         enc_ctx->width  = av_buffersink_get_w(ost->filter->filter);
         enc_ctx->height = av_buffersink_get_h(ost->filter->filter);
+
+        interlaced = av_buffersink_get_interlaced_frame(ost->filter->filter);
+        tff = av_buffersink_get_top_field_first(ost->filter->filter);
+        if (interlaced) {
+            if (tff)
+                enc_ctx->field_order = AV_FIELD_TT;
+            else
+                enc_ctx->field_order = AV_FIELD_BB;
+        } else {
+                enc_ctx->field_order = AV_FIELD_PROGRESSIVE;
+        }
+
         enc_ctx->sample_aspect_ratio = ost->st->sample_aspect_ratio =
             ost->frame_aspect_ratio.num ? // overridden by the -aspect cli option
             av_mul_q(ost->frame_aspect_ratio, (AVRational){ enc_ctx->height, enc_ctx->width }) :

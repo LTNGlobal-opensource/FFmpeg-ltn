@@ -473,6 +473,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
                                 AV_DICT_IGNORE_SUFFIX))) {
             av_strlcatf(args, sizeof(args), ":%s=%s", e->key, e->value);
         }
+        av_strlcatf(args, sizeof(args), ":interlaced=%d:top_field_first=%d",
+                    ofilter->interlaced_frame, ofilter->top_field_first);
 
         snprintf(name, sizeof(name), "scaler_out_%d_%d",
                  ost->file_index, ost->index);
@@ -777,10 +779,11 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     av_bprint_init(&args, 0, 1);
     av_bprintf(&args,
              "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:"
-             "pixel_aspect=%d/%d:sws_param=flags=%d",
+             "pixel_aspect=%d/%d:sws_param=flags=%d:interlaced=%d:top_field_first=%d",
              ifilter->width, ifilter->height, ifilter->format,
              tb.num, tb.den, sar.num, sar.den,
-             SWS_BILINEAR + ((ist->dec_ctx->flags&AV_CODEC_FLAG_BITEXACT) ? SWS_BITEXACT:0));
+             SWS_BILINEAR + ((ist->dec_ctx->flags&AV_CODEC_FLAG_BITEXACT) ? SWS_BITEXACT:0),
+             ifilter->interlaced_frame, ifilter->top_field_first);
     if (fr.num && fr.den)
         av_bprintf(&args, ":frame_rate=%d/%d", fr.num, fr.den);
     snprintf(name, sizeof(name), "graph %d input from stream %d:%d", fg->index,
@@ -791,6 +794,8 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
                                             args.str, NULL, fg->graph)) < 0)
         goto fail;
     par->hw_frames_ctx = ifilter->hw_frames_ctx;
+    par->interlaced_frame = -1;
+    par->top_field_first = -1;
     ret = av_buffersrc_parameters_set(ifilter->filter, par);
     if (ret < 0)
         goto fail;
@@ -1137,6 +1142,8 @@ int configure_filtergraph(FilterGraph *fg)
 
         ofilter->width  = av_buffersink_get_w(sink);
         ofilter->height = av_buffersink_get_h(sink);
+        ofilter->interlaced_frame = av_buffersink_get_interlaced_frame(sink);
+        ofilter->top_field_first = av_buffersink_get_top_field_first(sink);
 
         ofilter->sample_rate    = av_buffersink_get_sample_rate(sink);
         ofilter->channel_layout = av_buffersink_get_channel_layout(sink);
@@ -1209,6 +1216,8 @@ int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *frame)
     ifilter->width               = frame->width;
     ifilter->height              = frame->height;
     ifilter->sample_aspect_ratio = frame->sample_aspect_ratio;
+    ifilter->interlaced_frame    = frame->interlaced_frame;
+    ifilter->top_field_first     = frame->top_field_first;
 
     ifilter->sample_rate         = frame->sample_rate;
     ifilter->channels            = frame->channels;

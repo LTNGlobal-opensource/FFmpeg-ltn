@@ -387,6 +387,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         klvanc_destroy_eia708_cdp(pkt);
 
         ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, cdp, len, 11, 0);
+        free(cdp);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
@@ -427,6 +428,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         klvanc_destroy_AFD(pkt);
 
         ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len, 12, 0);
+        free(afd);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);

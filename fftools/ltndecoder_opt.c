@@ -1818,6 +1818,11 @@ static OutputStream *new_audio_stream(OptionsContext *o, AVFormatContext *oc, in
 
         MATCH_PER_STREAM_OPT(audio_channels, i, audio_enc->channels, oc, st);
 
+        /* FIXME: At least for now force all output to stereo pairs.  Otherwise we get
+           AC-3 decoded to 5.1(side) and put out on discrete channels, which doesn't work
+           properly yet in the decklink output...  */
+        audio_enc->channels = 2;
+
         MATCH_PER_STREAM_OPT(sample_fmts, str, sample_fmt, oc, st);
         if (sample_fmt &&
             (audio_enc->sample_fmt = av_get_sample_fmt(sample_fmt)) == AV_SAMPLE_FMT_NONE) {

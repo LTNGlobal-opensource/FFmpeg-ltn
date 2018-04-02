@@ -3647,6 +3647,9 @@ static void report_new_stream(int input_index, AVPacket *pkt)
            input_index, pkt->stream_index,
            pkt->pos, av_ts2timestr(pkt->dts, &st->time_base));
     file->nb_streams_warn = pkt->stream_index + 1;
+    av_log(file->ctx, AV_LOG_WARNING,
+           "Exiting to allow restart by controller..");
+    exit_program(1);
 }
 
 static int transcode_init(void)

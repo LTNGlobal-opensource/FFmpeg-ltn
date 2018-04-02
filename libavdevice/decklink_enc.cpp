@@ -333,10 +333,11 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 }
 
 #if CONFIG_LIBKLVANC
-static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *ctx,
+static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx *cctx,
                                    AVPacket *pkt, decklink_frame *frame,
                                    AVStream *st)
 {
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     struct klvanc_line_set_s vanc_lines = { 0 };
     int ret, size;
 
@@ -344,7 +345,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         return 0;
 
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
-    if (data) {
+    if (data && cctx->cea708_line != -1) {
         struct klvanc_packet_eia_708b_s *pkt;
         uint16_t *cdp;
         uint16_t len;
@@ -386,7 +387,9 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         }
         klvanc_destroy_eia708_cdp(pkt);
 
-        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, cdp, len, 11, 0);
+        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, cdp, len,
+                                 cctx->cea708_line, 0);
+        free(cdp);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
@@ -394,7 +397,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
     }
 
     data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
-    if (data) {
+    if (data && cctx->afd_line != -1) {
         struct klvanc_packet_afd_s *pkt;
         uint16_t *afd;
         uint16_t len;
@@ -426,7 +429,9 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         }
         klvanc_destroy_AFD(pkt);
 
-        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len, 12, 0);
+        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len,
+                                 cctx->afd_line, 0);
+        free(afd);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
@@ -477,6 +482,11 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
             }
             klvanc_smpte2038_anc_data_packet_free(pkt_2038);
         } else if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SCTE_104) {
+            if (cctx->scte104_line == -1) {
+                av_packet_unref(&vanc_pkt);
+                continue;
+            }
+
             /* Generate a VANC line for SCTE104 message */
             uint16_t *vancWords = NULL;
             uint16_t vancWordCount;
@@ -488,7 +498,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
                 break;
             }
             ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, vancWords,
-                                     vancWordCount, 13, 0);
+                                     vancWordCount, cctx->scte104_line, 0);
             free(vancWords);
             if (ret != 0) {
                 av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
@@ -595,7 +605,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
 
 #if CONFIG_LIBKLVANC
-        ret = decklink_construct_vanc(avctx, ctx, pkt, frame, st);
+        ret = decklink_construct_vanc(avctx, cctx, pkt, frame, st);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed to construct VANC\n");
         }

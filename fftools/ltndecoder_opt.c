@@ -2304,8 +2304,12 @@ static int open_output_file(OptionsContext *o, const char *filename)
             for (i = 0; codec_id != AV_CODEC_ID_NONE && i < nb_input_streams; i++) {
                 if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
                     if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
-                        && getenv("LTN_ENABLE_SMPTE2038") != NULL)
+                        && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
                         new_data_stream(o, oc, i);
+                    } else if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
+                               && getenv("LTN_ENABLE_SCTE35") != NULL) {
+                        new_data_stream(o, oc, i);
+                    }
                 }
             }
         }

@@ -2261,18 +2261,28 @@ static int open_output_file(OptionsContext *o, const char *filename)
         /* audio: most channels */
         if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
             int best_score = 0, idx = -1;
-            for (i = 0; i < nb_input_streams; i++) {
-                int score;
-                ist = input_streams[i];
-                score = ist->st->codecpar->channels + 100000000*!!ist->st->codec_info_nb_frames;
-                if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
-                    score > best_score) {
-                    best_score = score;
-                    idx = i;
+            if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
+                /* Enable all streams */
+                for (i = 0; i < nb_input_streams; i++) {
+                    if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                        new_audio_stream(o, oc, i);
                 }
+            } else {
+                /* Use legacy heuristic to pick single best audio stream */
+                for (i = 0; i < nb_input_streams; i++) {
+                    int score;
+                    ist = input_streams[i];
+                    score = ist->st->codecpar->channels + 100000000*!!ist->st->codec_info_nb_frames;
+                    if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                        score > best_score) {
+                        best_score = score;
+                        idx = i;
+                    }
+                }
+                if (idx >= 0)
+                    new_audio_stream(o, oc, idx);
+
             }
-            if (idx >= 0)
-                new_audio_stream(o, oc, idx);
         }
 
         /* subtitles: pick first */

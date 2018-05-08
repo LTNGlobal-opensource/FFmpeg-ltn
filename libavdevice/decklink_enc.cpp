@@ -33,6 +33,7 @@ extern "C" {
 extern "C" {
 #include "libavformat/avformat.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/vtune.h"
 #include "avdevice.h"
 }
 
@@ -140,6 +141,22 @@ public:
         ctx->frames_buffer_available_spots++;
         pthread_cond_broadcast(&ctx->cond);
         pthread_mutex_unlock(&ctx->mutex);
+
+        switch (result) {
+        case bmdOutputFrameCompleted:
+        case bmdOutputFrameFlushed:
+            break;
+        case bmdOutputFrameDisplayedLate:
+            ctx->late++;
+            av_vtune_log_stat(DECKLINK_BUFFERS_LATE, ctx->late, 0);
+            break;
+        case bmdOutputFrameDropped:
+            ctx->dropped++;
+            av_vtune_log_stat(DECKLINK_BUFFERS_DROPPED, ctx->dropped, 0);
+            break;
+        }
+
+        av_vtune_log_stat(DECKLINK_BUFFER_COUNT, ctx->frames_buffer_available_spots, 0);
 
         return S_OK;
     }
@@ -574,10 +591,12 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     decklink_frame *frame;
     buffercount_type buffered;
     HRESULT hr;
+    uint64_t t1;
 #if CONFIG_LIBKLVANC
     int ret;
 #endif
 
+    t1 = av_vtune_get_timestamp();
     ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
 
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
@@ -620,6 +639,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     }
 
     /* Always keep at most one second of frames buffered. */
+    av_vtune_log_stat(DECKLINK_BUFFER_COUNT, ctx->frames_buffer_available_spots, 0);
     pthread_mutex_lock(&ctx->mutex);
     while (ctx->frames_buffer_available_spots == 0) {
         pthread_cond_wait(&ctx->cond, &ctx->mutex);
@@ -658,6 +678,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         }
         ctx->playback_started = 1;
     }
+
+    av_vtune_log_event("write_video", t1, av_vtune_get_timestamp(), 1);
 
     return 0;
 }
@@ -715,6 +737,9 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     int offset = 0;
     int first_audio_index = -1;
     int sample_offset, sample_size;
+    uint64_t t1;
+
+    t1 = av_vtune_get_timestamp();
 
     ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
     if (pkt->pts > 1 && !buffered)
@@ -783,6 +808,8 @@ done:
     if (st->codecpar->codec_id == AV_CODEC_ID_AC3)
         av_free(outbuf);
 
+    av_vtune_log_event("write_audio", t1, av_vtune_get_timestamp(), 1);
+
     return ret;
 }
 
@@ -806,7 +833,10 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx;
     unsigned int n;
+    uint64_t t1;
     int ret;
+
+    t1 = av_vtune_get_timestamp();
 
     ctx = (struct decklink_ctx *) av_mallocz(sizeof(struct decklink_ctx));
     if (!ctx)
@@ -876,6 +906,8 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         if (decklink_enable_audio(avctx))
             goto error;
     }
+
+    av_vtune_log_event("write_header", t1, av_vtune_get_timestamp(), 1);
 
     return 0;
 

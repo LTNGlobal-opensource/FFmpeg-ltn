@@ -75,6 +75,7 @@ HEADERS = adler32.h                                                     \
           tree.h                                                        \
           twofish.h                                                     \
           version.h                                                     \
+          vtune.h                                                       \
           xtea.h                                                        \
           tea.h                                                         \
 
@@ -151,6 +152,7 @@ OBJS = adler32.o                                                        \
        tree.o                                                           \
        twofish.o                                                        \
        utils.o                                                          \
+       vtune.o                                                          \
        xga_font_data.o                                                  \
        xtea.o                                                           \
        tea.o                                                            \

@@ -25,6 +25,7 @@
 #include "bytestream.h"
 #include "internal.h"
 #include "v210enc.h"
+#include "libavutil/vtune.h"
 
 #define CLIP(v) av_clip(v, 4, 1019)
 #define CLIP8(v) av_clip(v, 1, 254)
@@ -126,6 +127,9 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     AVFrameSideData *side_data;
     int h, w, ret;
     uint8_t *dst;
+    uint64_t t1;
+
+    t1 = av_vtune_get_timestamp();
 
     ret = ff_alloc_packet2(avctx, pkt, avctx->height * stride, avctx->height * stride);
     if (ret < 0) {
@@ -251,6 +255,8 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         else
             return AVERROR(ENOMEM);
     }
+
+    av_vtune_log_event("v210_encode", t1, av_vtune_get_timestamp(), 1);
 
     pkt->flags |= AV_PKT_FLAG_KEY;
     *got_packet = 1;

@@ -19,6 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include <atomic>
 using std::atomic;
 
@@ -32,7 +35,10 @@ extern "C" {
 
 extern "C" {
 #include "libavformat/avformat.h"
+#include "libavformat/network.h"
+#include "libavformat/os_support.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/avstring.h"
 #include "libavutil/vtune.h"
 #include "avdevice.h"
 }
@@ -44,6 +50,21 @@ extern "C" {
 #include "libklvanc/vanc-lines.h"
 #include "libklvanc/pixels.h"
 #endif
+
+static void udp_monitor_report(int fd, const char *str, uint64_t val)
+{
+    char *buf;
+
+    if (fd < 0)
+        return;
+
+    buf = av_asprintf("%s: %" PRId64 "\n", str, val);
+    if (!buf)
+        return;
+
+    send(fd, buf, strlen(buf), 0);
+    av_free(buf);
+}
 
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame
@@ -344,6 +365,9 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
     pthread_mutex_destroy(&ctx->mutex);
     pthread_cond_destroy(&ctx->cond);
 
+    if (ctx->udp_fd >= 0)
+        closesocket(ctx->udp_fd);
+
     av_freep(&cctx->ctx);
 
     return 0;
@@ -411,6 +435,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
         }
+        udp_monitor_report(ctx->udp_fd, "CC COUNT", cc_count);
     }
 
     data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
@@ -659,6 +684,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         return AVERROR(EIO);
     }
 
+    udp_monitor_report(ctx->udp_fd, "PICTURE", pkt->pts);
+
     ctx->dlo->GetBufferedVideoFrameCount(&buffered);
     av_log(avctx, AV_LOG_DEBUG, "Buffered video frames: %d.\n", (int) buffered);
     if (pkt->pts > 2 && buffered <= 2)
@@ -781,11 +808,26 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     if (pkt->stream_index == first_audio_index) {
         /* Send the completed buffer if present, and create a new one */
         if (ctx->audio_buf) {
-            if (ctx->dlo->ScheduleAudioSamples(ctx->audio_buf, sample_count, pkt->pts,
-                                               bmdAudioSampleRate48kHz, NULL) != S_OK) {
+            uint32_t written;
+            HRESULT result = ctx->dlo->ScheduleAudioSamples(ctx->audio_buf,
+                                                            sample_count, pkt->pts,
+                                                            bmdAudioSampleRate48kHz,
+                                                            &written);
+            if (result != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not schedule audio samples.\n");
+                udp_monitor_report(ctx->udp_fd, "ERROR AUDIO", result);
                 ret = AVERROR(EIO);
                 goto done;
+            }
+            udp_monitor_report(ctx->udp_fd, "PLAY AUDIO BYTES", sample_count);
+
+            uint32_t samples;
+            ctx->dlo->GetBufferedAudioSampleFrameCount(&samples);
+            udp_monitor_report(ctx->udp_fd, "AUDIO BUFFERED SAMPLES", samples);
+
+            if (written != sample_count) {
+                udp_monitor_report(ctx->udp_fd, "ERROR AUDIO SAMPLES LOST",
+                                   sample_count - written);
             }
         }
         free(ctx->audio_buf);
@@ -835,6 +877,11 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     unsigned int n;
     uint64_t t1;
     int ret;
+    char hostname[256];
+    int port;
+    int error;
+    char sport[16];
+    struct addrinfo hints = { 0 }, *res = 0;
 
     t1 = av_vtune_get_timestamp();
 
@@ -845,6 +892,7 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     ctx->list_formats = cctx->list_formats;
     ctx->preroll      = cctx->preroll;
     cctx->ctx = ctx;
+    ctx->udp_fd = -1;
 #if CONFIG_LIBKLVANC
     klvanc_context_create(&ctx->vanc_ctx);
 #endif
@@ -908,6 +956,43 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     }
 
     av_vtune_log_event("write_header", t1, av_vtune_get_timestamp(), 1);
+
+    /* Setup the UDP monitor callback */
+
+    if (cctx->udp_monitor) {
+        av_url_split(NULL, 0, NULL, 0, hostname, sizeof(hostname), &port, NULL,
+                     0, cctx->udp_monitor);
+
+        /* This is all cribbed from libavformat/udp.c */
+        snprintf(sport, sizeof(sport), "%d", port);
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_family   = AF_UNSPEC;
+
+        if ((error = getaddrinfo(hostname, sport, &hints, &res))) {
+            res = NULL;
+            av_log(avctx, AV_LOG_ERROR, "getaddrinfo(%s, %s): %s\n",
+                   hostname, sport, gai_strerror(error));
+        } else {
+            struct sockaddr_storage dest_addr;
+            int dest_addr_len;
+
+            memcpy(&dest_addr, res->ai_addr, res->ai_addrlen);
+            dest_addr_len = res->ai_addrlen;
+
+            ctx->udp_fd = ff_socket(res->ai_family, SOCK_DGRAM, 0);
+            if (ctx->udp_fd < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Call to ff_socket failed\n");
+            } else {
+                if (connect(ctx->udp_fd, (struct sockaddr *) &dest_addr,
+                            dest_addr_len)) {
+                    av_log(avctx, AV_LOG_ERROR, "Failure to connect to monitor port\n");
+                    closesocket(ctx->udp_fd);
+                    ctx->udp_fd = -1;
+                    goto error;
+                }
+            }
+        }
+    }
 
     return 0;
 

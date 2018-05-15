@@ -131,6 +131,9 @@ struct decklink_ctx {
     int frames_buffer_available_spots;
     int autodetect;
 
+    /* Monitoring feedback to controller */
+    int udp_fd;
+
 #if CONFIG_LIBKLVANC
     struct klvanc_context_s *vanc_ctx;
 #endif

@@ -62,6 +62,7 @@ struct decklink_cctx {
     int afd_line;
     int cea708_line;
     int scte104_line;
+    char *udp_monitor;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

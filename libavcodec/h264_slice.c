@@ -429,6 +429,12 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
                        MAX_DELAYED_PIC_COUNT + 2, h, h1);
 
     h->frame_recovered       = h1->frame_recovered;
+    if (h1->sei.a53_caption.buf_ref) {
+        h->sei.a53_caption.buf_ref = av_buffer_ref(h1->sei.a53_caption.buf_ref);
+        av_buffer_unref(&h1->sei.a53_caption.buf_ref);
+    }
+    else
+        h->sei.a53_caption.buf_ref = NULL;
 
     if (!h->cur_pic_ptr)
         return 0;
@@ -1269,15 +1275,14 @@ static int h264_export_frame_props(H264Context *h)
         }
     }
 
-    if (h->sei.a53_caption.a53_caption) {
+    if (h->sei.a53_caption.buf_ref) {
         H264SEIA53Caption *a53 = &h->sei.a53_caption;
         AVFrameSideData *sd = av_frame_new_side_data(cur->f,
                                                      AV_FRAME_DATA_A53_CC,
-                                                     a53->a53_caption_size);
+                                                     a53->buf_ref->size);
         if (sd)
-            memcpy(sd->data, a53->a53_caption, a53->a53_caption_size);
-        av_freep(&a53->a53_caption);
-        a53->a53_caption_size = 0;
+            memcpy(sd->data, a53->buf_ref->data, a53->buf_ref->size);
+        av_buffer_unref(&a53->buf_ref);
         h->avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
     }
 

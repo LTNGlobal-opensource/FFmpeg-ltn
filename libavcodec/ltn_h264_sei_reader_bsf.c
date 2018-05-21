@@ -73,7 +73,8 @@ static int ltn_h264_sei_reader_filter(AVBSFContext *ctx, AVPacket *out)
     ReaderContext *s = ctx->priv_data;
     uint32_t frameNumber;
     struct timeval hw_received;
-    struct timeval begin, end, diff;
+    struct timeval codecBegin, codecEnd, codecDiff;
+    struct timeval hardwareToCodecDiff;
     AVPacket *in;
     int ret, i = 0, j;
     uint32_t w, x;
@@ -120,59 +121,62 @@ static int ltn_h264_sei_reader_filter(AVBSFContext *ctx, AVPacket *out)
             // bit delimiter
             w = hw_received.tv_usec;
 //
-            begin.tv_sec  = in->data[j + 18] << 24;
-            begin.tv_sec |= in->data[j + 19] << 16;
+            codecBegin.tv_sec  = in->data[j + 18] << 24;
+            codecBegin.tv_sec |= in->data[j + 19] << 16;
             // bit delimiter
-            begin.tv_sec |= in->data[j + 21] <<  8;
-            begin.tv_sec |= in->data[j + 22] <<  0;
-            // bit delimiter
-
-            begin.tv_usec  = in->data[j + 24] << 24;
-            begin.tv_usec |= in->data[j + 25] << 16;
-            // bit delimiter
-            begin.tv_usec |= in->data[j + 27] <<  8;
-            begin.tv_usec |= in->data[j + 28] <<  0;
-            // bit delimiter
-            x = begin.tv_usec;
-
-            end.tv_sec  = in->data[j + 30] << 24;
-            end.tv_sec |= in->data[j + 31] << 16;
-            // bit delimiter
-            end.tv_sec |= in->data[j + 33] <<  8;
-            end.tv_sec |= in->data[j + 34] <<  0;
+            codecBegin.tv_sec |= in->data[j + 21] <<  8;
+            codecBegin.tv_sec |= in->data[j + 22] <<  0;
             // bit delimiter
 
-            end.tv_usec  = in->data[j + 36] << 24;
-            end.tv_usec |= in->data[j + 37] << 16;
+            codecBegin.tv_usec  = in->data[j + 24] << 24;
+            codecBegin.tv_usec |= in->data[j + 25] << 16;
             // bit delimiter
-            end.tv_usec |= in->data[j + 39] <<  8;
-            end.tv_usec |= in->data[j + 40] <<  0;
+            codecBegin.tv_usec |= in->data[j + 27] <<  8;
+            codecBegin.tv_usec |= in->data[j + 28] <<  0;
+            // bit delimiter
+            x = codecBegin.tv_usec;
+
+            codecEnd.tv_sec  = in->data[j + 30] << 24;
+            codecEnd.tv_sec |= in->data[j + 31] << 16;
+            // bit delimiter
+            codecEnd.tv_sec |= in->data[j + 33] <<  8;
+            codecEnd.tv_sec |= in->data[j + 34] <<  0;
             // bit delimiter
 
-            timeval_subtract(&diff, &end, &begin);
+            codecEnd.tv_usec  = in->data[j + 36] << 24;
+            codecEnd.tv_usec |= in->data[j + 37] << 16;
+            // bit delimiter
+            codecEnd.tv_usec |= in->data[j + 39] <<  8;
+            codecEnd.tv_usec |= in->data[j + 40] <<  0;
+            // bit delimiter
+
+            timeval_subtract(&codecDiff, &codecEnd, &codecBegin);
+            timeval_subtract(&hardwareToCodecDiff, &codecEnd, &hw_received);
 
             if (s->rowcount++ == 0) {
-                printf("frame        Hardware           Codec              Codec              Codec Latency     \n");
-                printf("Number       Capture Time---->  Entry Time------>  Exit Time------->  Time (Seconds)--->\n");
+                printf("frame        Hardware           Codec              Codec              Codec Latency       HW 2 Codec Latency\n");
+                printf("Number       Capture Time---->  Entry Time------>  Exit Time------->  Time (Seconds)--->  Time (Seconds)--->\n");
             }
             if (s->rowcount == 25)
                 s->rowcount = 0;
 
 #ifdef __LINUX__
-            printf("%011d  %09ld.%06u  %09ld.%06u  %09ld.%06lu  %ld.%06lu\n",
+            printf("%011d  %09ld.%06u  %09ld.%06u  %09ld.%06lu  %11ld.%06lu  %11ld.%06lu\n",
                 frameNumber,
                 hw_received.tv_sec, w,
-                begin.tv_sec, x,
-                end.tv_sec, end.tv_usec,
-                diff.tv_sec, diff.tv_usec);
+                codecBegin.tv_sec, x,
+                codecEnd.tv_sec, codecEnd.tv_usec,
+                codecDiff.tv_sec, codecDiff.tv_usec,
+                hardwareToCodecDiff.tv_sec, hardwareToCodecDiff.tv_usec);
 #endif
 #ifdef __APPLE__
-            printf("%011d  %09lu.%06u  %09lu.%06u  %09lu.%06u  %lu.%06u\n",
+            printf("%011d  %09lu.%06u  %09lu.%06u  %09lu.%06u  %11lu.%06u  %11lu.%06u\n",
                 frameNumber,
                 hw_received.tv_sec, w,
-                begin.tv_sec, x,
-                end.tv_sec, end.tv_usec,
-                diff.tv_sec, diff.tv_usec);
+                codecBegin.tv_sec, x,
+                codecEnd.tv_sec, codecEnd.tv_usec,
+                codecDiff.tv_sec, codecDiff.tv_usec,
+                hardwareToCodecDiff.tv_sec, hardwareToCodecDiff.tv_usec);
 #endif
 
             break;

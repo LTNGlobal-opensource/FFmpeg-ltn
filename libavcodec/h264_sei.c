@@ -558,12 +558,14 @@ void ltn_sei_display(const H264SEIContext *s, const char *indent)
         printf("%s\tdpb_output_delay = %d\n", indent, s->picture_timing.dpb_output_delay);
         printf("%s\tcpb_removal_delay = %d\n", indent, s->picture_timing.cpb_removal_delay);
     }
+#if 0
     if (s->a53_caption.a53_caption_size) {
         printf("%sa53_caption = ", indent);
         for (int i = 0; i < s->a53_caption.a53_caption_size; i++)
             printf("%02x ", s->a53_caption.a53_caption[i]);
         printf("\n");
     }
+#endif
     if (s->frame_packing.present) {
         printf("%sframe_packing_arrangement()\n", indent);
         printf("%s\tarrangement_id = %d\n", indent, s->frame_packing.arrangement_id);

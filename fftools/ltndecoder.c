@@ -3647,6 +3647,9 @@ static void report_new_stream(int input_index, AVPacket *pkt)
            input_index, pkt->stream_index,
            pkt->pos, av_ts2timestr(pkt->dts, &st->time_base));
     file->nb_streams_warn = pkt->stream_index + 1;
+    av_log(file->ctx, AV_LOG_WARNING,
+           "Exiting to allow restart by controller..");
+    exit_program(1);
 }
 
 static int transcode_init(void)
@@ -4393,6 +4396,8 @@ static int process_input(int file_index)
         pkt.dts *= ist->ts_scale;
 
     pkt_dts = av_rescale_q_rnd(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+
+#ifdef ENABLE_DTS_DELTA_THRESHOLD
     if ((ist->dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
          ist->dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) &&
         pkt_dts != AV_NOPTS_VALUE && ist->next_dts == AV_NOPTS_VALUE && !copy_ts
@@ -4409,7 +4414,7 @@ static int process_input(int file_index)
                 pkt.pts -= av_rescale_q(delta, AV_TIME_BASE_Q, ist->st->time_base);
         }
     }
-
+#endif
     duration = av_rescale_q(ifile->duration, ifile->time_base, ist->st->time_base);
     if (pkt.pts != AV_NOPTS_VALUE) {
         pkt.pts += duration;
@@ -4421,6 +4426,7 @@ static int process_input(int file_index)
         pkt.dts += duration;
 
     pkt_dts = av_rescale_q_rnd(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+#ifdef ENABLE_DTS_DELTA_THRESHOLD
     if ((ist->dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
          ist->dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) &&
          pkt_dts != AV_NOPTS_VALUE && ist->next_dts != AV_NOPTS_VALUE &&
@@ -4455,6 +4461,7 @@ static int process_input(int file_index)
             }
         }
     }
+#endif
 
     if (pkt.dts != AV_NOPTS_VALUE)
         ifile->last_ts = av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q);

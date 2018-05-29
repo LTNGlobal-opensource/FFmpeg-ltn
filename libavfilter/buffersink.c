@@ -194,6 +194,8 @@ MAKE_AVFILTERLINK_ACCESSOR(AVRational       , frame_rate         )
 MAKE_AVFILTERLINK_ACCESSOR(int              , w                  )
 MAKE_AVFILTERLINK_ACCESSOR(int              , h                  )
 MAKE_AVFILTERLINK_ACCESSOR(AVRational       , sample_aspect_ratio)
+MAKE_AVFILTERLINK_ACCESSOR(int              , interlaced_frame   )
+MAKE_AVFILTERLINK_ACCESSOR(int              , top_field_first    )
 
 MAKE_AVFILTERLINK_ACCESSOR(int              , channels           )
 MAKE_AVFILTERLINK_ACCESSOR(uint64_t         , channel_layout     )

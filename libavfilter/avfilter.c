@@ -166,6 +166,8 @@ int avfilter_link(AVFilterContext *src, unsigned srcpad,
     link->type    = src->output_pads[srcpad].type;
     av_assert0(AV_PIX_FMT_NONE == -1 && AV_SAMPLE_FMT_NONE == -1);
     link->format  = -1;
+    link->interlaced_frame = -1;
+    link->top_field_first = -1;
     ff_framequeue_init(&link->fifo, &src->graph->internal->frame_queues);
 
     return 0;
@@ -336,6 +338,10 @@ int avfilter_config_links(AVFilterContext *filter)
                         link->w = inlink->w;
                     if (!link->h)
                         link->h = inlink->h;
+                    if (link->interlaced_frame < 0)
+                        link->interlaced_frame = inlink->interlaced_frame;
+                    if (link->top_field_first < 0)
+                        link->top_field_first = inlink->top_field_first;
                 } else if (!link->w || !link->h) {
                     av_log(link->src, AV_LOG_ERROR,
                            "Video source filters must set their output link's "
@@ -382,9 +388,10 @@ void ff_tlog_link(void *ctx, AVFilterLink *link, int end)
 {
     if (link->type == AVMEDIA_TYPE_VIDEO) {
         ff_tlog(ctx,
-                "link[%p s:%dx%d fmt:%s %s->%s]%s",
+                "link[%p s:%dx%d fmt:%s i:%d t:%d %s->%s]%s",
                 link, link->w, link->h,
                 av_get_pix_fmt_name(link->format),
+                link->interlaced_frame, link->top_field_first,
                 link->src ? link->src->filter->name : "",
                 link->dst ? link->dst->filter->name : "",
                 end ? "\n" : "");
@@ -489,6 +496,8 @@ static const char *const var_names[] = {
     "pos",
     "w",
     "h",
+    "interlaced",
+    "top_field_first",
     NULL
 };
 
@@ -498,6 +507,8 @@ enum {
     VAR_POS,
     VAR_W,
     VAR_H,
+    VAR_INTERLACED,
+    VAR_TOP_FIELD_FIRST,
     VAR_VARS_NB
 };
 
@@ -1624,6 +1635,8 @@ int ff_inlink_evaluate_timeline_at_frame(AVFilterLink *link, const AVFrame *fram
     dstctx->var_values[VAR_T] = pts == AV_NOPTS_VALUE ? NAN : pts * av_q2d(link->time_base);
     dstctx->var_values[VAR_W] = link->w;
     dstctx->var_values[VAR_H] = link->h;
+    dstctx->var_values[VAR_INTERLACED] = link->interlaced_frame;
+    dstctx->var_values[VAR_TOP_FIELD_FIRST] = link->top_field_first;
     dstctx->var_values[VAR_POS] = pos == -1 ? NAN : pos;
 
     return fabs(av_expr_eval(dstctx->enable, dstctx->var_values, NULL)) >= 0.5;

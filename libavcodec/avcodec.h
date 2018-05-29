@@ -669,6 +669,7 @@ enum AVCodecID {
 
     AV_CODEC_ID_SCTE_35, ///< Contain timestamp estimated through PCR of program stream.
     AV_CODEC_ID_SCTE_104,
+    AV_CODEC_ID_SMPTE_2038,
     AV_CODEC_ID_BINTEXT    = 0x18800,
     AV_CODEC_ID_XBIN,
     AV_CODEC_ID_IDF,
@@ -1347,6 +1348,16 @@ enum AVPacketSideDataType {
      * in ETSI TS 101 154 using AVActiveFormatDescription enum.
      */
     AV_PKT_DATA_AFD,
+
+    /**
+     * Provides the original PTS when passed through the demux.  This can
+     * be used to offset any subsequent changes made by the caller to
+     * adjust PTS values (such as ts_offset).  We need this for SCTE-35,
+     * since by the time the packets reach the output the PTS values have
+     * already been re-written, and we cannot calculate pre-roll values
+     * using the PTS values embedded in the packet content
+     */
+    AV_PKT_DATA_ORIG_PTS,
 
     /**
      * The number of side data types.

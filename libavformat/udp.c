@@ -26,7 +26,6 @@
 
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE     /* Needed for using struct ip_mreq with recent glibc */
-
 #include "avformat.h"
 #include "avio_internal.h"
 #include "libavutil/avassert.h"
@@ -41,6 +40,7 @@
 #include "network.h"
 #include "os_support.h"
 #include "url.h"
+#include "libavutil/vtune.h"
 
 #ifdef __APPLE__
 #include "TargetConditionals.h"
@@ -508,6 +508,8 @@ static void *circular_buffer_task_rx( void *_URLContext)
     while(1) {
         int len;
 
+        av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);
+
         pthread_mutex_unlock(&s->mutex);
         /* Blocking operations are always cancellation points;
            see "General Information" / "Thread Cancelation Overview"
@@ -539,6 +541,7 @@ static void *circular_buffer_task_rx( void *_URLContext)
                 goto end;
             }
         }
+
         av_fifo_generic_write(s->fifo, s->tmp, len+4, NULL);
         pthread_cond_signal(&s->cond);
     }
@@ -1018,6 +1021,8 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
 #if HAVE_PTHREAD_CANCEL
     int avail, nonblock = h->flags & AVIO_FLAG_NONBLOCK;
 
+    av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);
+
     if (s->fifo) {
         pthread_mutex_lock(&s->mutex);
         do {
@@ -1035,6 +1040,7 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
                 av_fifo_generic_read(s->fifo, buf, avail, NULL);
                 av_fifo_drain(s->fifo, AV_RL32(tmp) - avail);
                 pthread_mutex_unlock(&s->mutex);
+
                 return avail;
             } else if(s->circular_buffer_error){
                 int err = s->circular_buffer_error;
@@ -1066,6 +1072,8 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
             return ret;
     }
     ret = recv(s->udp_fd, buf, size, 0);
+
+    av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);
 
     return ret < 0 ? ff_neterrno() : ret;
 }

@@ -749,6 +749,7 @@ static const StreamType REGD_types[] = {
     { MKTAG('H', 'E', 'V', 'C'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_HEVC  },
     { MKTAG('K', 'L', 'V', 'A'), AVMEDIA_TYPE_DATA,  AV_CODEC_ID_SMPTE_KLV },
     { MKTAG('I', 'D', '3', ' '), AVMEDIA_TYPE_DATA,  AV_CODEC_ID_TIMED_ID3 },
+    { MKTAG('V', 'A', 'N', 'C'), AVMEDIA_TYPE_DATA,  AV_CODEC_ID_SMPTE_2038 },
     { MKTAG('V', 'C', '-', '1'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_VC1   },
     { MKTAG('O', 'p', 'u', 's'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_OPUS  },
     { 0 },
@@ -1620,6 +1621,11 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
         MpegTSFilter *f = ts->pids[prg->pcr_pid];
         if (f && f->last_pcr != -1)
             ts->pkt->pts = ts->pkt->dts = f->last_pcr/300;
+        if (f) {
+            int64_t *orig_pts = av_packet_new_side_data(ts->pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+            if (orig_pts)
+                *orig_pts = ts->pkt->pts;
+        }
     }
     ts->stop_parse = 1;
 

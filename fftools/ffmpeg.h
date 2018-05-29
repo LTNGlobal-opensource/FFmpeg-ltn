@@ -246,6 +246,8 @@ typedef struct InputFilter {
 
     int width, height;
     AVRational sample_aspect_ratio;
+    int interlaced_frame;
+    int top_field_first;
 
     int sample_rate;
     int channels;
@@ -270,6 +272,9 @@ typedef struct OutputFilter {
     int width, height;
     AVRational frame_rate;
     int format;
+    int interlaced_frame;
+    int top_field_first;
+
     int sample_rate;
     uint64_t channel_layout;
 

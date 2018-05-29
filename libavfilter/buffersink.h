@@ -114,6 +114,8 @@ AVRational       av_buffersink_get_frame_rate          (const AVFilterContext *c
 int              av_buffersink_get_w                   (const AVFilterContext *ctx);
 int              av_buffersink_get_h                   (const AVFilterContext *ctx);
 AVRational       av_buffersink_get_sample_aspect_ratio (const AVFilterContext *ctx);
+int              av_buffersink_get_interlaced_frame    (const AVFilterContext *ctx);
+int              av_buffersink_get_top_field_first     (const AVFilterContext *ctx);
 
 int              av_buffersink_get_channels            (const AVFilterContext *ctx);
 uint64_t         av_buffersink_get_channel_layout      (const AVFilterContext *ctx);

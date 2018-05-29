@@ -840,6 +840,33 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         last_filter = yadif;
     }
 
+    /* Special case for SD output to Decklink cards (which expect ITU-656 video) */
+    if (ifilter->height == 480) {
+        AVFilterContext *pad_filter;
+        char args[255];
+        int x = 0;
+
+        if (ifilter->width == 704) {
+            /* Original encoder encoded in D1, so we pad 8 pixels on
+               each side per the standard convention... */
+            x = 8;
+        }
+
+        /* Vertical padding is 2 on the top, 4 on the bottom, to preserve
+           field dominance */
+        snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2", 720, 486, x);
+        snprintf(name, sizeof(name), "pad_in_%d_%d",
+                 ist->file_index, ist->st->index);
+
+        if ((ret = avfilter_graph_create_filter(&pad_filter, avfilter_get_by_name("pad"),
+                                                name, args, NULL, fg->graph)) < 0)
+            return ret;
+        if ((ret = avfilter_link(last_filter, 0, pad_filter, 0)) < 0)
+            return ret;
+
+        last_filter = pad_filter;
+    }
+
     snprintf(name, sizeof(name), "trim_in_%d_%d",
              ist->file_index, ist->st->index);
     if (copy_ts) {

@@ -120,7 +120,7 @@ static int ltn_h264_sei_reader_filter(AVBSFContext *ctx, AVPacket *out)
             hw_received.tv_usec |= in->data[j + 16] <<  0;
             // bit delimiter
             w = hw_received.tv_usec;
-//
+
             codecBegin.tv_sec  = in->data[j + 18] << 24;
             codecBegin.tv_sec |= in->data[j + 19] << 16;
             // bit delimiter

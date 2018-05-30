@@ -66,6 +66,7 @@ static void udp_monitor_report(int fd, const char *str, uint64_t val)
     av_free(buf);
 }
 
+
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame
 {
@@ -145,9 +146,14 @@ private:
     std::atomic<int>  _refs;
 };
 
-class decklink_output_callback : public IDeckLinkVideoOutputCallback
+class decklink_output_callback : public IDeckLinkVideoOutputCallback, public IDeckLinkAudioOutputCallback
 {
 public:
+    struct decklink_cctx *_cctx;
+    decklink_output_callback(struct decklink_cctx *cctx)
+    {
+        _cctx = cctx;
+    }
     virtual HRESULT STDMETHODCALLTYPE ScheduledFrameCompleted(IDeckLinkVideoFrame *_frame, BMDOutputFrameCompletionResult result)
     {
         decklink_frame *frame = static_cast<decklink_frame *>(_frame);
@@ -182,6 +188,47 @@ public:
         return S_OK;
     }
     virtual HRESULT STDMETHODCALLTYPE ScheduledPlaybackHasStopped(void)       { return S_OK; }
+    virtual HRESULT STDMETHODCALLTYPE RenderAudioSamples (bool preroll)
+    {
+        struct decklink_ctx *ctx = (struct decklink_ctx *)_cctx->ctx;
+        AVPacketList *cur, *next;
+        BMDTimeValue streamtime;
+        double speed;
+        ctx->dlo->GetScheduledStreamTime(48000, &streamtime, &speed);
+
+        pthread_mutex_lock(&ctx->audio_mutex);
+
+        /* Do final Scheduling of audio at least 0.25 seconds before realtime.  This might
+           need to be configurable at some point if the user wants to do really low
+           latency (i.e. a pre-roll of less than 0.25 seconds)...  */
+        int window = streamtime + 12000;
+        if (window > 0) {
+            for (cur = ctx->output_audio_list; cur != NULL; cur = next) {
+                if (cur->next == NULL)
+                    break;
+                if (cur->pkt.pts > window)
+                    break;
+                uint32_t written;
+                HRESULT result = ctx->dlo->ScheduleAudioSamples(cur->pkt.data,
+                                                                ctx->audio_pkt_numsamples, cur->pkt.pts,
+                                                                bmdAudioSampleRate48kHz,
+                                                                &written);
+                if (result != S_OK)
+                    udp_monitor_report(ctx->udp_fd, "ERROR AUDIO", result);
+                else
+                    udp_monitor_report(ctx->udp_fd, "PLAY AUDIO BYTES", written);
+
+                ctx->output_audio_list = cur->next;
+                next = cur->next;
+                av_packet_unref(&cur->pkt);
+                av_freep(&cur);
+            }
+        }
+
+        pthread_mutex_unlock(&ctx->audio_mutex);
+
+        return S_OK;
+    }
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID *ppv) { return E_NOINTERFACE; }
     virtual ULONG   STDMETHODCALLTYPE AddRef(void)                            { return 1; }
     virtual ULONG   STDMETHODCALLTYPE Release(void)                           { return 1; }
@@ -232,8 +279,9 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     avpacket_queue_init (avctx, &ctx->vanc_queue);
 
     /* Set callback. */
-    ctx->output_callback = new decklink_output_callback();
+    ctx->output_callback = new decklink_output_callback(cctx);
     ctx->dlo->SetScheduledFrameCompletionCallback(ctx->output_callback);
+    ctx->dlo->SetAudioCallback(ctx->output_callback);
 
     ctx->frames_preroll = st->time_base.den * ctx->preroll;
     if (st->time_base.den > 1000)
@@ -243,6 +291,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     ctx->frames_buffer = ctx->frames_preroll * 2;
     ctx->frames_buffer = FFMIN(ctx->frames_buffer, 60);
     pthread_mutex_init(&ctx->mutex, NULL);
+    pthread_mutex_init(&ctx->audio_mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);
     ctx->frames_buffer_available_spots = ctx->frames_buffer;
 
@@ -761,10 +810,11 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     buffercount_type buffered;
     uint8_t *outbuf = NULL;
     int i, ret = 0;
-    int offset = 0;
-    int first_audio_index = -1;
+    int interleave_offset = 0;
     int sample_offset, sample_size;
     uint64_t t1;
+    struct AVPacketList *cur;
+    int src_offset, remaining;
 
     t1 = av_vtune_get_timestamp();
 
@@ -786,66 +836,70 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
         outbuf = pkt->data;
     }
 
-    /* Find the first audio stream */
-    for (i = 0; i <= pkt->stream_index; i++) {
-        AVStream *audio_st = avctx->streams[i];
-        if (audio_st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            first_audio_index = i;
-            break;
-        }
-    }
-
-    /* Figure out the interleaving offset */
+    /* Figure out the interleaving offset for this stream */
     for (i = 0; i < pkt->stream_index; i++) {
         AVStream *audio_st = avctx->streams[i];
         if (audio_st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
             if (audio_st->codecpar->codec_id == AV_CODEC_ID_AC3)
-                offset += 2;
+                interleave_offset += 2;
             else
-                offset += audio_st->codecpar->channels;
+                interleave_offset += audio_st->codecpar->channels;
     }
 
-    if (pkt->stream_index == first_audio_index) {
-        /* Send the completed buffer if present, and create a new one */
-        if (ctx->audio_buf) {
-            uint32_t written;
-            HRESULT result = ctx->dlo->ScheduleAudioSamples(ctx->audio_buf,
-                                                            sample_count, pkt->pts,
-                                                            bmdAudioSampleRate48kHz,
-                                                            &written);
-            if (result != S_OK) {
-                av_log(avctx, AV_LOG_ERROR, "Could not schedule audio samples.\n");
-                udp_monitor_report(ctx->udp_fd, "ERROR AUDIO", result);
-                ret = AVERROR(EIO);
-                goto done;
-            }
-            udp_monitor_report(ctx->udp_fd, "PLAY AUDIO BYTES", sample_count);
+    pthread_mutex_lock(&ctx->audio_mutex);
+    if (ctx->audio_pkt_numsamples == 0) {
+        /* Establish initial cadence */
+        ctx->audio_pkt_numsamples = sample_count;
+        ctx->output_audio_list = (AVPacketList *)av_mallocz(sizeof(AVPacketList));
+        if (ctx->output_audio_list == NULL)
+            goto done_unlock;
+        ret = av_new_packet(&ctx->output_audio_list->pkt, ctx->audio_pkt_numsamples * ctx->channels * 2);
+        if (ret != 0)
+            goto done_unlock;
+        memset(ctx->output_audio_list->pkt.data, 0, ctx->audio_pkt_numsamples * ctx->channels * 2);
+        ctx->output_audio_list->pkt.pts = pkt->pts;
+    }
 
-            uint32_t samples;
-            ctx->dlo->GetBufferedAudioSampleFrameCount(&samples);
-            udp_monitor_report(ctx->udp_fd, "AUDIO BUFFERED SAMPLES", samples);
+    remaining = sample_count;
+    src_offset = 0;
+    for (cur = ctx->output_audio_list; cur != NULL; cur = cur->next) {
+        /* See if we should interleave into this packet */
+        if (((pkt->pts) >= cur->pkt.pts) &&
+            (pkt->pts) < (cur->pkt.pts + ctx->audio_pkt_numsamples)) {
+            int num_copy = remaining;
+            int dst_offset = pkt->pts - cur->pkt.pts;
 
-            if (written != sample_count) {
-                udp_monitor_report(ctx->udp_fd, "ERROR AUDIO SAMPLES LOST",
-                                   sample_count - written);
+            /* Don't overflow dest buffer */
+            if (num_copy > (ctx->audio_pkt_numsamples - dst_offset))
+                num_copy = ctx->audio_pkt_numsamples - dst_offset;
+
+            /* Yes, interleave */
+            sample_offset = (dst_offset * ctx->channels + interleave_offset) * 2;
+            for (i = 0; i < num_copy; i++) {
+                memcpy(&cur->pkt.data[sample_offset], &pkt->data[(i + src_offset) * sample_size], sample_size);
+                sample_offset += (ctx->channels * 2);
             }
+            pkt->pts += num_copy;
+            src_offset += num_copy;
+            remaining -= num_copy;
+            if (remaining == 0)
+                break;
         }
-        free(ctx->audio_buf);
-        ctx->audio_buf = (unsigned char *) av_mallocz(2 * sample_count * ctx->channels);
-    }
 
-    if (ctx->audio_buf == NULL) {
-        /* No buffer to interleave into, either because stream 0 has never been
-           received or because out of memory */
-        return 0;
+        if ((pkt->pts >= cur->pkt.pts) && cur->next == NULL && remaining > 0) {
+            /* We need a new packet in our outgoing queue */
+            cur->next = (AVPacketList *)av_mallocz(sizeof(AVPacketList));
+            if (cur->next == NULL)
+                goto done_unlock;
+            ret = av_new_packet(&cur->next->pkt, ctx->audio_pkt_numsamples * ctx->channels * 2);
+            if (ret != 0)
+                goto done_unlock;
+            memset(cur->next->pkt.data, 0, ctx->audio_pkt_numsamples * ctx->channels * 2);
+            cur->next->pkt.pts = cur->pkt.pts + ctx->audio_pkt_numsamples;
+        }
     }
-
-    sample_offset = offset * 2;
-    for (i = 0; i < sample_count; i++) {
-        memcpy(&ctx->audio_buf[sample_offset], &outbuf[i * sample_size], sample_size);
-        sample_offset += (ctx->channels * 2);
-    }
-
+done_unlock:
+    pthread_mutex_unlock(&ctx->audio_mutex);
 done:
     if (st->codecpar->codec_id == AV_CODEC_ID_AC3)
         av_free(outbuf);

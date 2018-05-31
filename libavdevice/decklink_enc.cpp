@@ -610,9 +610,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
        final VANC sections for the Decklink output */
     for (int i = 0; i < vanc_lines.num_lines; i++) {
         struct klvanc_line_s *line = vanc_lines.lines[i];
-        uint16_t *out_line;
         int real_line;
-        int out_len;
         void *buf;
 
         if (line == NULL)
@@ -633,16 +631,14 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
         }
 
         /* Generate the full line taking into account all VANC packets on that line */
-        result = klvanc_generate_vanc_line(ctx->vanc_ctx, line, &out_line, &out_len, ctx->bmd_width);
+        result = klvanc_generate_vanc_line_v210(ctx->vanc_ctx, line, (uint8_t *) buf,
+                                                ctx->bmd_width);
         if (result != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed to generate VANC line\n");
             klvanc_line_free(line);
             continue;
         }
 
-        /* Repack the 16-bit ints into 10-bit, and push into final buffer */
-        klvanc_y10_to_v210(out_line, (uint8_t *) buf, out_len);
-        free(out_line);
         klvanc_line_free(line);
     }
 

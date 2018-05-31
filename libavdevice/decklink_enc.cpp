@@ -460,9 +460,10 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
 
         /* CC data */
         pkt->header.ccdata_present = 1;
+        pkt->header.caption_service_active = 1;
         pkt->ccdata.cc_count = cc_count;
         for (size_t i = 0; i < cc_count; i++) {
-            if (data [3*i] & 0x40)
+            if (data [3*i] & 0x04)
                 pkt->ccdata.cc[i].cc_valid = 1;
             pkt->ccdata.cc[i].cc_type = data[3*i] & 0x03;
             pkt->ccdata.cc[i].cc_data[0] = data[3*i+1];

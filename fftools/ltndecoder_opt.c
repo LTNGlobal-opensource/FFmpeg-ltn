@@ -2236,94 +2236,147 @@ static int open_output_file(OptionsContext *o, const char *filename)
         char *subtitle_codec_name = NULL;
         /* pick the "best" stream of each type */
 
-        /* video: highest resolution */
-        if (!o->video_disable && av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_VIDEO) != AV_CODEC_ID_NONE) {
-            int area = 0, idx = -1;
-            int qcr = avformat_query_codec(oc->oformat, oc->oformat->video_codec, 0);
-            for (i = 0; i < nb_input_streams; i++) {
-                int new_area;
-                ist = input_streams[i];
-                new_area = ist->st->codecpar->width * ist->st->codecpar->height + 100000000*!!ist->st->codec_info_nb_frames;
-                if((qcr!=MKTAG('A', 'P', 'I', 'C')) && (ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
-                    new_area = 1;
-                if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
-                    new_area > area) {
-                    if((qcr==MKTAG('A', 'P', 'I', 'C')) && !(ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
-                        continue;
-                    area = new_area;
-                    idx = i;
+        if (nb_input_files == 1 && input_files[0]->ctx->nb_programs > 0) {
+            /* Input file is arranged into programs, so respect that */
+            int video_idx = -1, audio_idx;
+            AVProgram *prg = input_files[0]->ctx->programs[0];
+            if (!o->video_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
+                                                    AVMEDIA_TYPE_VIDEO) != AV_CODEC_ID_NONE) {
+                for (i = 0; i < prg->nb_stream_indexes; i++) {
+                    if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                        video_idx = i;
+                        new_video_stream(o, oc, video_idx);
+                        break;
+                    }
                 }
             }
-            if (idx >= 0)
-                new_video_stream(o, oc, idx);
-        }
+            if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
+                                                    AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
+                int related_stream;
+                if (video_idx >= 0)
+                    related_stream = video_idx;
+                else
+                    related_stream = prg->stream_index[0];
 
-        /* audio: most channels */
-        if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
-            int best_score = 0, idx = -1;
-            if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
-                /* Enable all streams */
-                for (i = 0; i < nb_input_streams; i++) {
-                    if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
-                        new_audio_stream(o, oc, i);
+                if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
+                    /* Include all audio streams */
+                    for (i = 0; i < prg->nb_stream_indexes; i++) {
+                        if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                            new_audio_stream(o, oc, i);
+                    }
+                } else {
+                    audio_idx = av_find_best_stream(input_files[0]->ctx, AVMEDIA_TYPE_AUDIO, -1,
+                                                    related_stream, NULL, 0);
+                    if (audio_idx >= 0)
+                        new_audio_stream(o, oc, audio_idx);
                 }
-            } else {
-                /* Use legacy heuristic to pick single best audio stream */
+            }
+            /* Data only if explicitly enabled through LTN environment variables */
+            if (!o->data_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
+                                                   AVMEDIA_TYPE_DATA) != AV_CODEC_ID_NONE) {
+                for (i = 0; i < prg->nb_stream_indexes; i++) {
+                    AVStream *st = input_streams[prg->stream_index[i]]->st;
+                    if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+                        if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
+                            && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
+                            new_data_stream(o, oc, i);
+                        } else if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
+                                   && getenv("LTN_ENABLE_SCTE35") != NULL) {
+                            new_data_stream(o, oc, i);
+                        }
+                    }
+                }
+            }
+        } else {
+            /* video: highest resolution */
+            if (!o->video_disable && av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_VIDEO) != AV_CODEC_ID_NONE) {
+                int area = 0, idx = -1;
+                int qcr = avformat_query_codec(oc->oformat, oc->oformat->video_codec, 0);
                 for (i = 0; i < nb_input_streams; i++) {
-                    int score;
+                    int new_area;
                     ist = input_streams[i];
-                    score = ist->st->codecpar->channels + 100000000*!!ist->st->codec_info_nb_frames;
-                    if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
-                        score > best_score) {
-                        best_score = score;
+                    new_area = ist->st->codecpar->width * ist->st->codecpar->height + 100000000*!!ist->st->codec_info_nb_frames;
+                    if((qcr!=MKTAG('A', 'P', 'I', 'C')) && (ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
+                        new_area = 1;
+                    if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
+                        new_area > area) {
+                        if((qcr==MKTAG('A', 'P', 'I', 'C')) && !(ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
+                            continue;
+                        area = new_area;
                         idx = i;
                     }
                 }
                 if (idx >= 0)
-                    new_audio_stream(o, oc, idx);
-
+                    new_video_stream(o, oc, idx);
             }
-        }
 
-        /* subtitles: pick first */
-        MATCH_PER_TYPE_OPT(codec_names, str, subtitle_codec_name, oc, "s");
-        if (!o->subtitle_disable && (avcodec_find_encoder(oc->oformat->subtitle_codec) || subtitle_codec_name)) {
-            for (i = 0; i < nb_input_streams; i++)
-                if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
-                    AVCodecDescriptor const *input_descriptor =
-                        avcodec_descriptor_get(input_streams[i]->st->codecpar->codec_id);
-                    AVCodecDescriptor const *output_descriptor = NULL;
-                    AVCodec const *output_codec =
-                        avcodec_find_encoder(oc->oformat->subtitle_codec);
-                    int input_props = 0, output_props = 0;
-                    if (output_codec)
-                        output_descriptor = avcodec_descriptor_get(output_codec->id);
-                    if (input_descriptor)
-                        input_props = input_descriptor->props & (AV_CODEC_PROP_TEXT_SUB | AV_CODEC_PROP_BITMAP_SUB);
-                    if (output_descriptor)
-                        output_props = output_descriptor->props & (AV_CODEC_PROP_TEXT_SUB | AV_CODEC_PROP_BITMAP_SUB);
-                    if (subtitle_codec_name ||
-                        input_props & output_props ||
-                        // Map dvb teletext which has neither property to any output subtitle encoder
-                        input_descriptor && output_descriptor &&
-                        (!input_descriptor->props ||
-                         !output_descriptor->props)) {
-                        new_subtitle_stream(o, oc, i);
-                        break;
+            /* audio: most channels */
+            if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
+                int best_score = 0, idx = -1;
+                if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
+                    /* Enable all streams */
+                    for (i = 0; i < nb_input_streams; i++) {
+                        if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                            new_audio_stream(o, oc, i);
                     }
+                } else {
+                    /* Use legacy heuristic to pick single best audio stream */
+                    for (i = 0; i < nb_input_streams; i++) {
+                        int score;
+                        ist = input_streams[i];
+                        score = ist->st->codecpar->channels + 100000000*!!ist->st->codec_info_nb_frames;
+                        if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                            score > best_score) {
+                            best_score = score;
+                            idx = i;
+                        }
+                    }
+                    if (idx >= 0)
+                        new_audio_stream(o, oc, idx);
+
                 }
-        }
-        /* Data only if explicitly enabled through LTN environment variables */
-        if (!o->data_disable ) {
-            enum AVCodecID codec_id = av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_DATA);
-            for (i = 0; codec_id != AV_CODEC_ID_NONE && i < nb_input_streams; i++) {
-                if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
-                    if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
-                        && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
-                        new_data_stream(o, oc, i);
-                    } else if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
-                               && getenv("LTN_ENABLE_SCTE35") != NULL) {
-                        new_data_stream(o, oc, i);
+            }
+
+            /* subtitles: pick first */
+            MATCH_PER_TYPE_OPT(codec_names, str, subtitle_codec_name, oc, "s");
+            if (!o->subtitle_disable && (avcodec_find_encoder(oc->oformat->subtitle_codec) || subtitle_codec_name)) {
+                for (i = 0; i < nb_input_streams; i++)
+                    if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+                        AVCodecDescriptor const *input_descriptor =
+                            avcodec_descriptor_get(input_streams[i]->st->codecpar->codec_id);
+                        AVCodecDescriptor const *output_descriptor = NULL;
+                        AVCodec const *output_codec =
+                            avcodec_find_encoder(oc->oformat->subtitle_codec);
+                        int input_props = 0, output_props = 0;
+                        if (output_codec)
+                            output_descriptor = avcodec_descriptor_get(output_codec->id);
+                        if (input_descriptor)
+                            input_props = input_descriptor->props & (AV_CODEC_PROP_TEXT_SUB | AV_CODEC_PROP_BITMAP_SUB);
+                        if (output_descriptor)
+                            output_props = output_descriptor->props & (AV_CODEC_PROP_TEXT_SUB | AV_CODEC_PROP_BITMAP_SUB);
+                        if (subtitle_codec_name ||
+                            input_props & output_props ||
+                            // Map dvb teletext which has neither property to any output subtitle encoder
+                            input_descriptor && output_descriptor &&
+                            (!input_descriptor->props ||
+                             !output_descriptor->props)) {
+                            new_subtitle_stream(o, oc, i);
+                            break;
+                        }
+                    }
+            }
+            /* Data only if explicitly enabled through LTN environment variables */
+            if (!o->data_disable ) {
+                enum AVCodecID codec_id = av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_DATA);
+                for (i = 0; codec_id != AV_CODEC_ID_NONE && i < nb_input_streams; i++) {
+                    if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+                        if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
+                            && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
+                            new_data_stream(o, oc, i);
+                        } else if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
+                                   && getenv("LTN_ENABLE_SCTE35") != NULL) {
+                            new_data_stream(o, oc, i);
+                        }
                     }
                 }
             }

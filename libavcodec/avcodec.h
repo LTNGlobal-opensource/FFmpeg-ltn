@@ -1090,6 +1090,15 @@ typedef struct AVPanScan {
     int16_t position[3][2];
 } AVPanScan;
 
+
+typedef struct AVBarData {
+    int top_bottom; /* 0=top/bottom 1=left/right */
+    int top;
+    int left;
+    int bottom;
+    int right;
+} AVBarData;
+
 /**
  * This structure describes the bitrate properties of an encoded bitstream. It
  * roughly corresponds to a subset the VBV parameters for MPEG-2 or HRD

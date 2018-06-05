@@ -92,6 +92,15 @@ typedef struct H264SEIAFD {
     uint8_t active_format_description;
 } H264SEIAFD;
 
+typedef struct H264SEIBarData {
+    int present;
+    /* Only one pair of top/bottom or left/right can be populated */
+    uint16_t top;
+    uint16_t bottom;
+    uint16_t left;
+    uint16_t right;
+} H264SEIBarData;
+
 typedef struct H264SEIA53Caption {
     AVBufferRef *buf_ref;
 } H264SEIA53Caption;
@@ -154,6 +163,7 @@ typedef struct H264SEIAlternativeTransfer {
 typedef struct H264SEIContext {
     H264SEIPictureTiming picture_timing;
     H264SEIAFD afd;
+    H264SEIBarData a53_bardata;
     H264SEIA53Caption a53_caption;
     H264SEIUnregistered unregistered;
     H264SEIRecoveryPoint recovery_point;

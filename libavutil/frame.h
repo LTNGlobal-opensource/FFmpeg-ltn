@@ -88,6 +88,12 @@ enum AVFrameSideDataType {
      */
     AV_FRAME_DATA_AFD,
     /**
+     * SCTE 128-1 Bar data
+     * The data is the AVBarData struct defined in libavcodec.
+     * Note: See SCTE-128-1 Sec 8.2.8 for the interaction between AFD and Bar Data
+     */
+    AV_FRAME_DATA_BARDATA,
+    /**
      * Motion vectors exported by some codecs (on demand through the export_mvs
      * flag set in the libavcodec AVCodecContext flags2 option).
      * The data is the AVMotionVector struct defined in

@@ -207,12 +207,14 @@ static int decode_registered_user_data_bardata(H264SEIBarData *h,
         skip_bits(gb, 32);
     } else if (flag & 0x0c) {
         /* Top/bottom */
+        h->present = 1;
         skip_bits(gb, 2);      // Marker bits
         h->top = get_bits(gb, 14);
         skip_bits(gb, 2);      // Marker bits
         h->bottom = get_bits(gb, 14);
     } else if (flag & 0x03) {
         /* Left/right */
+        h->present = 1;
         skip_bits(gb, 2);      // Marker bits
         h->left = get_bits(gb, 14);
         skip_bits(gb, 2);      // Marker bits

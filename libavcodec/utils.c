@@ -2310,10 +2310,10 @@ int ff_alloc_afd_sei(const AVFrame *frame, size_t prefix_len,
     sei_data[1] = 0;
     sei_data[2] = 49;
 
-    /* country code (SCTE 128-1 Sec 8.1.2) */
+    /* user_identifier (SCTE 128-1 Sec 8.1.2) */
     AV_WL32(sei_data + 3, MKTAG('D', 'T', 'G', '1'));
 
-    /* country code (SCTE 128-1 Sec 8.2.5) */
+    /* afd_data (SCTE 128-1 Sec 8.2.5) */
     sei_data[7] = 0x41;
     sei_data[8] = 0xf0 | side_data->data[0];
 

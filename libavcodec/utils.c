@@ -2320,6 +2320,61 @@ int ff_alloc_afd_sei(const AVFrame *frame, size_t prefix_len,
     return 0;
 }
 
+int ff_alloc_bardata_sei(const AVFrame *frame, size_t prefix_len,
+                         void **data, size_t *sei_size)
+{
+    AVFrameSideData *side_data = NULL;
+    AVBarData *bar_data = NULL;
+    uint8_t *sei_data;
+
+    if (frame)
+        side_data = av_frame_get_side_data(frame, AV_FRAME_DATA_BARDATA);
+
+    if (!side_data) {
+        *data = NULL;
+        return 0;
+    }
+
+    *sei_size = 14;
+    *data = av_mallocz(*sei_size + prefix_len);
+    if (!*data)
+        return AVERROR(ENOMEM);
+    sei_data = (uint8_t*)*data + prefix_len;
+    bar_data = (AVBarData *) side_data->data;
+
+    /* itu_t_t35_country_code (SCTE 128-1 Sec 8.1.2) */
+    sei_data[0] = 181;
+
+    /* itu_t_t35_provider_code (SCTE 128-1 Sec 8.1.2) */
+    sei_data[1] = 0;
+    sei_data[2] = 49;
+
+    /* user_identifier (SCTE 128-1 Sec 8.1.2, Table 13) */
+    AV_WL32(sei_data + 3, MKTAG('G', 'A', '9', '4'));
+
+    /* user_data_type_code (SCTE 128-1 Sec 8.2.1) */
+    sei_data[7] = 0x06; /* bar_data() */
+
+    /* bar_data (SCTE 128-1 Sec 8.2.3) */
+    if (bar_data->top_bottom == 1) {
+        sei_data[8] = 0xc0 | 0x0f; /* Flags */
+        sei_data[9] = 0xc0 | bar_data->top >> 8;
+        sei_data[10] = bar_data->top & 0xff;
+        sei_data[11] = 0xc0 | bar_data->bottom >> 8;
+        sei_data[12] = bar_data->bottom & 0xff;
+    } else {
+        sei_data[8] = 0x30 | 0x0f; /* Flags */
+        sei_data[9] = 0xc0 | bar_data->left >> 8;
+        sei_data[10] = bar_data->left & 0xff;
+        sei_data[11] = 0xc0 | bar_data->right >> 8;
+        sei_data[12] = bar_data->right & 0xff;
+    }
+
+    sei_data[13] = 0xff; /* Marker bits */
+
+    return 0;
+}
+
 int64_t ff_guess_coded_bitrate(AVCodecContext *avctx)
 {
     AVRational framerate = avctx->framerate;

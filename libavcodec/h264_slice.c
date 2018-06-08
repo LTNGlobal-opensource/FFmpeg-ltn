@@ -1280,7 +1280,7 @@ static int h264_export_frame_props(H264Context *h)
                                                      sizeof(struct AVBarData));
 
         if (sd) {
-            struct AVBarData *bardata = (struct AVBarData *) sd;
+            struct AVBarData *bardata = (struct AVBarData *) sd->data;
             bardata->top = h->sei.a53_bardata.top;
             bardata->bottom = h->sei.a53_bardata.bottom;
             bardata->left = h->sei.a53_bardata.left;

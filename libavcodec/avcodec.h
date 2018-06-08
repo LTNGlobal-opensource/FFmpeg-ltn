@@ -1092,7 +1092,7 @@ typedef struct AVPanScan {
 
 
 typedef struct AVBarData {
-    int top_bottom; /* 0=top/bottom 1=left/right */
+    int top_bottom; /* 1=top/bottom 0=left/right */
     int top;
     int left;
     int bottom;

@@ -250,6 +250,7 @@ static void register_all(void)
     REGISTER_FILTER(LUTYUV,         lutyuv,         vf);
     REGISTER_FILTER(MASKEDCLAMP,    maskedclamp,    vf);
     REGISTER_FILTER(MASKEDMERGE,    maskedmerge,    vf);
+    REGISTER_FILTER(MCCINSERT,      mccinsert,      vf);
     REGISTER_FILTER(MCDEINT,        mcdeint,        vf);
     REGISTER_FILTER(MERGEPLANES,    mergeplanes,    vf);
     REGISTER_FILTER(MESTIMATE,      mestimate,      vf);

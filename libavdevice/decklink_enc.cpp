@@ -429,7 +429,8 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
 {
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     struct klvanc_line_set_s vanc_lines = { 0 };
-    int ret, size;
+    AVBarData *bardata;
+    int ret, size, bardata_size;
 
     if (ctx->supports_vanc == 0)
         return 0;
@@ -489,7 +490,8 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
     }
 
     data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
-    if (data && cctx->afd_line != -1) {
+    bardata = (AVBarData *) av_packet_get_side_data(pkt, AV_PKT_DATA_BARDATA, &bardata_size);
+    if ((data || bardata) && cctx->afd_line != -1) {
         struct klvanc_packet_afd_s *pkt;
         uint16_t *afd;
         uint16_t len;
@@ -498,12 +500,26 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
         if (ret != 0)
             return AVERROR(ENOMEM);
 
-        ret = klvanc_set_AFD_val(pkt, data[0]);
-        if (ret != 0) {
-            av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
-                   data[0]);
-            klvanc_destroy_AFD(pkt);
-            return AVERROR(EINVAL);
+        if (data) {
+            ret = klvanc_set_AFD_val(pkt, data[0]);
+            if (ret != 0) {
+                av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
+                       data[0]);
+                klvanc_destroy_AFD(pkt);
+                return AVERROR(EINVAL);
+            }
+        }
+
+        if (bardata) {
+            if (bardata->top_bottom) {
+                pkt->barDataFlags = BARS_TOPBOTTOM;
+                pkt->top = bardata->top;
+                pkt->bottom = bardata->bottom;
+            } else {
+                pkt->barDataFlags = BARS_LEFTRIGHT;
+                pkt->left = bardata->left;
+                pkt->right = bardata->right;
+            }
         }
 
         /* FIXME: Should really rely on the coded_width but seems like that

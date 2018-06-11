@@ -592,12 +592,30 @@ static int cb_AFD(void *callback_context, struct klvanc_context_s *ctx,
 {
     struct vanc_cb_ctx *cb_ctx = (struct vanc_cb_ctx *)callback_context;
     uint8_t *afd;
+    struct AVBarData *bardata;
 
     afd = av_packet_new_side_data(cb_ctx->pkt, AV_PKT_DATA_AFD, 1);
     if (afd == NULL) {
         return AVERROR(ENOMEM);
     }
-    afd[0] = pkt->hdr.payload[0] >> 3;
+    afd[0] = pkt->afd;
+
+    if (pkt->barDataFlags == BARS_TOPBOTTOM ||
+	pkt->barDataFlags == BARS_LEFTRIGHT) {
+        bardata = (AVBarData *) av_packet_new_side_data(cb_ctx->pkt, AV_PKT_DATA_BARDATA,
+                                                        sizeof(AVBarData));
+        if (bardata == NULL)
+            return AVERROR(ENOMEM);
+        if (pkt->barDataFlags == BARS_TOPBOTTOM) {
+            bardata->top_bottom = 1;
+            bardata->top = pkt->top;
+            bardata->bottom = pkt->bottom;
+        } else {
+            bardata->top_bottom = 0;
+            bardata->left = pkt->left;
+            bardata->right = pkt->right;
+        }
+    }
 
     return 0;
 }

@@ -516,7 +516,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
 
         ret = klvanc_convert_AFD_to_words(pkt, &afd, &len);
         if (ret != 0) {
-            av_log(avctx, AV_LOG_ERROR, "Failed converting 708 packet to words\n");
+            av_log(avctx, AV_LOG_ERROR, "Failed converting AFD packet to words\n");
             return AVERROR(ENOMEM);
         }
         klvanc_destroy_AFD(pkt);

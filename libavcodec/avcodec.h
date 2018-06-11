@@ -1358,6 +1358,9 @@ enum AVPacketSideDataType {
      */
     AV_PKT_DATA_AFD,
 
+    /* ATSC A/53, SCTE 128-1 bar data */
+    AV_PKT_DATA_BARDATA,
+
     /**
      * Provides the original PTS when passed through the demux.  This can
      * be used to offset any subsequent changes made by the caller to

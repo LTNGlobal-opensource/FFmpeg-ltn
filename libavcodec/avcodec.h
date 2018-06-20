@@ -1090,6 +1090,15 @@ typedef struct AVPanScan {
     int16_t position[3][2];
 } AVPanScan;
 
+
+typedef struct AVBarData {
+    int top_bottom; /* 1=top/bottom 0=left/right */
+    int top;
+    int left;
+    int bottom;
+    int right;
+} AVBarData;
+
 /**
  * This structure describes the bitrate properties of an encoded bitstream. It
  * roughly corresponds to a subset the VBV parameters for MPEG-2 or HRD
@@ -1348,6 +1357,9 @@ enum AVPacketSideDataType {
      * in ETSI TS 101 154 using AVActiveFormatDescription enum.
      */
     AV_PKT_DATA_AFD,
+
+    /* ATSC A/53, SCTE 128-1 bar data */
+    AV_PKT_DATA_BARDATA,
 
     /**
      * Provides the original PTS when passed through the demux.  This can

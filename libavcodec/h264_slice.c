@@ -1275,6 +1275,22 @@ static int h264_export_frame_props(H264Context *h)
         }
     }
 
+    if (h->sei.a53_bardata.present) {
+        AVFrameSideData *sd = av_frame_new_side_data(cur->f, AV_FRAME_DATA_BARDATA,
+                                                     sizeof(struct AVBarData));
+
+        if (sd) {
+            struct AVBarData *bardata = (struct AVBarData *) sd->data;
+            bardata->top = h->sei.a53_bardata.top;
+            bardata->bottom = h->sei.a53_bardata.bottom;
+            bardata->left = h->sei.a53_bardata.left;
+            bardata->right = h->sei.a53_bardata.right;
+            if (bardata->top || bardata->bottom)
+                bardata->top_bottom = 1;
+            h->sei.a53_bardata.present = 0;
+        }
+    }
+
     if (h->sei.a53_caption.buf_ref) {
         H264SEIA53Caption *a53 = &h->sei.a53_caption;
         AVFrameSideData *sd = av_frame_new_side_data(cur->f,

@@ -2222,6 +2222,18 @@ static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream,
                 AVContentLightMetadata *metadata = (AVContentLightMetadata *)sd->data;
                 print_int("max_content", metadata->MaxCLL);
                 print_int("max_average", metadata->MaxFALL);
+            } else if (sd->type == AV_FRAME_DATA_AFD) {
+                print_int("afd_code", sd->data[0]);
+            } else if (sd->type == AV_FRAME_DATA_BARDATA) {
+                AVBarData *bardata = (AVBarData *)sd->data;
+                print_str("bars_type", bardata->top_bottom ? "top/bottom" : "left/right");
+                if (bardata->top_bottom) {
+                    print_int("top", bardata->top);
+                    print_int("bottom", bardata->bottom);
+                } else {
+                    print_int("left", bardata->left);
+                    print_int("right", bardata->right);
+                }
             } else if (sd->type == AV_FRAME_DATA_ICC_PROFILE) {
                 AVDictionaryEntry *tag = av_dict_get(sd->metadata, "name", NULL, AV_DICT_MATCH_CASE);
                 if (tag)

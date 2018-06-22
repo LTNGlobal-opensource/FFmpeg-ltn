@@ -63,6 +63,7 @@
 #include "libavutil/time.h"
 #include "libavutil/thread.h"
 #include "libavutil/threadmessage.h"
+#include "libavutil/vtune.h"
 #include "libavcodec/mathops.h"
 #include "libavformat/os_support.h"
 
@@ -1413,6 +1414,9 @@ static int reap_filters(int flush)
 {
     AVFrame *filtered_frame = NULL;
     int i;
+    uint64_t t1;
+
+    t1 = av_vtune_get_timestamp();
 
     /* Reap all buffers present in the buffer sinks */
     for (i = 0; i < nb_output_streams; i++) {
@@ -1437,6 +1441,7 @@ static int reap_filters(int flush)
         }
 
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
+            av_vtune_log_event("reap_filters", t1, av_vtune_get_timestamp(), 1);
             return AVERROR(ENOMEM);
         }
         filtered_frame = ost->filtered_frame;
@@ -1512,6 +1517,7 @@ static int reap_filters(int flush)
         }
     }
 
+    av_vtune_log_event("reap_filters", t1, av_vtune_get_timestamp(), 1);
     return 0;
 }
 
@@ -4535,16 +4541,20 @@ static int transcode_step(void)
 {
     OutputStream *ost;
     InputStream  *ist = NULL;
+    uint64_t t1;
     int ret;
+    t1 = av_vtune_get_timestamp();
 
     ost = choose_output();
     if (!ost) {
         if (got_eagain()) {
             reset_eagain();
             av_usleep(10000);
+            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
             return 0;
         }
         av_log(NULL, AV_LOG_VERBOSE, "No more inputs to read from, finishing.\n");
+        av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
         return AVERROR_EOF;
     }
 
@@ -4553,6 +4563,7 @@ static int transcode_step(void)
             ret = configure_filtergraph(ost->filter->graph);
             if (ret < 0) {
                 av_log(NULL, AV_LOG_ERROR, "Error reinitializing filters!\n");
+                av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
                 return ret;
             }
         }
@@ -4568,10 +4579,14 @@ static int transcode_step(void)
                 exit_program(1);
             }
         }
-        if ((ret = transcode_from_filter(ost->filter->graph, &ist)) < 0)
+        if ((ret = transcode_from_filter(ost->filter->graph, &ist)) < 0) {
+            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
             return ret;
-        if (!ist)
+        }
+        if (!ist) {
+            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
             return 0;
+        }
     } else if (ost->filter) {
         int i;
         for (i = 0; i < ost->filter->graph->nb_inputs; i++) {
@@ -4583,6 +4598,7 @@ static int transcode_step(void)
         }
         if (!ist) {
             ost->inputs_done = 1;
+            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
             return 0;
         }
     } else {
@@ -4594,11 +4610,15 @@ static int transcode_step(void)
     if (ret == AVERROR(EAGAIN)) {
         if (input_files[ist->file_index]->eagain)
             ost->unavailable = 1;
+        av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
         return 0;
     }
 
-    if (ret < 0)
+    if (ret < 0) {
+        av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
         return ret == AVERROR_EOF ? 0 : ret;
+    }
+    av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
 
     return reap_filters(0);
 }

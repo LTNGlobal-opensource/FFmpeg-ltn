@@ -769,12 +769,16 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     /* Always keep at most one second of frames buffered. */
     av_vtune_log_stat(DECKLINK_BUFFER_COUNT, ctx->frames_buffer_available_spots, 0);
+
     pthread_mutex_lock(&ctx->mutex);
     while (ctx->frames_buffer_available_spots == 0) {
         pthread_cond_wait(&ctx->cond, &ctx->mutex);
     }
     ctx->frames_buffer_available_spots--;
     pthread_mutex_unlock(&ctx->mutex);
+
+    if (ctx->first_pts == 0)
+        ctx->first_pts = pkt->pts;
 
     /* Schedule frame for playback. */
     hr = ctx->dlo->ScheduleVideoFrame((class IDeckLinkVideoFrame *) frame,
@@ -797,13 +801,13 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
                " Video may misbehave!\n");
 
     /* Preroll video frames. */
-    if (!ctx->playback_started && pkt->pts > ctx->frames_preroll) {
+    if (!ctx->playback_started && pkt->pts > (ctx->first_pts + ctx->frames_preroll)) {
         if (ctx->audio && ctx->dlo->EndAudioPreroll() != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not end audio preroll!\n");
             return AVERROR(EIO);
         }
         av_log(avctx, AV_LOG_DEBUG, "Starting scheduled playback.\n");
-        if (ctx->dlo->StartScheduledPlayback(0, ctx->bmd_tb_den, 1.0) != S_OK) {
+        if (ctx->dlo->StartScheduledPlayback(ctx->first_pts * ctx->bmd_tb_num, ctx->bmd_tb_den, 1.0) != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not start scheduled playback!\n");
             return AVERROR(EIO);
         }

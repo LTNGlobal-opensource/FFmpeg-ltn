@@ -2199,6 +2199,10 @@ static void show_frame(WriterContext *w, AVFrame *frame, AVStream *stream,
                 char tcbuf[AV_TIMECODE_STR_SIZE];
                 av_timecode_make_mpeg_tc_string(tcbuf, *(int64_t *)(sd->data));
                 print_str("timecode", tcbuf);
+            } else if (sd->type == AV_FRAME_DATA_S12M_TIMECODE && sd->size >= 4) {
+                char tcbuf[AV_TIMECODE_STR_SIZE];
+                av_timecode_make_smpte_tc_string(tcbuf, *(uint32_t *)(sd->data), 0);
+                print_str("timecode", tcbuf);
             } else if (sd->type == AV_FRAME_DATA_MASTERING_DISPLAY_METADATA) {
                 AVMasteringDisplayMetadata *metadata = (AVMasteringDisplayMetadata *)sd->data;
 

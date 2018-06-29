@@ -130,6 +130,12 @@ enum AVFrameSideDataType {
     AV_FRAME_DATA_GOP_TIMECODE,
 
     /**
+     * Timecode which conforms to SMPTE ST 12-1.  The data is a uint32_t which
+     * can be found described in libavutil/timecode.h.
+     */
+    AV_FRAME_DATA_S12M_TIMECODE,
+
+    /**
      * The data represents the AVSphericalMapping structure defined in
      * libavutil/spherical.h.
      */

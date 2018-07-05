@@ -117,6 +117,7 @@ static unsigned bcd2uint(uint8_t bcd)
 
 char *av_timecode_make_smpte_tc_string(char *buf, uint32_t tcsmpte, int prevent_df)
 {
+    /* See SMPTE ST 314M-2005 Sec 4.4.2.2.1 "Time code pack (TC)" */
     unsigned hh   = bcd2uint(tcsmpte     & 0x3f);    // 6-bit hours
     unsigned mm   = bcd2uint(tcsmpte>>8  & 0x7f);    // 7-bit minutes
     unsigned ss   = bcd2uint(tcsmpte>>16 & 0x7f);    // 7-bit seconds

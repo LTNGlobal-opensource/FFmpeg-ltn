@@ -267,6 +267,16 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
 
     av_vtune_log_event("v210_encode", t1, av_vtune_get_timestamp(), 1);
 
+    side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_S12M_TIMECODE);
+    if (side_data && side_data->size) {
+        uint8_t *buf = av_packet_new_side_data(pkt, AV_PKT_DATA_S12M_TIMECODE,
+                                               side_data->size);
+        if (buf)
+            memcpy(buf, side_data->data, side_data->size);
+        else
+            return AVERROR(ENOMEM);
+    }
+
     pkt->flags |= AV_PKT_FLAG_KEY;
     *got_packet = 1;
     return 0;

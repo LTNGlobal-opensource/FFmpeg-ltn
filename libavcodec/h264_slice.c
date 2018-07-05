@@ -1316,6 +1316,12 @@ static int h264_export_frame_props(H264Context *h)
            See SMPTE ST 12-1:2014 Sec 12.1 for more info. */
         if (av_cmp_q(h->avctx->framerate, (AVRational) {30, 1}) == 1) {
             frames = h->sei.picture_timing.tc_frames / 2;
+            if (h->sei.picture_timing.tc_frames % 2 == 1) {
+                if (av_cmp_q(h->avctx->framerate, (AVRational) {50, 1}) == 0)
+                    tc |= (1 << 7);
+                else
+                    tc |= (1 << 23);
+            }
         } else {
             frames = h->sei.picture_timing.tc_frames;
         }

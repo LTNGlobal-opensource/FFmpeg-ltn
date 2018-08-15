@@ -4798,6 +4798,35 @@ static void log_callback_null(void *ptr, int level, const char *fmt, va_list vl)
 {
 }
 
+static AVMutex log_mutex = AV_MUTEX_INITIALIZER;
+static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
+{
+    char line[1024];
+    char line2[1024];
+    time_t now;
+    struct tm *timeinfo;
+    unsigned tint = 0;
+    static int print_prefix = 1;
+
+    if (level >= 0) {
+        tint = level & 0xff00;
+        level &= 0xff;
+    }
+
+    if (level > av_log_get_level())
+        return;
+
+    ff_mutex_lock(&log_mutex);
+    time(&now);
+    timeinfo = localtime(&now);
+
+    av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
+    strftime(line2, sizeof(line2), "%F %T ", timeinfo);
+    av_strlcat(line2, line, sizeof(line2));
+    fprintf(stderr, "%s", line2);
+    ff_mutex_unlock(&log_mutex);
+}
+
 int main(int argc, char **argv)
 {
     int i, ret;
@@ -4817,6 +4846,8 @@ int main(int argc, char **argv)
         av_log_set_callback(log_callback_null);
         argc--;
         argv++;
+    } else {
+        av_log_set_callback(log_callback_ltn);
     }
 
     avcodec_register_all();

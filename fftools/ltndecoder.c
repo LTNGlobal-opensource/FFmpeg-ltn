@@ -4819,9 +4819,13 @@ static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
     ff_mutex_lock(&log_mutex);
     time(&now);
     timeinfo = localtime(&now);
+    if (print_prefix == 1)
+        strftime(line2, sizeof(line2), "%F %T ", timeinfo);
+    else
+        line2[0] = '\0';
 
     av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
-    strftime(line2, sizeof(line2), "%F %T ", timeinfo);
+
     av_strlcat(line2, line, sizeof(line2));
     fprintf(stderr, "%s", line2);
     ff_mutex_unlock(&log_mutex);

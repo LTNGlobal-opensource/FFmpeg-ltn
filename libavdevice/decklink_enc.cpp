@@ -465,19 +465,15 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 }
 
 #if CONFIG_LIBKLVANC
-static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx *cctx,
-                                   AVPacket *pkt, decklink_frame *frame,
-                                   AVStream *st)
+static void construct_cc(AVFormatContext *avctx, struct decklink_cctx *cctx,
+                         AVPacket *pkt, decklink_frame *frame,
+                         AVStream *st, struct klvanc_line_set_s *vanc_lines)
 {
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
-    struct klvanc_line_set_s vanc_lines = { 0 };
-    AVBarData *bardata;
-    int ret, size, bardata_size;
+    const uint8_t *data;
+    int ret, size;
 
-    if (ctx->supports_vanc == 0)
-        return 0;
-
-    const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
+    data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
     if (data && cctx->cea708_line != -1) {
         struct klvanc_packet_eia_708b_s *pkt;
         uint16_t *cdp;
@@ -486,14 +482,14 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
 
         ret = klvanc_create_eia708_cdp(&pkt);
         if (ret != 0)
-            return AVERROR(ENOMEM);
+            return;
 
         ret = klvanc_set_framerate_EIA_708B(pkt, ctx->bmd_tb_num, ctx->bmd_tb_den);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "Invalid framerate specified: %lld/%lld\n",
                    ctx->bmd_tb_num, ctx->bmd_tb_den);
             klvanc_destroy_eia708_cdp(pkt);
-            return AVERROR(EINVAL);
+            return;
         }
 
         if (cc_count > KLVANC_MAX_CC_COUNT) {
@@ -517,19 +513,29 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
         ret = klvanc_convert_EIA_708B_to_words(pkt, &cdp, &len);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed converting 708 packet to words\n");
-            return AVERROR(ENOMEM);
+            return;
         }
         klvanc_destroy_eia708_cdp(pkt);
 
-        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, cdp, len,
+        ret = klvanc_line_insert(ctx->vanc_ctx, vanc_lines, cdp, len,
                                  cctx->cea708_line, 0);
         free(cdp);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
-            return AVERROR(ENOMEM);
+            return;
         }
         udp_monitor_report(ctx->udp_fd, "CC COUNT", cc_count);
     }
+}
+
+static void construct_afd(AVFormatContext *avctx, struct decklink_cctx *cctx,
+                          AVPacket *pkt, decklink_frame *frame,
+                          AVStream *st, struct klvanc_line_set_s *vanc_lines)
+{
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+    AVBarData *bardata;
+    int ret, size, bardata_size;
+    const uint8_t *data;
 
     data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
     bardata = (AVBarData *) av_packet_get_side_data(pkt, AV_PKT_DATA_BARDATA, &bardata_size);
@@ -540,7 +546,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
 
         ret = klvanc_create_AFD(&pkt);
         if (ret != 0)
-            return AVERROR(ENOMEM);
+            return;
 
         if (data) {
             ret = klvanc_set_AFD_val(pkt, data[0]);
@@ -548,7 +554,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
                 av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
                        data[0]);
                 klvanc_destroy_AFD(pkt);
-                return AVERROR(EINVAL);
+                return;
             }
         }
 
@@ -575,18 +581,34 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
         ret = klvanc_convert_AFD_to_words(pkt, &afd, &len);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed converting AFD packet to words\n");
-            return AVERROR(ENOMEM);
+            return;
         }
         klvanc_destroy_AFD(pkt);
 
-        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len,
+        ret = klvanc_line_insert(ctx->vanc_ctx, vanc_lines, afd, len,
                                  cctx->afd_line, 0);
         free(afd);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
-            return AVERROR(ENOMEM);
+            return;
         }
     }
+}
+
+
+static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx *cctx,
+                                   AVPacket *pkt, decklink_frame *frame,
+                                   AVStream *st)
+{
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+    struct klvanc_line_set_s vanc_lines = { 0 };
+    int ret;
+
+    if (ctx->supports_vanc == 0)
+        return 0;
+
+    construct_cc(avctx, cctx, pkt, frame, st, &vanc_lines);
+    construct_afd(avctx, cctx, pkt, frame, st, &vanc_lines);
 
     /* See if there any pending data packets to process */
     int dequeue_size = avpacket_queue_size(&ctx->vanc_queue);

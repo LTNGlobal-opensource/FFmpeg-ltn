@@ -58,7 +58,7 @@ typedef struct BurnContext
 static const AVOption burnreader_options[] = {
 
 	/* pixel row/line at which to the top of the digit box begins. */
-	{ "line", "set line", OFFSET(line), AV_OPT_TYPE_INT, {.i64=200}, 1, 1080, FLAGS, "line" },
+	{ "line", "set line", OFFSET(line), AV_OPT_TYPE_INT, {.i64=1}, 1, 1080, FLAGS, "line" },
 	{ "snapshot", "extract each frame to disk as YUV420P", OFFSET(snapshot), AV_OPT_TYPE_INT, {.i64=0}, 0, 1, FLAGS, "snapshot" },
 
 	/* With and height of each bit in pixels, usually digits are 30x30 pixels. */
@@ -97,13 +97,14 @@ static int query_formats(AVFilterContext *ctx)
 	return ff_set_common_formats(ctx, formats);
 }
 
-static void analyzeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_t sizeBytes)
+static void analyzeFrame(BurnContext *ctx, AVFrame *frame)
 {       
         char t[160]; 
         uint32_t bits = 0;
         time_t now;
         uint8_t *x;
-        int startline, c;
+	uint8_t *pic = frame->data[0];
+	int startline, c, sizeBytes;
         FILE *fh;
 
 	/* Figure out where the vertical center of row of digits should be */
@@ -147,10 +148,16 @@ static void analyzeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_
 		sprintf(fn, "snapshot-frame%010d-counter%010d.yuv420p", ctx->framesProcessed, (uint32_t)ctx->framecnt);
 		fh = fopen(fn, "wb");
 		if (fh) {
-			fwrite(pic, 1, sizeBytes, fh);
+			fwrite(frame->data[0], 1, frame->width * frame->height, fh);
+			fwrite(frame->data[1], 1, (frame->width * frame->height) / 4, fh);
+			fwrite(frame->data[2], 1, (frame->width * frame->height) / 4, fh);
 			fclose(fh);
 		}
 	}
+
+	sizeBytes = (frame->width * frame->height) +
+		((frame->width * frame->height) / 4) + ((frame->width * frame->height) / 4);
+
 	printf("%s: Frame %dx%d fmt:%s bytes:%d burned-in-frame#%08d totalframes#%08d totalErrors#%" PRIu64 "\n",
 		t, frame->width, frame->height, av_get_pix_fmt_name(frame->format), sizeBytes,
 		bits, ctx->framesProcessed, ctx->totalErrors);
@@ -170,7 +177,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 	av_frame_copy_props(out, in);
 	av_frame_copy(out, in);
 
-	analyzeFrame(ctx, out, out->data[0], (out->width * out->height) + ((out->width * out->height) / 2));
+	analyzeFrame(ctx, out);
 
 	av_frame_free(&in);
 	return ff_filter_frame(outlink, out);

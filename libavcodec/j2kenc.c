@@ -690,7 +690,8 @@ static void encode_cblk(Jpeg2000EncoderContext *s, Jpeg2000T1Context *t1, Jpeg20
     cblk->npasses = passno;
     cblk->ninclpasses = passno;
 
-    cblk->passes[passno-1].rate = ff_mqc_flush_to(&t1->mqc, cblk->passes[passno-1].flushed, &cblk->passes[passno-1].flushed_len);
+    if (passno)
+        cblk->passes[passno-1].rate = ff_mqc_flush_to(&t1->mqc, cblk->passes[passno-1].flushed, &cblk->passes[passno-1].flushed_len);
 }
 
 /* tier-2 routines: */
@@ -940,7 +941,9 @@ static int encode_tile(Jpeg2000EncoderContext *s, Jpeg2000Tile *tile, int tileno
                         }
                         if (!prec->cblk[cblkno].data)
                             prec->cblk[cblkno].data = av_malloc(1 + 8192);
-                        if (!prec->cblk[cblkno].data)
+                        if (!prec->cblk[cblkno].passes)
+                            prec->cblk[cblkno].passes = av_malloc_array(JPEG2000_MAX_PASSES, sizeof (*prec->cblk[cblkno].passes));
+                        if (!prec->cblk[cblkno].data || !prec->cblk[cblkno].passes)
                             return AVERROR(ENOMEM);
                         encode_cblk(s, &t1, prec->cblk + cblkno, tile, xx1 - xx0, yy1 - yy0,
                                     bandpos, codsty->nreslevels - reslevelno - 1);

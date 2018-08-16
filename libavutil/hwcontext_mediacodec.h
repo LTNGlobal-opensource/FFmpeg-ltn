@@ -16,23 +16,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavutil/atomic.h"
-#include "libavutil/avassert.h"
+#ifndef AVUTIL_HWCONTEXT_MEDIACODEC_H
+#define AVUTIL_HWCONTEXT_MEDIACODEC_H
 
-int main(void)
-{
-    volatile int val      = 1;
-    void *tmp1            = (int *)&val;
-    void * volatile *tmp2 = &tmp1;
-    int res;
+/**
+ * MediaCodec details.
+ *
+ * Allocated as AVHWDeviceContext.hwctx
+ */
+typedef struct AVMediaCodecDeviceContext {
+    /**
+     * android/view/Surface handle, to be filled by the user.
+     *
+     * This is the default surface used by decoders on this device.
+     */
+    void *surface;
+} AVMediaCodecDeviceContext;
 
-    res = avpriv_atomic_int_add_and_fetch(&val, 1);
-    av_assert0(res == 2);
-    avpriv_atomic_int_set(&val, 3);
-    res = avpriv_atomic_int_get(&val);
-    av_assert0(res == 3);
-    avpriv_atomic_ptr_cas(tmp2, tmp1, &res);
-    av_assert0(*tmp2 == &res);
-
-    return 0;
-}
+#endif /* AVUTIL_HWCONTEXT_MEDIACODEC_H */

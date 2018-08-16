@@ -152,6 +152,12 @@ static const struct {
     #if CONFIG_COLORSPACE_FILTER
         { "vf_colorspace", checkasm_check_colorspace },
     #endif
+    #if CONFIG_HFLIP_FILTER
+        { "vf_hflip", checkasm_check_vf_hflip },
+    #endif
+    #if CONFIG_THRESHOLD_FILTER
+        { "vf_threshold", checkasm_check_vf_threshold },
+    #endif
 #endif
 #if CONFIG_AVUTIL
         { "fixed_dsp", checkasm_check_fixed_dsp },
@@ -198,6 +204,7 @@ static const struct {
     { "FMA3",     "fma3",     AV_CPU_FLAG_FMA3 },
     { "FMA4",     "fma4",     AV_CPU_FLAG_FMA4 },
     { "AVX2",     "avx2",     AV_CPU_FLAG_AVX2 },
+    { "AVX-512",  "avx512",   AV_CPU_FLAG_AVX512 },
 #endif
     { NULL }
 };

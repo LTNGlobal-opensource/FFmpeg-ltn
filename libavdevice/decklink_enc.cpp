@@ -303,7 +303,8 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 
 #if CONFIG_LIBKLVANC
 static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *ctx,
-                                   AVPacket *pkt, decklink_frame *frame)
+                                   AVPacket *pkt, decklink_frame *frame,
+                                   AVStream *st)
 {
     struct klvanc_line_set_s vanc_lines = { 0 };
     int ret, size, i;
@@ -359,6 +360,55 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         free(cdp);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+            return AVERROR(ENOMEM);
+        }
+    }
+
+    data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
+    if (data) {
+        struct klvanc_packet_afd_s *pkt;
+        uint16_t *afd;
+        uint16_t len;
+
+        ret = klvanc_create_AFD(&pkt);
+        if (ret) {
+            for (i = 0; i < vanc_lines.num_lines; i++)
+                klvanc_line_free(vanc_lines.lines[i]);
+            return AVERROR(ENOMEM);
+        }
+
+        ret = klvanc_set_AFD_val(pkt, data[0]);
+        if (ret) {
+            av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
+                   data[0]);
+            klvanc_destroy_AFD(pkt);
+            for (i = 0; i < vanc_lines.num_lines; i++)
+                klvanc_line_free(vanc_lines.lines[i]);
+            return AVERROR(EINVAL);
+        }
+
+        /* FIXME: Should really rely on the coded_width but seems like that
+           is not accessible to libavdevice outputs */
+        if (av_cmp_q((AVRational) {st->codecpar->width, st->codecpar->height}, (AVRational) {4, 3}) == 1)
+            pkt->aspectRatio = ASPECT_16x9;
+        else
+            pkt->aspectRatio = ASPECT_4x3;
+
+        ret = klvanc_convert_AFD_to_words(pkt, &afd, &len);
+        klvanc_destroy_AFD(pkt);
+        if (ret) {
+            av_log(avctx, AV_LOG_ERROR, "Failed converting AFD packet to words\n");
+            for (i = 0; i < vanc_lines.num_lines; i++)
+                klvanc_line_free(vanc_lines.lines[i]);
+            return AVERROR(ENOMEM);
+        }
+
+        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len, 12, 0);
+        free(afd);
+        if (ret) {
+            av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+            for (i = 0; i < vanc_lines.num_lines; i++)
+                klvanc_line_free(vanc_lines.lines[i]);
             return AVERROR(ENOMEM);
         }
     }
@@ -457,7 +507,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
 
 #if CONFIG_LIBKLVANC
-        ret = decklink_construct_vanc(avctx, ctx, pkt, frame);
+        ret = decklink_construct_vanc(avctx, ctx, pkt, frame, st);
         if (ret)
             av_log(avctx, AV_LOG_ERROR, "Failed to construct VANC\n");
 #endif

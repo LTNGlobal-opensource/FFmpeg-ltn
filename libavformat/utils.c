@@ -4666,7 +4666,7 @@ uint64_t ff_get_formatted_ntp_time(uint64_t ntp_time_us)
     return ntp_ts;
 }
 
-int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number, int flags)
+int av_get_frame_filename3(char *buf, int buf_size, const char *path, int64_t number, int flags)
 {
     const char *p;
     char *q, buf1[20], c;
@@ -4696,7 +4696,7 @@ int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number
                 percentd_found = 1;
                 if (number < 0)
                     nd += 1;
-                snprintf(buf1, sizeof(buf1), "%0*d", nd, number);
+                snprintf(buf1, sizeof(buf1), "%0*" PRId64, nd, number);
                 len = strlen(buf1);
                 if ((q - buf + len) > buf_size - 1)
                     goto fail;
@@ -4719,6 +4719,11 @@ addchar:
 fail:
     *q = '\0';
     return -1;
+}
+
+int av_get_frame_filename2(char *buf, int buf_size, const char *path, int number, int flags)
+{
+    return av_get_frame_filename3(buf, buf_size, path, number, flags);
 }
 
 int av_get_frame_filename(char *buf, int buf_size, const char *path, int number)

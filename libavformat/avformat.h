@@ -2896,6 +2896,8 @@ void av_dump_format(AVFormatContext *ic,
  * @param flags AV_FRAME_FILENAME_FLAGS_*
  * @return 0 if OK, -1 on format error
  */
+int av_get_frame_filename3(char *buf, int buf_size,
+                          const char *path, int64_t number, int flags);
 int av_get_frame_filename2(char *buf, int buf_size,
                           const char *path, int number, int flags);
 

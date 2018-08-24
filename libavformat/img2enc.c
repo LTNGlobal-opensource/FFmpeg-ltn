@@ -101,7 +101,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt)
                 return AVERROR(EINVAL);
             }
         } else if (img->frame_pts) {
-            if (av_get_frame_filename2(filename, sizeof(filename), img->path, pkt->pts, AV_FRAME_FILENAME_FLAGS_MULTIPLE) < 0) {
+            if (av_get_frame_filename3(filename, sizeof(filename), img->path, pkt->pts, AV_FRAME_FILENAME_FLAGS_MULTIPLE) < 0) {
                 av_log(s, AV_LOG_ERROR, "Cannot write filename by pts of the frames.");
                 return AVERROR(EINVAL);
             }

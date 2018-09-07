@@ -362,8 +362,57 @@ static void construct_cc(AVFormatContext *avctx, struct decklink_ctx *ctx,
     }
 }
 
+static void construct_afd(AVFormatContext *avctx, struct decklink_ctx *ctx,
+                          AVPacket *pkt, struct klvanc_line_set_s *vanc_lines,
+                          AVStream *st)
+{
+    struct klvanc_packet_afd_s *afd;
+    uint16_t *afd_words;
+    uint16_t len;
+    int size, ret;
+
+    const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
+    if (!data || size == 0)
+        return;
+
+    ret = klvanc_create_AFD(&afd);
+    if (ret) {
+        return;
+    }
+
+    ret = klvanc_set_AFD_val(afd, data[0]);
+    if (ret) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
+               data[0]);
+        klvanc_destroy_AFD(afd);
+        return;
+    }
+
+    /* FIXME: Should really rely on the coded_width but seems like that
+       is not accessible to libavdevice outputs */
+    if (av_cmp_q((AVRational) {st->codecpar->width, st->codecpar->height}, (AVRational) {4, 3}) == 1)
+        afd->aspectRatio = ASPECT_16x9;
+    else
+        afd->aspectRatio = ASPECT_4x3;
+
+    ret = klvanc_convert_AFD_to_words(afd, &afd_words, &len);
+    klvanc_destroy_AFD(afd);
+    if (ret) {
+        av_log(avctx, AV_LOG_ERROR, "Failed converting AFD packet to words\n");
+        return;
+    }
+
+    ret = klvanc_line_insert(ctx->vanc_ctx, vanc_lines, afd_words, len, 12, 0);
+    free(afd_words);
+    if (ret) {
+        av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+        return;
+    }
+}
+
 static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *ctx,
-                                   AVPacket *pkt, decklink_frame *frame)
+                                   AVPacket *pkt, decklink_frame *frame,
+                                   AVStream *st)
 {
     struct klvanc_line_set_s vanc_lines = { 0 };
     int ret = 0, i;
@@ -372,6 +421,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         return 0;
 
     construct_cc(avctx, ctx, pkt, &vanc_lines);
+    construct_afd(avctx, ctx, pkt, &vanc_lines, st);
 
     IDeckLinkVideoFrameAncillary *vanc;
     int result = ctx->dlo->CreateAncillaryData(bmdFormat10BitYUV, &vanc);
@@ -461,7 +511,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
 
 #if CONFIG_LIBKLVANC
-        if (decklink_construct_vanc(avctx, ctx, pkt, frame))
+        if (decklink_construct_vanc(avctx, ctx, pkt, frame, st))
             av_log(avctx, AV_LOG_ERROR, "Failed to construct VANC\n");
 #endif
     }

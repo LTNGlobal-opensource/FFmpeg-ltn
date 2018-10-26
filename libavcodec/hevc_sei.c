@@ -135,16 +135,68 @@ static int decode_nal_sei_pic_timing(HEVCSEI *s, GetBitContext *gb, const HEVCPa
         return(AVERROR(ENOMEM));
     sps = (HEVCSPS*)ps->sps_list[s->active_seq_parameter_set_id]->data;
 
+    h->picture_struct = AV_PICTURE_STRUCTURE_UNKNOWN;
+    h->field_order = AV_FIELD_UNKNOWN;
+
     if (sps->vui.frame_field_info_present_flag) {
-        int pic_struct = get_bits(gb, 4);
-        h->picture_struct = AV_PICTURE_STRUCTURE_UNKNOWN;
-        if (pic_struct == 2 || pic_struct == 10 || pic_struct == 12) {
-            av_log(logctx, AV_LOG_DEBUG, "BOTTOM Field\n");
-            h->picture_struct = AV_PICTURE_STRUCTURE_BOTTOM_FIELD;
-        } else if (pic_struct == 1 || pic_struct == 9 || pic_struct == 11) {
-            av_log(logctx, AV_LOG_DEBUG, "TOP Field\n");
+        h->pic_struct = get_bits(gb, 4);
+
+        /* Picture Structure */
+        switch(h->pic_struct) {
+        case HEVC_SEI_PIC_STRUCT_FRAME:
+        case HEVC_SEI_PIC_STRUCT_TOP_BOTTOM:
+        case HEVC_SEI_PIC_STRUCT_BOTTOM_TOP:
+        case HEVC_SEI_PIC_STRUCT_TOP_BOTTOM_TOP:
+        case HEVC_SEI_PIC_STRUCT_BOTTOM_TOP_BOTTOM:
+        case HEVC_SEI_PIC_STRUCT_FRAME_DOUBLING:
+        case HEVC_SEI_PIC_STRUCT_FRAME_TRIPLING:
+            h->picture_struct = AV_PICTURE_STRUCTURE_FRAME;
+            break;
+        case HEVC_SEI_PIC_STRUCT_TOP_FIELD:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_BOTTOM:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_NEXT_BOTTOM:
             h->picture_struct = AV_PICTURE_STRUCTURE_TOP_FIELD;
+            break;
+        case HEVC_SEI_PIC_STRUCT_BOTTOM_FIELD:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_TOP:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_NEXT_TOP:
+            h->picture_struct = AV_PICTURE_STRUCTURE_BOTTOM_FIELD;
+            break;
+        default:
+            h->picture_struct = AV_PICTURE_STRUCTURE_UNKNOWN;
+            break;
         }
+
+        /* Field ordering */
+        switch(h->pic_struct) {
+        case HEVC_SEI_PIC_STRUCT_FRAME:
+        case HEVC_SEI_PIC_STRUCT_FRAME_DOUBLING:
+        case HEVC_SEI_PIC_STRUCT_FRAME_TRIPLING:
+            h->field_order = AV_FIELD_PROGRESSIVE;
+            break;
+        case HEVC_SEI_PIC_STRUCT_TOP_FIELD:
+        case HEVC_SEI_PIC_STRUCT_BOTTOM_FIELD:
+        case HEVC_SEI_PIC_STRUCT_TOP_BOTTOM:
+            h->field_order = AV_FIELD_TT;
+            break;
+        case HEVC_SEI_PIC_STRUCT_BOTTOM_TOP:
+            h->field_order = AV_FIELD_TB;
+            break;
+        case HEVC_SEI_PIC_STRUCT_TOP_BOTTOM_TOP:
+            h->field_order = AV_FIELD_TT;
+            break;
+        case HEVC_SEI_PIC_STRUCT_BOTTOM_TOP_BOTTOM:
+            h->field_order = AV_FIELD_BB;
+            break;
+        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_BOTTOM:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_TOP:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_NEXT_BOTTOM:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_NEXT_TOP:
+            /* FIXME: Not sure about these */
+        default:
+            h->field_order = AV_FIELD_UNKNOWN;
+        }
+
         get_bits(gb, 2);                   // source_scan_type
         get_bits(gb, 1);                   // duplicate_flag
         skip_bits1(gb);
@@ -363,6 +415,7 @@ int ff_hevc_decode_nal_sei(GetBitContext *gb, void *logctx, HEVCSEI *s,
 
 void ff_hevc_reset_sei(HEVCSEI *s)
 {
+    s->picture_timing.pic_struct = -1;
     s->a53_caption.a53_caption_size = 0;
     av_freep(&s->a53_caption.a53_caption);
 }

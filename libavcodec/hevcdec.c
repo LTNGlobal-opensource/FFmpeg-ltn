@@ -3449,6 +3449,7 @@ static av_cold int hevc_decode_init(AVCodecContext *avctx)
         return ret;
 
     s->enable_parallel_tiles = 0;
+    s->sei.picture_timing.pic_struct = -1;
     s->sei.picture_timing.picture_struct = 0;
     s->eos = 1;
 

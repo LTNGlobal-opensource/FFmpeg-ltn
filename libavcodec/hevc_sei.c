@@ -177,9 +177,13 @@ static int decode_nal_sei_pic_timing(HEVCSEI *s, GetBitContext *gb, const HEVCPa
         case HEVC_SEI_PIC_STRUCT_TOP_FIELD:
         case HEVC_SEI_PIC_STRUCT_BOTTOM_FIELD:
         case HEVC_SEI_PIC_STRUCT_TOP_BOTTOM:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_BOTTOM:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_NEXT_BOTTOM:
             h->field_order = AV_FIELD_TT;
             break;
         case HEVC_SEI_PIC_STRUCT_BOTTOM_TOP:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_TOP:
+        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_NEXT_TOP:
             h->field_order = AV_FIELD_TB;
             break;
         case HEVC_SEI_PIC_STRUCT_TOP_BOTTOM_TOP:
@@ -188,11 +192,6 @@ static int decode_nal_sei_pic_timing(HEVCSEI *s, GetBitContext *gb, const HEVCPa
         case HEVC_SEI_PIC_STRUCT_BOTTOM_TOP_BOTTOM:
             h->field_order = AV_FIELD_BB;
             break;
-        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_BOTTOM:
-        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_TOP:
-        case HEVC_SEI_PIC_STRUCT_PAIRED_TOP_NEXT_BOTTOM:
-        case HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_NEXT_TOP:
-            /* FIXME: Not sure about these */
         default:
             h->field_order = AV_FIELD_UNKNOWN;
         }

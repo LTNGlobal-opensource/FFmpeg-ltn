@@ -481,6 +481,7 @@ static int config_props(AVFilterLink *link)
     link->time_base.den = ctx->inputs[0]->time_base.den * 2;
     link->w             = ctx->inputs[0]->w;
     link->h             = ctx->inputs[0]->h;
+    link->interlaced_frame = 0;
 
     if(s->mode & 1)
         link->frame_rate = av_mul_q(ctx->inputs[0]->frame_rate,

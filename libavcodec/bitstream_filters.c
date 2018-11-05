@@ -50,6 +50,7 @@ extern const AVBitStreamFilter ff_trace_headers_bsf;
 extern const AVBitStreamFilter ff_vp9_raw_reorder_bsf;
 extern const AVBitStreamFilter ff_vp9_superframe_bsf;
 extern const AVBitStreamFilter ff_vp9_superframe_split_bsf;
+extern const AVBitStreamFilter ff_scte35toscte104_bsf;
 
 #include "libavcodec/bsf_list.c"
 

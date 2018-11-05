@@ -669,6 +669,7 @@ enum AVCodecID {
 
     AV_CODEC_ID_SCTE_35, ///< Contain timestamp estimated through PCR of program stream.
     AV_CODEC_ID_SCTE_104,
+    AV_CODEC_ID_SMPTE_2038,
     AV_CODEC_ID_BINTEXT    = 0x18800,
     AV_CODEC_ID_XBIN,
     AV_CODEC_ID_IDF,
@@ -1089,6 +1090,15 @@ typedef struct AVPanScan {
     int16_t position[3][2];
 } AVPanScan;
 
+
+typedef struct AVBarData {
+    int top_bottom; /* 1=top/bottom 0=left/right */
+    int top;
+    int left;
+    int bottom;
+    int right;
+} AVBarData;
+
 /**
  * This structure describes the bitrate properties of an encoded bitstream. It
  * roughly corresponds to a subset the VBV parameters for MPEG-2 or HRD
@@ -1347,6 +1357,19 @@ enum AVPacketSideDataType {
      * in ETSI TS 101 154 using AVActiveFormatDescription enum.
      */
     AV_PKT_DATA_AFD,
+
+    /* ATSC A/53, SCTE 128-1 bar data */
+    AV_PKT_DATA_BARDATA,
+
+    /**
+     * Provides the original PTS when passed through the demux.  This can
+     * be used to offset any subsequent changes made by the caller to
+     * adjust PTS values (such as ts_offset).  We need this for SCTE-35,
+     * since by the time the packets reach the output the PTS values have
+     * already been re-written, and we cannot calculate pre-roll values
+     * using the PTS values embedded in the packet content
+     */
+    AV_PKT_DATA_ORIG_PTS,
 
     /**
      * The number of side data types.

@@ -59,6 +59,13 @@ typedef struct AVPacketQueue {
     int64_t max_q_size;
 } AVPacketQueue;
 
+void avpacket_queue_init(AVFormatContext *avctx, AVPacketQueue *q);
+void avpacket_queue_flush(AVPacketQueue *q);
+void avpacket_queue_end(AVPacketQueue *q);
+unsigned long long avpacket_queue_size(AVPacketQueue *q);
+int avpacket_queue_put(AVPacketQueue *q, AVPacket *pkt);
+int avpacket_queue_get(AVPacketQueue *q, AVPacket *pkt, int block);
+
 struct decklink_ctx {
     /* DeckLink SDK interfaces */
     IDeckLink *dl;
@@ -83,6 +90,7 @@ struct decklink_ctx {
 
     /* Capture buffer queue */
     AVPacketQueue queue;
+    AVPacketQueue vanc_queue;
 
     /* Streams present */
     int audio;
@@ -91,9 +99,11 @@ struct decklink_ctx {
     /* Status */
     int playback_started;
     int capture_started;
+    int64_t first_pts;
     int64_t last_pts;
     unsigned long frameCount;
     unsigned int dropped;
+    unsigned int late;
     AVStream *audio_st[DECKLINK_MAX_AUDIO_CHANNELS];
     int num_audio_streams;
     AVStream *data_st[DECKLINK_MAX_DATA_STREAMS];
@@ -120,6 +130,14 @@ struct decklink_ctx {
     pthread_cond_t cond;
     int frames_buffer_available_spots;
     int autodetect;
+
+    /* Audio output interleaving */
+    pthread_mutex_t audio_mutex;
+    AVPacketList *output_audio_list;
+    int audio_pkt_numsamples = 0;
+
+    /* Monitoring feedback to controller */
+    int udp_fd;
 
 #if CONFIG_LIBKLVANC
     struct klvanc_context_s *vanc_ctx;

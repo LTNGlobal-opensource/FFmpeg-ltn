@@ -51,8 +51,7 @@ void ff_h264_sei_uninit(H264SEIContext *h)
     h->display_orientation.present = 0;
     h->afd.present                 =  0;
 
-    h->a53_caption.a53_caption_size = 0;
-    av_freep(&h->a53_caption.a53_caption);
+    av_buffer_unref(&h->a53_caption.buf_ref);
 }
 
 static int decode_picture_timing(H264SEIPictureTiming *h, GetBitContext *gb,
@@ -151,46 +150,102 @@ static int decode_registered_user_data_closed_caption(H264SEIA53Caption *h,
                                                      int size)
 {
     int flag;
-    int user_data_type_code;
     int cc_count;
+
+    skip_bits(gb, 1);           // reserved
+    flag = get_bits(gb, 1);     // process_cc_data_flag
+    if (flag) {
+        skip_bits(gb, 1);       // zero bit
+        cc_count = get_bits(gb, 5);
+        skip_bits(gb, 8);       // reserved
+        size -= 2;
+
+        if (cc_count && size >= cc_count * 3) {
+            int old_size = h->buf_ref ? h->buf_ref->size : 0;
+            const uint64_t new_size = (old_size + cc_count
+                                       * UINT64_C(3));
+            int i, ret;
+
+            if (new_size > INT_MAX)
+                return AVERROR(EINVAL);
+
+            /* Allow merging of the cc data from two fields. */
+            ret = av_buffer_realloc(&h->buf_ref, new_size);
+            if (ret < 0)
+                return ret;
+
+            /* Use of av_buffer_realloc assumes buffer is writeable */
+            for (i = 0; i < cc_count; i++) {
+                h->buf_ref->data[old_size++] = get_bits(gb, 8);
+                h->buf_ref->data[old_size++] = get_bits(gb, 8);
+                h->buf_ref->data[old_size++] = get_bits(gb, 8);
+            }
+
+            skip_bits(gb, 8);   // marker_bits
+        }
+    }
+
+    return 0;
+}
+
+static int decode_registered_user_data_bardata(H264SEIBarData *h,
+                                               GetBitContext *gb, void *logctx,
+                                               int size)
+{
+    int flag;
+
+    /* Defined in SCTE 128-1 Sec 8.2.3 */
+    flag = get_bits(gb, 4);    // Flags
+    skip_bits(gb, 4);          // reserved
+
+    /* Ignore if flags set in invalid manner */
+    if ((flag & 0x0c == 0x08 || flag & 0x0c == 0x04) ||
+        (flag & 0x03 == 0x02 || flag & 0x03 == 0x01)) {
+        /* Flags must be set for both top/bottom or
+           left/right, but it cannot be both, and for
+           a given pair it cannot be one but not the other */
+        skip_bits(gb, 32);
+    } else if (flag & 0x0c) {
+        /* Top/bottom */
+        h->present = 1;
+        skip_bits(gb, 2);      // Marker bits
+        h->top = get_bits(gb, 14);
+        skip_bits(gb, 2);      // Marker bits
+        h->bottom = get_bits(gb, 14);
+    } else if (flag & 0x03) {
+        /* Left/right */
+        h->present = 1;
+        skip_bits(gb, 2);      // Marker bits
+        h->left = get_bits(gb, 14);
+        skip_bits(gb, 2);      // Marker bits
+        h->right = get_bits(gb, 14);
+    } else {
+        h->top = 0;
+        h->bottom = 0;
+        h->left = 0;
+        h->right = 0;
+    }
+    return 0;
+}
+
+static int decode_registered_user_data_ATSC1(H264SEIContext *h,
+                                             GetBitContext *gb, void *logctx,
+                                             int size)
+{
+    int user_data_type_code;
 
     if (size < 3)
         return AVERROR(EINVAL);
 
     user_data_type_code = get_bits(gb, 8);
     if (user_data_type_code == 0x3) {
-        skip_bits(gb, 1);           // reserved
-
-        flag = get_bits(gb, 1);     // process_cc_data_flag
-        if (flag) {
-            skip_bits(gb, 1);       // zero bit
-            cc_count = get_bits(gb, 5);
-            skip_bits(gb, 8);       // reserved
-            size -= 2;
-
-            if (cc_count && size >= cc_count * 3) {
-                const uint64_t new_size = (h->a53_caption_size + cc_count
-                                           * UINT64_C(3));
-                int i, ret;
-
-                if (new_size > INT_MAX)
-                    return AVERROR(EINVAL);
-
-                /* Allow merging of the cc data from two fields. */
-                ret = av_reallocp(&h->a53_caption, new_size);
-                if (ret < 0)
-                    return ret;
-
-                for (i = 0; i < cc_count; i++) {
-                    h->a53_caption[h->a53_caption_size++] = get_bits(gb, 8);
-                    h->a53_caption[h->a53_caption_size++] = get_bits(gb, 8);
-                    h->a53_caption[h->a53_caption_size++] = get_bits(gb, 8);
-                }
-
-                skip_bits(gb, 8);   // marker_bits
-            }
-        }
+        decode_registered_user_data_closed_caption(&h->a53_caption, gb, logctx,
+                                                   size);
+    } else if (user_data_type_code == 0x6) {
+        decode_registered_user_data_bardata(&h->a53_bardata, gb, logctx,
+                                            size);
     } else {
+        /* "SCTE/ATSC Reserved" according to SCTE 128-1 Sec 8.2.1  */
         int i;
         for (i = 0; i < size - 1; i++)
             skip_bits(gb, 8);
@@ -198,6 +253,7 @@ static int decode_registered_user_data_closed_caption(H264SEIA53Caption *h,
 
     return 0;
 }
+
 
 static int decode_registered_user_data(H264SEIContext *h, GetBitContext *gb,
                                        void *logctx, int size)
@@ -223,9 +279,8 @@ static int decode_registered_user_data(H264SEIContext *h, GetBitContext *gb,
     switch (user_identifier) {
         case MKBETAG('D', 'T', 'G', '1'):       // afd_data
             return decode_registered_user_data_afd(&h->afd, gb, size);
-        case MKBETAG('G', 'A', '9', '4'):       // closed captions
-            return decode_registered_user_data_closed_caption(&h->a53_caption, gb,
-                                                              logctx, size);
+        case MKBETAG('G', 'A', '9', '4'):       // closed captions and bar data
+            return decode_registered_user_data_ATSC1(h, gb, logctx, size);
         default:
             skip_bits(gb, size * 8);
             break;

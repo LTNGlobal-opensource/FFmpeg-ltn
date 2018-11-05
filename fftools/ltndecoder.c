@@ -63,7 +63,6 @@
 #include "libavutil/time.h"
 #include "libavutil/thread.h"
 #include "libavutil/threadmessage.h"
-#include "libavutil/vtune.h"
 #include "libavcodec/mathops.h"
 #include "libavformat/os_support.h"
 
@@ -1414,9 +1413,6 @@ static int reap_filters(int flush)
 {
     AVFrame *filtered_frame = NULL;
     int i;
-    uint64_t t1;
-
-    t1 = av_vtune_get_timestamp();
 
     /* Reap all buffers present in the buffer sinks */
     for (i = 0; i < nb_output_streams; i++) {
@@ -1441,7 +1437,6 @@ static int reap_filters(int flush)
         }
 
         if (!ost->filtered_frame && !(ost->filtered_frame = av_frame_alloc())) {
-            av_vtune_log_event("reap_filters", t1, av_vtune_get_timestamp(), 1);
             return AVERROR(ENOMEM);
         }
         filtered_frame = ost->filtered_frame;
@@ -1517,7 +1512,6 @@ static int reap_filters(int flush)
         }
     }
 
-    av_vtune_log_event("reap_filters", t1, av_vtune_get_timestamp(), 1);
     return 0;
 }
 
@@ -3653,6 +3647,9 @@ static void report_new_stream(int input_index, AVPacket *pkt)
            input_index, pkt->stream_index,
            pkt->pos, av_ts2timestr(pkt->dts, &st->time_base));
     file->nb_streams_warn = pkt->stream_index + 1;
+    av_log(file->ctx, AV_LOG_WARNING,
+           "Exiting to allow restart by controller..");
+    exit_program(1);
 }
 
 static int transcode_init(void)
@@ -4399,6 +4396,8 @@ static int process_input(int file_index)
         pkt.dts *= ist->ts_scale;
 
     pkt_dts = av_rescale_q_rnd(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+
+#ifdef ENABLE_DTS_DELTA_THRESHOLD
     if ((ist->dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
          ist->dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) &&
         pkt_dts != AV_NOPTS_VALUE && ist->next_dts == AV_NOPTS_VALUE && !copy_ts
@@ -4415,7 +4414,7 @@ static int process_input(int file_index)
                 pkt.pts -= av_rescale_q(delta, AV_TIME_BASE_Q, ist->st->time_base);
         }
     }
-
+#endif
     duration = av_rescale_q(ifile->duration, ifile->time_base, ist->st->time_base);
     if (pkt.pts != AV_NOPTS_VALUE) {
         pkt.pts += duration;
@@ -4427,6 +4426,7 @@ static int process_input(int file_index)
         pkt.dts += duration;
 
     pkt_dts = av_rescale_q_rnd(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q, AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
+#ifdef ENABLE_DTS_DELTA_THRESHOLD
     if ((ist->dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
          ist->dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) &&
          pkt_dts != AV_NOPTS_VALUE && ist->next_dts != AV_NOPTS_VALUE &&
@@ -4461,6 +4461,7 @@ static int process_input(int file_index)
             }
         }
     }
+#endif
 
     if (pkt.dts != AV_NOPTS_VALUE)
         ifile->last_ts = av_rescale_q(pkt.dts, ist->st->time_base, AV_TIME_BASE_Q);
@@ -4541,20 +4542,16 @@ static int transcode_step(void)
 {
     OutputStream *ost;
     InputStream  *ist = NULL;
-    uint64_t t1;
     int ret;
-    t1 = av_vtune_get_timestamp();
 
     ost = choose_output();
     if (!ost) {
         if (got_eagain()) {
             reset_eagain();
             av_usleep(10000);
-            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
             return 0;
         }
         av_log(NULL, AV_LOG_VERBOSE, "No more inputs to read from, finishing.\n");
-        av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
         return AVERROR_EOF;
     }
 
@@ -4563,7 +4560,6 @@ static int transcode_step(void)
             ret = configure_filtergraph(ost->filter->graph);
             if (ret < 0) {
                 av_log(NULL, AV_LOG_ERROR, "Error reinitializing filters!\n");
-                av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
                 return ret;
             }
         }
@@ -4579,14 +4575,10 @@ static int transcode_step(void)
                 exit_program(1);
             }
         }
-        if ((ret = transcode_from_filter(ost->filter->graph, &ist)) < 0) {
-            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
+        if ((ret = transcode_from_filter(ost->filter->graph, &ist)) < 0)
             return ret;
-        }
-        if (!ist) {
-            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
+        if (!ist)
             return 0;
-        }
     } else if (ost->filter) {
         int i;
         for (i = 0; i < ost->filter->graph->nb_inputs; i++) {
@@ -4598,7 +4590,6 @@ static int transcode_step(void)
         }
         if (!ist) {
             ost->inputs_done = 1;
-            av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
             return 0;
         }
     } else {
@@ -4610,15 +4601,11 @@ static int transcode_step(void)
     if (ret == AVERROR(EAGAIN)) {
         if (input_files[ist->file_index]->eagain)
             ost->unavailable = 1;
-        av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
         return 0;
     }
 
-    if (ret < 0) {
-        av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
+    if (ret < 0)
         return ret == AVERROR_EOF ? 0 : ret;
-    }
-    av_vtune_log_event("transcode_step", t1, av_vtune_get_timestamp(), 1);
 
     return reap_filters(0);
 }

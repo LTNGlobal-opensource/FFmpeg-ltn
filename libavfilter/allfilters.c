@@ -312,6 +312,7 @@ static void register_all(void)
     REGISTER_FILTER(SELECTIVECOLOR, selectivecolor, vf);
     REGISTER_FILTER(SENDCMD,        sendcmd,        vf);
     REGISTER_FILTER(SEPARATEFIELDS, separatefields, vf);
+    REGISTER_FILTER(SETAFD,         setafd,         vf);
     REGISTER_FILTER(SETDAR,         setdar,         vf);
     REGISTER_FILTER(SETFIELD,       setfield,       vf);
     REGISTER_FILTER(SETPTS,         setpts,         vf);

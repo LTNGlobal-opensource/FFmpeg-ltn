@@ -36,6 +36,7 @@
 #include "libavutil/time.h"
 #include "libavutil/time_internal.h"
 #include "libavutil/timestamp.h"
+#include "libavutil/vtune.h"
 
 #include "libavcodec/bytestream.h"
 #include "libavcodec/internal.h"
@@ -3523,7 +3524,10 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     int64_t max_subtitle_analyze_duration;
     int64_t probesize = ic->probesize;
     int eof_reached = 0;
+    uint64_t t1;
     int *missing_streams = av_opt_ptr(ic->iformat->priv_class, ic->priv_data, "missing_streams");
+
+    t1 = av_vtune_get_timestamp();
 
     flush_codecs = probesize > 0;
 
@@ -4105,6 +4109,9 @@ find_stream_info_err:
     if (ic->pb)
         av_log(ic, AV_LOG_DEBUG, "After avformat_find_stream_info() pos: %"PRId64" bytes read:%"PRId64" seeks:%d frames:%d\n",
                avio_tell(ic->pb), ic->pb->bytes_read, ic->pb->seek_count, count);
+
+    av_vtune_log_event("find_stream_info", t1, av_vtune_get_timestamp(), 1);
+
     return ret;
 }
 

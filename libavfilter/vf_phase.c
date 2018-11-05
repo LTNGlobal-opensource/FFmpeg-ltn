@@ -100,6 +100,20 @@ static int config_input(AVFilterLink *inlink)
     return 0;
 }
 
+static int config_output(AVFilterLink *outlink)
+{
+    PhaseContext *s = outlink->src->priv;
+
+    /* Update the field dominance on the output link */
+
+    if (s->mode == TOP_FIRST)
+        outlink->top_field_first = 0;
+    else if (s->mode == BOTTOM_FIRST)
+        outlink->top_field_first = 1;
+
+    return 0;
+}
+
 /*
  * This macro interpolates the value of both fields at a point halfway
  * between lines and takes the squared difference. In field resolution
@@ -268,6 +282,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     }
     av_frame_copy_props(out, in);
 
+    /* Make sure the modified field dominance is reflected in the outgoing
+       packet */
+    if (s->mode == TOP_FIRST)
+        out->top_field_first = 0;
+    else if (s->mode == BOTTOM_FIRST)
+        out->top_field_first = 1;
+
     if (!s->frame) {
         s->frame = in;
         mode = PROGRESSIVE;
@@ -316,6 +337,7 @@ static const AVFilterPad phase_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
+        .config_props = config_output,
     },
     { NULL }
 };

@@ -19,6 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 #include <atomic>
 using std::atomic;
 
@@ -29,10 +32,15 @@ extern "C" {
 }
 
 #include <DeckLinkAPI.h>
+#include <DeckLinkAPIVersion.h>
 
 extern "C" {
 #include "libavformat/avformat.h"
+#include "libavformat/network.h"
+#include "libavformat/os_support.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/avstring.h"
+#include "libavutil/vtune.h"
 #include "avdevice.h"
 }
 
@@ -43,6 +51,22 @@ extern "C" {
 #include "libklvanc/vanc-lines.h"
 #include "libklvanc/pixels.h"
 #endif
+
+static void udp_monitor_report(int fd, const char *str, uint64_t val)
+{
+    char *buf;
+
+    if (fd < 0)
+        return;
+
+    buf = av_asprintf("%s: %" PRId64 "\n", str, val);
+    if (!buf)
+        return;
+
+    send(fd, buf, strlen(buf), 0);
+    av_free(buf);
+}
+
 
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame
@@ -123,9 +147,14 @@ private:
     std::atomic<int>  _refs;
 };
 
-class decklink_output_callback : public IDeckLinkVideoOutputCallback
+class decklink_output_callback : public IDeckLinkVideoOutputCallback, public IDeckLinkAudioOutputCallback
 {
 public:
+    struct decklink_cctx *_cctx;
+    decklink_output_callback(struct decklink_cctx *cctx)
+    {
+        _cctx = cctx;
+    }
     virtual HRESULT STDMETHODCALLTYPE ScheduledFrameCompleted(IDeckLinkVideoFrame *_frame, BMDOutputFrameCompletionResult result)
     {
         decklink_frame *frame = static_cast<decklink_frame *>(_frame);
@@ -141,13 +170,106 @@ public:
         pthread_cond_broadcast(&ctx->cond);
         pthread_mutex_unlock(&ctx->mutex);
 
+        switch (result) {
+        case bmdOutputFrameCompleted:
+        case bmdOutputFrameFlushed:
+            break;
+        case bmdOutputFrameDisplayedLate:
+            ctx->late++;
+            av_vtune_log_stat(DECKLINK_BUFFERS_LATE, ctx->late, 0);
+            break;
+        case bmdOutputFrameDropped:
+            ctx->dropped++;
+            av_vtune_log_stat(DECKLINK_BUFFERS_DROPPED, ctx->dropped, 0);
+            break;
+        }
+
+        av_vtune_log_stat(DECKLINK_BUFFER_COUNT, ctx->frames_buffer_available_spots, 0);
+
         return S_OK;
     }
     virtual HRESULT STDMETHODCALLTYPE ScheduledPlaybackHasStopped(void)       { return S_OK; }
+    virtual HRESULT STDMETHODCALLTYPE RenderAudioSamples (bool preroll)
+    {
+        struct decklink_ctx *ctx = (struct decklink_ctx *)_cctx->ctx;
+        AVPacketList *cur, *next;
+        BMDTimeValue streamtime;
+        double speed;
+        ctx->dlo->GetScheduledStreamTime(48000, &streamtime, &speed);
+
+        pthread_mutex_lock(&ctx->audio_mutex);
+
+        /* Do final Scheduling of audio at least 0.25 seconds before realtime.  This might
+           need to be configurable at some point if the user wants to do really low
+           latency (i.e. a pre-roll of less than 0.25 seconds)...  */
+        int window = streamtime + 12000;
+        if (window > 0) {
+            for (cur = ctx->output_audio_list; cur != NULL; cur = next) {
+                if (cur->next == NULL)
+                    break;
+                if (cur->pkt.pts > window)
+                    break;
+                uint32_t written;
+                HRESULT result = ctx->dlo->ScheduleAudioSamples(cur->pkt.data,
+                                                                ctx->audio_pkt_numsamples, cur->pkt.pts,
+                                                                bmdAudioSampleRate48kHz,
+                                                                &written);
+                if (result != S_OK)
+                    udp_monitor_report(ctx->udp_fd, "ERROR AUDIO", result);
+                else
+                    udp_monitor_report(ctx->udp_fd, "PLAY AUDIO BYTES", written);
+
+                ctx->output_audio_list = cur->next;
+                next = cur->next;
+                av_packet_unref(&cur->pkt);
+                av_freep(&cur);
+            }
+        }
+
+        pthread_mutex_unlock(&ctx->audio_mutex);
+
+        return S_OK;
+    }
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID *ppv) { return E_NOINTERFACE; }
     virtual ULONG   STDMETHODCALLTYPE AddRef(void)                            { return 1; }
     virtual ULONG   STDMETHODCALLTYPE Release(void)                           { return 1; }
 };
+
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080000
+static void reset_output(AVFormatContext *avctx, IDeckLink *p_card, IDeckLinkOutput *p_output)
+{
+    /* The decklink driver can sometimes get stuck in a state where
+       EnableVideoOutput always fails.  To work around this issue,
+       call it with the last configured output mode, which causes it
+       to recover */
+    IDeckLinkStatus *p_status;
+    int64_t vid_mode;
+    int result;
+
+    result = p_card->QueryInterface(IID_IDeckLinkStatus, (void**)&p_status);
+    if (result != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not get status interface");
+        return;
+    }
+
+    result = p_status->GetInt(bmdDeckLinkStatusCurrentVideoOutputMode, &vid_mode);
+    if (result != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not get current video output mode");
+        p_status->Release();
+        return;
+    }
+
+    result = p_output->EnableVideoOutput(vid_mode, bmdVideoOutputFlagDefault);
+    if (result != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not get enable video output mode");
+        p_status->Release();
+        return;
+    }
+
+    p_output->DisableVideoOutput();
+    p_status->Release();
+}
+#endif
 
 static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
 {
@@ -185,15 +307,23 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
                " Check available formats with -list_formats 1.\n");
         return -1;
     }
+
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080000
+    reset_output(avctx, ctx->dl, ctx->dlo);
+#endif
+
     if (ctx->dlo->EnableVideoOutput(ctx->bmd_mode,
                                     ctx->supports_vanc ? bmdVideoOutputVANC : bmdVideoOutputFlagDefault) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not enable video output!\n");
         return -1;
     }
 
+    avpacket_queue_init (avctx, &ctx->vanc_queue);
+
     /* Set callback. */
-    ctx->output_callback = new decklink_output_callback();
+    ctx->output_callback = new decklink_output_callback(cctx);
     ctx->dlo->SetScheduledFrameCompletionCallback(ctx->output_callback);
+    ctx->dlo->SetAudioCallback(ctx->output_callback);
 
     ctx->frames_preroll = st->time_base.den * ctx->preroll;
     if (st->time_base.den > 1000)
@@ -203,6 +333,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     ctx->frames_buffer = ctx->frames_preroll * 2;
     ctx->frames_buffer = FFMIN(ctx->frames_buffer, 60);
     pthread_mutex_init(&ctx->mutex, NULL);
+    pthread_mutex_init(&ctx->audio_mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);
     ctx->frames_buffer_available_spots = ctx->frames_buffer;
 
@@ -220,23 +351,49 @@ static int decklink_setup_audio(AVFormatContext *avctx, AVStream *st)
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     AVCodecParameters *c = st->codecpar;
 
-    if (ctx->audio) {
-        av_log(avctx, AV_LOG_ERROR, "Only one audio stream is supported!\n");
+    if (st->codecpar->codec_id == AV_CODEC_ID_AC3) {
+        /* Regardless of the number of channels in the codec, we're only
+           using 2 SDI audio channels at 48000Hz */
+        ctx->channels += 2;
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_PCM_S16LE) {
+        if (c->sample_rate != bmdAudioSampleRate48kHz) {
+            av_log(avctx, AV_LOG_ERROR, "Unsupported sample rate!"
+                   " Only 48kHz is supported.\n");
+            return -1;
+        }
+        ctx->channels += c->channels;
+    } else {
+        av_log(avctx, AV_LOG_ERROR, "Unsupported codec specified!"
+               " Only PCM_S16LE and AC-3 are supported.\n");
         return -1;
     }
-    if (c->sample_rate != 48000) {
-        av_log(avctx, AV_LOG_ERROR, "Unsupported sample rate!"
-               " Only 48kHz is supported.\n");
-        return -1;
-    }
-    if (c->channels != 2 && c->channels != 8 && c->channels != 16) {
-        av_log(avctx, AV_LOG_ERROR, "Unsupported number of channels!"
-               " Only 2, 8 or 16 channels are supported.\n");
-        return -1;
-    }
+
+    /* The device expects the sample rate to be fixed. */
+    avpriv_set_pts_info(st, 64, 1, bmdAudioSampleRate48kHz);
+
+    ctx->audio++;
+
+    return 0;
+}
+
+static int decklink_enable_audio(AVFormatContext *avctx)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+
+    /* Round up total channel count to that supported by decklink.  This
+       means we may need to pad the output buffer when interleaving the
+       audio packet data... */
+    if (ctx->channels <= 2)
+        ctx->channels = 2;
+    else if (ctx->channels <= 8)
+        ctx->channels = 8;
+    else if (ctx->channels <= 16)
+        ctx->channels = 16;
+
     if (ctx->dlo->EnableAudioOutput(bmdAudioSampleRate48kHz,
                                     bmdAudioSampleType16bitInteger,
-                                    c->channels,
+                                    ctx->channels,
                                     bmdAudioOutputStreamTimestamped) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not enable audio output!\n");
         return -1;
@@ -246,13 +403,35 @@ static int decklink_setup_audio(AVFormatContext *avctx, AVStream *st)
         return -1;
     }
 
-    /* The device expects the sample rate to be fixed. */
-    avpriv_set_pts_info(st, 64, 1, c->sample_rate);
-    ctx->channels = c->channels;
-
-    ctx->audio = 1;
-
     return 0;
+}
+
+static int decklink_setup_data(AVFormatContext *avctx, AVStream *st)
+{
+    int ret = -1;
+
+    switch(st->codecpar->codec_id) {
+#if CONFIG_LIBKLVANC
+    case AV_CODEC_ID_SMPTE_2038:
+    case AV_CODEC_ID_SCTE_104:
+        /* No specific setup required */
+        ret = 0;
+        break;
+    case AV_CODEC_ID_SCTE_35:
+#if CONFIG_SCTE35TOSCTE104_BSF
+        if (ff_stream_add_bitstream_filter(st, "scte35toscte104", NULL) > 0) {
+            st->codecpar->codec_id = AV_CODEC_ID_SCTE_104;
+            ret = 0;
+        }
+#else
+        av_log(avctx, AV_LOG_ERROR, "SCTE-35 requires scte35toscte104 BSF to be available\n");
+#endif
+        break;
+#endif
+    default:
+        av_log(avctx, AV_LOG_ERROR, "Unsupported data codec specified\n");
+    }
+    return ret;
 }
 
 av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
@@ -277,24 +456,29 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
     pthread_mutex_destroy(&ctx->mutex);
     pthread_cond_destroy(&ctx->cond);
 
+    if (ctx->udp_fd >= 0)
+        closesocket(ctx->udp_fd);
+
     av_freep(&cctx->ctx);
 
     return 0;
 }
 
 #if CONFIG_LIBKLVANC
-static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *ctx,
+static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx *cctx,
                                    AVPacket *pkt, decklink_frame *frame,
                                    AVStream *st)
 {
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     struct klvanc_line_set_s vanc_lines = { 0 };
-    int ret, size;
+    AVBarData *bardata;
+    int ret, size, bardata_size;
 
     if (ctx->supports_vanc == 0)
         return 0;
 
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
-    if (data) {
+    if (data && cctx->cea708_line != -1) {
         struct klvanc_packet_eia_708b_s *pkt;
         uint16_t *cdp;
         uint16_t len;
@@ -319,9 +503,10 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
 
         /* CC data */
         pkt->header.ccdata_present = 1;
+        pkt->header.caption_service_active = 1;
         pkt->ccdata.cc_count = cc_count;
         for (size_t i = 0; i < cc_count; i++) {
-            if (data [3*i] & 0x40)
+            if (data [3*i] & 0x04)
                 pkt->ccdata.cc[i].cc_valid = 1;
             pkt->ccdata.cc[i].cc_type = data[3*i] & 0x03;
             pkt->ccdata.cc[i].cc_data[0] = data[3*i+1];
@@ -336,15 +521,19 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         }
         klvanc_destroy_eia708_cdp(pkt);
 
-        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, cdp, len, 11, 0);
+        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, cdp, len,
+                                 cctx->cea708_line, 0);
+        free(cdp);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
         }
+        udp_monitor_report(ctx->udp_fd, "CC COUNT", cc_count);
     }
 
     data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
-    if (data) {
+    bardata = (AVBarData *) av_packet_get_side_data(pkt, AV_PKT_DATA_BARDATA, &bardata_size);
+    if ((data || bardata) && cctx->afd_line != -1) {
         struct klvanc_packet_afd_s *pkt;
         uint16_t *afd;
         uint16_t len;
@@ -353,12 +542,26 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         if (ret != 0)
             return AVERROR(ENOMEM);
 
-        ret = klvanc_set_AFD_val(pkt, data[0]);
-        if (ret != 0) {
-            av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
-                   data[0]);
-            klvanc_destroy_AFD(pkt);
-            return AVERROR(EINVAL);
+        if (data) {
+            ret = klvanc_set_AFD_val(pkt, data[0]);
+            if (ret != 0) {
+                av_log(avctx, AV_LOG_ERROR, "Invalid AFD value specified: %d\n",
+                       data[0]);
+                klvanc_destroy_AFD(pkt);
+                return AVERROR(EINVAL);
+            }
+        }
+
+        if (bardata) {
+            if (bardata->top_bottom) {
+                pkt->barDataFlags = BARS_TOPBOTTOM;
+                pkt->top = bardata->top;
+                pkt->bottom = bardata->bottom;
+            } else {
+                pkt->barDataFlags = BARS_LEFTRIGHT;
+                pkt->left = bardata->left;
+                pkt->right = bardata->right;
+            }
         }
 
         /* FIXME: Should really rely on the coded_width but seems like that
@@ -371,16 +574,88 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
 
         ret = klvanc_convert_AFD_to_words(pkt, &afd, &len);
         if (ret != 0) {
-            av_log(avctx, AV_LOG_ERROR, "Failed converting 708 packet to words\n");
+            av_log(avctx, AV_LOG_ERROR, "Failed converting AFD packet to words\n");
             return AVERROR(ENOMEM);
         }
         klvanc_destroy_AFD(pkt);
 
-        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len, 12, 0);
+        ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, afd, len,
+                                 cctx->afd_line, 0);
+        free(afd);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return AVERROR(ENOMEM);
         }
+    }
+
+    /* See if there any pending data packets to process */
+    int dequeue_size = avpacket_queue_size(&ctx->vanc_queue);
+    while (dequeue_size > 0) {
+        AVStream *vanc_st;
+        AVPacket vanc_pkt;
+
+        avpacket_queue_get(&ctx->vanc_queue, &vanc_pkt, 1);
+        dequeue_size -= (vanc_pkt.size + sizeof(AVPacketList));
+        if (vanc_pkt.pts + 1 < ctx->last_pts) {
+            av_log(avctx, AV_LOG_WARNING, "VANC packet too old, throwing away\n");
+            av_packet_unref(&vanc_pkt);
+            continue;
+        }
+
+        vanc_st = avctx->streams[vanc_pkt.stream_index];
+
+        if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038) {
+            struct klvanc_smpte2038_anc_data_packet_s *pkt_2038 = 0;
+
+            klvanc_smpte2038_parse_pes_payload(vanc_pkt.data, vanc_pkt.size, &pkt_2038);
+            if (pkt_2038 == NULL) {
+                av_log(avctx, AV_LOG_ERROR, "failed to decode SMPTE 2038 PES packet");
+                av_packet_unref(&vanc_pkt);
+                continue;
+            }
+            for (int i = 0; i < pkt_2038->lineCount; i++) {
+                struct klvanc_smpte2038_anc_data_line_s *l = &pkt_2038->lines[i];
+                uint16_t *vancWords = NULL;
+                uint16_t vancWordCount;
+
+                if (klvanc_smpte2038_convert_line_to_words(l, &vancWords,
+                                                           &vancWordCount) < 0)
+                    break;
+
+                ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, vancWords,
+                                         vancWordCount, l->line_number, 0);
+                free(vancWords);
+                if (ret != 0) {
+                    av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+                    break;
+                }
+            }
+            klvanc_smpte2038_anc_data_packet_free(pkt_2038);
+        } else if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SCTE_104) {
+            if (cctx->scte104_line == -1) {
+                av_packet_unref(&vanc_pkt);
+                continue;
+            }
+
+            /* Generate a VANC line for SCTE104 message */
+            uint16_t *vancWords = NULL;
+            uint16_t vancWordCount;
+            ret = klvanc_sdi_create_payload(0x07, 0x41, vanc_pkt.data, vanc_pkt.size,
+                                            &vancWords, &vancWordCount, 10);
+            if (ret != 0) {
+                av_log(avctx, AV_LOG_ERROR, "Error creating SCTE-104 VANC payload, ret=%d\n",
+                       ret);
+                break;
+            }
+            ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, vancWords,
+                                     vancWordCount, cctx->scte104_line, 0);
+            free(vancWords);
+            if (ret != 0) {
+                av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
+                break;
+            }
+        }
+        av_packet_unref(&vanc_pkt);
     }
 
     IDeckLinkVideoFrameAncillary *vanc;
@@ -394,9 +669,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
        final VANC sections for the Decklink output */
     for (int i = 0; i < vanc_lines.num_lines; i++) {
         struct klvanc_line_s *line = vanc_lines.lines[i];
-        uint16_t *out_line;
         int real_line;
-        int out_len;
         void *buf;
 
         if (line == NULL)
@@ -417,16 +690,14 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
         }
 
         /* Generate the full line taking into account all VANC packets on that line */
-        result = klvanc_generate_vanc_line(ctx->vanc_ctx, line, &out_line, &out_len, ctx->bmd_width);
+        result = klvanc_generate_vanc_line_v210(ctx->vanc_ctx, line, (uint8_t *) buf,
+                                                ctx->bmd_width);
         if (result != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed to generate VANC line\n");
             klvanc_line_free(line);
             continue;
         }
 
-        /* Repack the 16-bit ints into 10-bit, and push into final buffer */
-        klvanc_y10_to_v210(out_line, (uint8_t *) buf, out_len);
-        free(out_line);
         klvanc_line_free(line);
     }
 
@@ -449,9 +720,13 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     decklink_frame *frame;
     buffercount_type buffered;
     HRESULT hr;
+    uint64_t t1;
 #if CONFIG_LIBKLVANC
     int ret;
 #endif
+
+    t1 = av_vtune_get_timestamp();
+    ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
 
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
         if (tmp->format != AV_PIX_FMT_UYVY422 ||
@@ -478,7 +753,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame = new decklink_frame(ctx, avpacket, st->codecpar->codec_id, ctx->bmd_height, ctx->bmd_width);
 
 #if CONFIG_LIBKLVANC
-        ret = decklink_construct_vanc(avctx, ctx, pkt, frame, st);
+        ret = decklink_construct_vanc(avctx, cctx, pkt, frame, st);
         if (ret != 0) {
             av_log(avctx, AV_LOG_ERROR, "Failed to construct VANC\n");
         }
@@ -493,6 +768,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     }
 
     /* Always keep at most one second of frames buffered. */
+    av_vtune_log_stat(DECKLINK_BUFFER_COUNT, ctx->frames_buffer_available_spots, 0);
+
     pthread_mutex_lock(&ctx->mutex);
     while (ctx->frames_buffer_available_spots == 0) {
         pthread_cond_wait(&ctx->cond, &ctx->mutex);
@@ -500,8 +777,11 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     ctx->frames_buffer_available_spots--;
     pthread_mutex_unlock(&ctx->mutex);
 
+    if (ctx->first_pts == 0)
+        ctx->first_pts = pkt->pts;
+
     /* Schedule frame for playback. */
-    hr = ctx->dlo->ScheduleVideoFrame((struct IDeckLinkVideoFrame *) frame,
+    hr = ctx->dlo->ScheduleVideoFrame((class IDeckLinkVideoFrame *) frame,
                                       pkt->pts * ctx->bmd_tb_num,
                                       ctx->bmd_tb_num, ctx->bmd_tb_den);
     /* Pass ownership to DeckLink, or release on failure */
@@ -512,6 +792,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         return AVERROR(EIO);
     }
 
+    udp_monitor_report(ctx->udp_fd, "PICTURE", pkt->pts);
+
     ctx->dlo->GetBufferedVideoFrameCount(&buffered);
     av_log(avctx, AV_LOG_DEBUG, "Buffered video frames: %d.\n", (int) buffered);
     if (pkt->pts > 2 && buffered <= 2)
@@ -519,18 +801,59 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
                " Video may misbehave!\n");
 
     /* Preroll video frames. */
-    if (!ctx->playback_started && pkt->pts > ctx->frames_preroll) {
-        av_log(avctx, AV_LOG_DEBUG, "Ending audio preroll.\n");
+    if (!ctx->playback_started && pkt->pts > (ctx->first_pts + ctx->frames_preroll)) {
         if (ctx->audio && ctx->dlo->EndAudioPreroll() != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not end audio preroll!\n");
             return AVERROR(EIO);
         }
         av_log(avctx, AV_LOG_DEBUG, "Starting scheduled playback.\n");
-        if (ctx->dlo->StartScheduledPlayback(0, ctx->bmd_tb_den, 1.0) != S_OK) {
+        if (ctx->dlo->StartScheduledPlayback(ctx->first_pts * ctx->bmd_tb_num, ctx->bmd_tb_den, 1.0) != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not start scheduled playback!\n");
             return AVERROR(EIO);
         }
         ctx->playback_started = 1;
+    }
+
+    av_vtune_log_event("write_video", t1, av_vtune_get_timestamp(), 1);
+
+    return 0;
+}
+
+static int create_s337_payload(AVPacket *pkt, enum AVCodecID codec_id, uint8_t **outbuf, int *outsize)
+{
+    uint8_t *s337_payload;
+    uint8_t *s337_payload_start;
+    int i;
+
+    /* Encapsulate AC3 syncframe into SMPTE 337 packet */
+    *outsize = (pkt->size + 4) * sizeof(uint16_t);
+    s337_payload = (uint8_t *) av_mallocz(*outsize);
+    if (s337_payload == NULL)
+        return AVERROR(ENOMEM);
+
+    *outbuf = s337_payload;
+
+    /* Construct SMPTE S337 Burst preamble */
+    s337_payload[0] = 0x72; /* Sync Word 1 */
+    s337_payload[1] = 0xf8; /* Sync Word 1 */
+    s337_payload[2] = 0x1f; /* Sync Word 1 */
+    s337_payload[3] = 0x4e; /* Sync Word 1 */
+
+    if (codec_id == AV_CODEC_ID_AC3) {
+        s337_payload[4] = 0x01;
+    } else {
+        return AVERROR(EINVAL);
+    }
+
+    s337_payload[5] = 0x00;
+    uint16_t bitcount = pkt->size * 8;
+    s337_payload[6] = bitcount & 0xff; /* Length code */
+    s337_payload[7] = bitcount >> 8; /* Length code */
+    s337_payload_start = &s337_payload[8];
+    for (i = 0; i < pkt->size; i += 2) {
+        s337_payload_start[0] = pkt->data[i+1];
+        s337_payload_start[1] = pkt->data[i];
+        s337_payload_start += 2;
     }
 
     return 0;
@@ -540,18 +863,119 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
-    int sample_count = pkt->size / (ctx->channels << 1);
+    AVStream *st = avctx->streams[pkt->stream_index];
+    AVCodecParameters *c = st->codecpar;
+    int sample_count;
     buffercount_type buffered;
+    uint8_t *outbuf = NULL;
+    int i, ret = 0;
+    int interleave_offset = 0;
+    int sample_offset, sample_size;
+    uint64_t t1;
+    struct AVPacketList *cur;
+    int src_offset, remaining;
+
+    t1 = av_vtune_get_timestamp();
 
     ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
     if (pkt->pts > 1 && !buffered)
         av_log(avctx, AV_LOG_WARNING, "There's no buffered audio."
                " Audio will misbehave!\n");
 
-    if (ctx->dlo->ScheduleAudioSamples(pkt->data, sample_count, pkt->pts,
-                                       bmdAudioSampleRate48kHz, NULL) != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not schedule audio samples.\n");
-        return AVERROR(EIO);
+    if (st->codecpar->codec_id == AV_CODEC_ID_AC3) {
+        /* Encapsulate AC3 syncframe into SMPTE 337 packet */
+        ret = create_s337_payload(pkt, st->codecpar->codec_id,
+                                  &outbuf, &sample_count);
+        if (ret != 0)
+            goto done;
+        sample_size = 4;
+    } else {
+        sample_count = pkt->size / (c->channels << 1);
+        sample_size = st->codecpar->channels * 2;
+        outbuf = pkt->data;
+    }
+
+    /* Figure out the interleaving offset for this stream */
+    for (i = 0; i < pkt->stream_index; i++) {
+        AVStream *audio_st = avctx->streams[i];
+        if (audio_st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+            if (audio_st->codecpar->codec_id == AV_CODEC_ID_AC3)
+                interleave_offset += 2;
+            else
+                interleave_offset += audio_st->codecpar->channels;
+    }
+
+    pthread_mutex_lock(&ctx->audio_mutex);
+    if (ctx->audio_pkt_numsamples == 0) {
+        /* Establish initial cadence */
+        ctx->audio_pkt_numsamples = sample_count;
+        ctx->output_audio_list = (AVPacketList *)av_mallocz(sizeof(AVPacketList));
+        if (ctx->output_audio_list == NULL)
+            goto done_unlock;
+        ret = av_new_packet(&ctx->output_audio_list->pkt, ctx->audio_pkt_numsamples * ctx->channels * 2);
+        if (ret != 0)
+            goto done_unlock;
+        memset(ctx->output_audio_list->pkt.data, 0, ctx->audio_pkt_numsamples * ctx->channels * 2);
+        ctx->output_audio_list->pkt.pts = pkt->pts;
+    }
+
+    remaining = sample_count;
+    src_offset = 0;
+    for (cur = ctx->output_audio_list; cur != NULL; cur = cur->next) {
+        /* See if we should interleave into this packet */
+        if (((pkt->pts) >= cur->pkt.pts) &&
+            (pkt->pts) < (cur->pkt.pts + ctx->audio_pkt_numsamples)) {
+            int num_copy = remaining;
+            int dst_offset = pkt->pts - cur->pkt.pts;
+
+            /* Don't overflow dest buffer */
+            if (num_copy > (ctx->audio_pkt_numsamples - dst_offset))
+                num_copy = ctx->audio_pkt_numsamples - dst_offset;
+
+            /* Yes, interleave */
+            sample_offset = (dst_offset * ctx->channels + interleave_offset) * 2;
+            for (i = 0; i < num_copy; i++) {
+                memcpy(&cur->pkt.data[sample_offset], &pkt->data[(i + src_offset) * sample_size], sample_size);
+                sample_offset += (ctx->channels * 2);
+            }
+            pkt->pts += num_copy;
+            src_offset += num_copy;
+            remaining -= num_copy;
+            if (remaining == 0)
+                break;
+        }
+
+        if ((pkt->pts >= cur->pkt.pts) && cur->next == NULL && remaining > 0) {
+            /* We need a new packet in our outgoing queue */
+            cur->next = (AVPacketList *)av_mallocz(sizeof(AVPacketList));
+            if (cur->next == NULL)
+                goto done_unlock;
+            ret = av_new_packet(&cur->next->pkt, ctx->audio_pkt_numsamples * ctx->channels * 2);
+            if (ret != 0)
+                goto done_unlock;
+            memset(cur->next->pkt.data, 0, ctx->audio_pkt_numsamples * ctx->channels * 2);
+            cur->next->pkt.pts = cur->pkt.pts + ctx->audio_pkt_numsamples;
+        }
+    }
+done_unlock:
+    pthread_mutex_unlock(&ctx->audio_mutex);
+done:
+    if (st->codecpar->codec_id == AV_CODEC_ID_AC3)
+        av_free(outbuf);
+
+    av_vtune_log_event("write_audio", t1, av_vtune_get_timestamp(), 1);
+
+    return ret;
+}
+
+static int decklink_write_data_packet(AVFormatContext *avctx, AVPacket *pkt)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+
+    AVPacket *avpacket = av_packet_clone(pkt);
+    if (avpacket_queue_put(&ctx->vanc_queue, avpacket) < 0) {
+        av_log(avctx, AV_LOG_WARNING, "Failed to queue DATA packet\n");
     }
 
     return 0;
@@ -564,7 +988,15 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx;
     unsigned int n;
+    uint64_t t1;
     int ret;
+    char hostname[256];
+    int port;
+    int error;
+    char sport[16];
+    struct addrinfo hints = { 0 }, *res = 0;
+
+    t1 = av_vtune_get_timestamp();
 
     ctx = (struct decklink_ctx *) av_mallocz(sizeof(struct decklink_ctx));
     if (!ctx)
@@ -573,6 +1005,7 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     ctx->list_formats = cctx->list_formats;
     ctx->preroll      = cctx->preroll;
     cctx->ctx = ctx;
+    ctx->udp_fd = -1;
 #if CONFIG_LIBKLVANC
     klvanc_context_create(&ctx->vanc_ctx);
 #endif
@@ -613,9 +1046,64 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         } else if (c->codec_type == AVMEDIA_TYPE_VIDEO) {
             if (decklink_setup_video(avctx, st))
                 goto error;
+        } else if (c->codec_type == AVMEDIA_TYPE_DATA) {
+            if (decklink_setup_data(avctx, st))
+                goto error;
         } else {
             av_log(avctx, AV_LOG_ERROR, "Unsupported stream type.\n");
             goto error;
+        }
+    }
+
+    /* Reconfigure the data stream clocks to match the video */
+    for (n = 0; n < avctx->nb_streams; n++) {
+        AVStream *st = avctx->streams[n];
+        AVCodecParameters *c = st->codecpar;
+        if (c->codec_type == AVMEDIA_TYPE_DATA)
+            avpriv_set_pts_info(st, 64, ctx->bmd_tb_num, ctx->bmd_tb_den);
+    }
+
+    if (ctx->audio > 0) {
+        if (decklink_enable_audio(avctx))
+            goto error;
+    }
+
+    av_vtune_log_event("write_header", t1, av_vtune_get_timestamp(), 1);
+
+    /* Setup the UDP monitor callback */
+
+    if (cctx->udp_monitor) {
+        av_url_split(NULL, 0, NULL, 0, hostname, sizeof(hostname), &port, NULL,
+                     0, cctx->udp_monitor);
+
+        /* This is all cribbed from libavformat/udp.c */
+        snprintf(sport, sizeof(sport), "%d", port);
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_family   = AF_UNSPEC;
+
+        if ((error = getaddrinfo(hostname, sport, &hints, &res))) {
+            res = NULL;
+            av_log(avctx, AV_LOG_ERROR, "getaddrinfo(%s, %s): %s\n",
+                   hostname, sport, gai_strerror(error));
+        } else {
+            struct sockaddr_storage dest_addr;
+            int dest_addr_len;
+
+            memcpy(&dest_addr, res->ai_addr, res->ai_addrlen);
+            dest_addr_len = res->ai_addrlen;
+
+            ctx->udp_fd = ff_socket(res->ai_family, SOCK_DGRAM, 0);
+            if (ctx->udp_fd < 0) {
+                av_log(avctx, AV_LOG_ERROR, "Call to ff_socket failed\n");
+            } else {
+                if (connect(ctx->udp_fd, (struct sockaddr *) &dest_addr,
+                            dest_addr_len)) {
+                    av_log(avctx, AV_LOG_ERROR, "Failure to connect to monitor port\n");
+                    closesocket(ctx->udp_fd);
+                    ctx->udp_fd = -1;
+                    goto error;
+                }
+            }
         }
     }
 
@@ -632,12 +1120,13 @@ int ff_decklink_write_packet(AVFormatContext *avctx, AVPacket *pkt)
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     AVStream *st = avctx->streams[pkt->stream_index];
 
-    ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
-
     if      (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
         return decklink_write_video_packet(avctx, pkt);
     else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
         return decklink_write_audio_packet(avctx, pkt);
+    else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+        return decklink_write_data_packet(avctx, pkt);
+    }
 
     return AVERROR(EIO);
 }

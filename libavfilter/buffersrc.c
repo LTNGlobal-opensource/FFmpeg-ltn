@@ -53,6 +53,7 @@ typedef struct BufferSourceContext {
     enum AVPixelFormat  pix_fmt;
     AVRational        pixel_aspect;
     char              *sws_param;
+    int               interlaced_frame, top_field_first;
 
     AVBufferRef *hw_frames_ctx;
 
@@ -111,6 +112,10 @@ int av_buffersrc_parameters_set(AVFilterContext *ctx, AVBufferSrcParameters *par
             s->pixel_aspect = param->sample_aspect_ratio;
         if (param->frame_rate.num > 0 && param->frame_rate.den > 0)
             s->frame_rate = param->frame_rate;
+        if (param->interlaced_frame > -1)
+            s->interlaced_frame = param->interlaced_frame;
+        if (param->top_field_first > -1)
+            s->top_field_first = param->top_field_first;
         if (param->hw_frames_ctx) {
             av_buffer_unref(&s->hw_frames_ctx);
             s->hw_frames_ctx = av_buffer_ref(param->hw_frames_ctx);
@@ -282,10 +287,11 @@ static av_cold int init_video(AVFilterContext *ctx)
     if (!(c->fifo = av_fifo_alloc(sizeof(AVFrame*))))
         return AVERROR(ENOMEM);
 
-    av_log(ctx, AV_LOG_VERBOSE, "w:%d h:%d pixfmt:%s tb:%d/%d fr:%d/%d sar:%d/%d sws_param:%s\n",
+    av_log(ctx, AV_LOG_VERBOSE, "w:%d h:%d pixfmt:%s tb:%d/%d fr:%d/%d sar:%d/%d sws_param:%s i:%d t:%d\n",
            c->w, c->h, av_get_pix_fmt_name(c->pix_fmt),
            c->time_base.num, c->time_base.den, c->frame_rate.num, c->frame_rate.den,
-           c->pixel_aspect.num, c->pixel_aspect.den, (char *)av_x_if_null(c->sws_param, ""));
+           c->pixel_aspect.num, c->pixel_aspect.den, (char *)av_x_if_null(c->sws_param, ""),
+           c->interlaced_frame, c->top_field_first);
     c->warning_limit = 100;
     return 0;
 }
@@ -309,6 +315,8 @@ static const AVOption buffer_options[] = {
     { "time_base",     NULL,                     OFFSET(time_base),        AV_OPT_TYPE_RATIONAL, { .dbl = 0 }, 0, DBL_MAX, V },
     { "frame_rate",    NULL,                     OFFSET(frame_rate),       AV_OPT_TYPE_RATIONAL, { .dbl = 0 }, 0, DBL_MAX, V },
     { "sws_param",     NULL,                     OFFSET(sws_param),        AV_OPT_TYPE_STRING,                    .flags = V },
+    { "interlaced",    NULL,                     OFFSET(interlaced_frame), AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, INT_MAX, V },
+    { "top_field_first", NULL,                   OFFSET(top_field_first),  AV_OPT_TYPE_INT,      { .i64 = 0 }, 0, INT_MAX, V },
     { NULL },
 };
 
@@ -434,6 +442,8 @@ static int config_props(AVFilterLink *link)
         link->w = c->w;
         link->h = c->h;
         link->sample_aspect_ratio = c->pixel_aspect;
+        link->interlaced_frame = c->interlaced_frame;
+        link->top_field_first = c->top_field_first;
 
         if (c->hw_frames_ctx) {
             link->hw_frames_ctx = av_buffer_ref(c->hw_frames_ctx);

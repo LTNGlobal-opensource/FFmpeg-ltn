@@ -433,6 +433,9 @@ struct AVFilterLink {
     int w;                      ///< agreed upon image width
     int h;                      ///< agreed upon image height
     AVRational sample_aspect_ratio; ///< agreed upon sample aspect ratio
+    int interlaced_frame;
+    int top_field_first;
+
     /* These parameters apply only to audio */
     uint64_t channel_layout;    ///< channel layout of current buffer (see libavutil/channel_layout.h)
     int sample_rate;            ///< samples per second

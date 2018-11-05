@@ -473,6 +473,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
                                 AV_DICT_IGNORE_SUFFIX))) {
             av_strlcatf(args, sizeof(args), ":%s=%s", e->key, e->value);
         }
+        av_strlcatf(args, sizeof(args), ":interlaced=%d:top_field_first=%d",
+                    ofilter->interlaced_frame, ofilter->top_field_first);
 
         snprintf(name, sizeof(name), "scaler_out_%d_%d",
                  ost->file_index, ost->index);
@@ -836,6 +838,48 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
             return ret;
 
         last_filter = yadif;
+    }
+
+    /* Special case for SD output to Decklink cards (which expect ITU-656 video) */
+    if (ifilter->height == 480) {
+        AVFilterContext *pad_filter;
+        char args[255];
+        int x = 0;
+
+        if (ifilter->width == 704) {
+            /* Original encoder encoded in D1, so we pad 8 pixels on
+               each side per the standard convention... */
+            x = 8;
+        }
+
+        /* Vertical padding is 2 on the top, 4 on the bottom, to preserve
+           field dominance */
+        snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2", 720, 486, x);
+        snprintf(name, sizeof(name), "pad_in_%d_%d",
+                 ist->file_index, ist->st->index);
+
+        if ((ret = avfilter_graph_create_filter(&pad_filter, avfilter_get_by_name("pad"),
+                                                name, args, NULL, fg->graph)) < 0)
+            return ret;
+        if ((ret = avfilter_link(last_filter, 0, pad_filter, 0)) < 0)
+            return ret;
+
+        last_filter = pad_filter;
+
+        /* Special case if the source 480i video is TFF, since 480i video
+           over SDI is always supposed to be BFF */
+	if (ifilter->top_field_first == 1) {
+            snprintf(name, sizeof(name), "phase_%d_%d",
+                     ist->file_index, ist->st->index);
+
+            if ((ret = avfilter_graph_create_filter(&pad_filter, avfilter_get_by_name("phase"),
+                                                    name, "mode=t", NULL, fg->graph)) < 0)
+                return ret;
+            if ((ret = avfilter_link(last_filter, 0, pad_filter, 0)) < 0)
+                return ret;
+
+            last_filter = pad_filter;
+	}
     }
 
     snprintf(name, sizeof(name), "trim_in_%d_%d",

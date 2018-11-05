@@ -86,6 +86,8 @@ typedef struct AVBufferSrcParameters {
      */
     int width, height;
 
+    int interlaced_frame, top_field_first;
+
     /**
      * Video only, the sample (pixel) aspect ratio.
      */

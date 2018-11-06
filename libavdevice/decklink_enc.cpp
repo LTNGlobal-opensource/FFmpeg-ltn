@@ -52,6 +52,14 @@ extern "C" {
 #include "libklvanc/pixels.h"
 #endif
 
+/* If the PTS of the latest audio packet is within this number of the previous
+   packet received, just concatenate the blocks.  This is to deal with certain
+   encoders which provide PTS values that are slightly off from the actual number
+   of samples delivered.  Without this, we either introduce small gaps between
+   the audio blocks, or we end up overwriting the last few samples of the previous
+   audio block.  */
+#define AUDIO_PTS_FUDGEFACTOR 15
+
 static void udp_monitor_report(int fd, const char *str, uint64_t val)
 {
     char *buf;
@@ -899,6 +907,15 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     t1 = av_vtune_get_timestamp();
 
+    if (ctx->audio_st_lastpts[pkt->stream_index] != pkt->pts) {
+        int64_t delta = pkt->pts - ctx->audio_st_lastpts[pkt->stream_index];
+        if (delta > -AUDIO_PTS_FUDGEFACTOR && delta < AUDIO_PTS_FUDGEFACTOR) {
+            /* Within the fudge factor, so just slip the packet's
+               pts to match the where the last call left off */
+            pkt->pts = ctx->audio_st_lastpts[pkt->stream_index];
+        }
+    }
+
     ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
     if (pkt->pts > 1 && !buffered)
         av_log(avctx, AV_LOG_WARNING, "There's no buffered audio."
@@ -979,6 +996,10 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
             cur->next->pkt.pts = cur->pkt.pts + ctx->audio_pkt_numsamples;
         }
     }
+
+    /* Stash the last PTS for the next call */
+    ctx->audio_st_lastpts[pkt->stream_index] = pkt->pts;
+
 done_unlock:
     pthread_mutex_unlock(&ctx->audio_mutex);
 done:

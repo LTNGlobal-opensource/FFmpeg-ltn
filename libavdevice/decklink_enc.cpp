@@ -202,7 +202,7 @@ public:
         /* Do final Scheduling of audio at least 0.25 seconds before realtime.  This might
            need to be configurable at some point if the user wants to do really low
            latency (i.e. a pre-roll of less than 0.25 seconds)...  */
-        int window = streamtime + 12000;
+        int64_t window = streamtime + 12000;
         if (window > 0) {
             for (cur = ctx->output_audio_list; cur != NULL; cur = next) {
                 if (cur->next == NULL)

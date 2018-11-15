@@ -667,11 +667,27 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
                 continue;
             }
 
+	    /* SCTE-104 packets cannot be directly embedded into SDI.  They needs to
+               be encapsulated in SMPTE 2010 first) */
+            uint8_t *smpte2010_bytes;
+            uint16_t smpte2010_len;
+            ret = klvanc_convert_SCTE_104_packetbytes_to_SMPTE_2010(ctx->vanc_ctx,
+                                                                    vanc_pkt.data,
+                                                                    vanc_pkt.size,
+                                                                    &smpte2010_bytes,
+                                                                    &smpte2010_len);
+            if (ret != 0) {
+                av_log(avctx, AV_LOG_ERROR, "Error creating SMPTE 2010 VANC payload, ret=%d\n",
+                       ret);
+                break;
+            }
+
             /* Generate a VANC line for SCTE104 message */
             uint16_t *vancWords = NULL;
             uint16_t vancWordCount;
-            ret = klvanc_sdi_create_payload(0x07, 0x41, vanc_pkt.data, vanc_pkt.size,
+            ret = klvanc_sdi_create_payload(0x07, 0x41, smpte2010_bytes, smpte2010_len,
                                             &vancWords, &vancWordCount, 10);
+            free(smpte2010_bytes);
             if (ret != 0) {
                 av_log(avctx, AV_LOG_ERROR, "Error creating SCTE-104 VANC payload, ret=%d\n",
                        ret);

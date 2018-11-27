@@ -2758,6 +2758,10 @@ static int set_side_data(HEVCContext *s)
         s->avctx->color_trc = out->color_trc = s->sei.alternative_transfer.preferred_transfer_characteristics;
     }
 
+    if (s->sei.picture_timing.picture_struct) {
+        av_dict_set_int(&out->metadata, "pic_struct", s->sei.picture_timing.picture_struct, 0);
+    }
+
     return 0;
 }
 

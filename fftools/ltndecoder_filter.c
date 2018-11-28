@@ -868,7 +868,7 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
 
         /* Special case if the source 480i video is TFF, since 480i video
            over SDI is always supposed to be BFF */
-	if (ifilter->top_field_first == 1) {
+        if (ifilter->top_field_first == 1) {
             snprintf(name, sizeof(name), "phase_%d_%d",
                      ist->file_index, ist->st->index);
 
@@ -879,7 +879,7 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
                 return ret;
 
             last_filter = pad_filter;
-	}
+        }
     }
 
     snprintf(name, sizeof(name), "trim_in_%d_%d",

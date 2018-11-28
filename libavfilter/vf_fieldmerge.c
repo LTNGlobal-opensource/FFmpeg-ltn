@@ -92,7 +92,7 @@ static int supported_format(AVFilterLink *inlink)
         return 1;
     if (inlink->w == 720 && inlink->h == 240)
         return 1;
-    return 1;
+    return 0;
 }
 
 static int config_out_props(AVFilterLink *outlink)

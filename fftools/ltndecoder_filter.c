@@ -823,6 +823,16 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
             return ret;
     }
 
+    /* Special case for HEVC interlaced */
+    AVFilterContext *fm_filter;
+    snprintf(name, sizeof(name), "fieldmerge_%d_%d", ist->file_index, ist->st->index);
+    if ((ret = avfilter_graph_create_filter(&fm_filter, avfilter_get_by_name("fieldmerge"),
+                                            name, "", NULL, fg->graph)) < 0)
+        return ret;
+    if ((ret = avfilter_link(last_filter, 0, fm_filter, 0)) < 0)
+        return ret;
+    last_filter = fm_filter;
+
     if (do_deinterlace) {
         AVFilterContext *yadif;
 

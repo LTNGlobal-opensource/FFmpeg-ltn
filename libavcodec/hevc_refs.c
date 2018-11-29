@@ -109,9 +109,18 @@ static HEVCFrame *alloc_frame(HEVCContext *s)
         for (j = 0; j < frame->ctb_count; j++)
             frame->rpl_tab[j] = (RefPicListTab *)frame->rpl_buf->data;
 
-        frame->frame->interlaced_frame = (s->sei.picture_timing.field_order != AV_FIELD_PROGRESSIVE);
-        frame->frame->top_field_first  = (s->sei.picture_timing.field_order == AV_FIELD_TT ||
-                                          s->sei.picture_timing.field_order == AV_FIELD_BT);
+        if (s->sei.picture_timing.field_order == AV_FIELD_PROGRESSIVE ||
+            s->sei.picture_timing.field_order == AV_FIELD_UNKNOWN) {
+            /* The pic_timing SEI may not be present in the stream (resulting in
+               the "field_order" being left at its default value of unknown),
+               in which case we should default to progressive */
+            frame->frame->interlaced_frame = 0;
+            frame->frame->top_field_first = 0;
+        } else {
+            frame->frame->interlaced_frame = 1;
+            frame->frame->top_field_first  = (s->sei.picture_timing.field_order == AV_FIELD_TT ||
+                                              s->sei.picture_timing.field_order == AV_FIELD_BT);
+        }
 
         if (s->avctx->hwaccel) {
             const AVHWAccel *hwaccel = s->avctx->hwaccel;

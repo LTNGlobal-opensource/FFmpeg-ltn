@@ -205,6 +205,35 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
         pic_struct_next = atoi(entry->value);
     }
 
+    /* Combine any captions from the two fields */
+    AVFrameSideData *f1_side_data = NULL;
+    AVFrameSideData *f2_side_data = NULL;
+    AVFrameSideData *out_side_data = NULL;
+    f1_side_data = av_frame_get_side_data(s->cur, AV_FRAME_DATA_A53_CC);
+    f2_side_data = av_frame_get_side_data(s->next, AV_FRAME_DATA_A53_CC);
+
+    if (f1_side_data && f2_side_data) {
+        out_side_data = av_frame_new_side_data(out, AV_FRAME_DATA_A53_CC,
+                                               f1_side_data->size + f2_side_data->size);
+        if (out_side_data) {
+            memcpy(&out_side_data->data[0], f1_side_data->data, f1_side_data->size);
+            memcpy(&out_side_data->data[f1_side_data->size], f2_side_data->data,
+                   f2_side_data->size);
+        }
+    } else if (f1_side_data) {
+        out_side_data = av_frame_new_side_data(out, AV_FRAME_DATA_A53_CC,
+                                               f1_side_data->size);
+        if (out_side_data) {
+            memcpy(&out_side_data->data[0], f1_side_data->data, f1_side_data->size);
+        }
+    } else if (f2_side_data) {
+        out_side_data = av_frame_new_side_data(out, AV_FRAME_DATA_A53_CC,
+                                               f2_side_data->size);
+        if (out_side_data) {
+            memcpy(&out_side_data->data[0], f2_side_data->data, f2_side_data->size);
+        }
+    }
+
     copy_picture_field(s, s->cur, out, inlink, pic_struct_cur);
     av_frame_free(&s->cur);
 

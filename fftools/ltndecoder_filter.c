@@ -752,6 +752,8 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     int ret, pad_idx = 0;
     int64_t tsoffset = 0;
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
+    int width = ifilter->width;
+    int height = ifilter->height;
 
     if (!par)
         return AVERROR(ENOMEM);
@@ -778,12 +780,12 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         sar = (AVRational){0,1};
     av_bprint_init(&args, 0, 1);
     av_bprintf(&args,
-             "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:"
-             "pixel_aspect=%d/%d:sws_param=flags=%d:interlaced=%d:top_field_first=%d",
-             ifilter->width, ifilter->height, ifilter->format,
-             tb.num, tb.den, sar.num, sar.den,
-             SWS_BILINEAR + ((ist->dec_ctx->flags&AV_CODEC_FLAG_BITEXACT) ? SWS_BITEXACT:0),
-             ifilter->interlaced_frame, ifilter->top_field_first);
+               "video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:"
+               "pixel_aspect=%d/%d:sws_param=flags=%d:interlaced=%d:top_field_first=%d",
+               width, height, ifilter->format,
+               tb.num, tb.den, sar.num, sar.den,
+               SWS_BILINEAR + ((ist->dec_ctx->flags&AV_CODEC_FLAG_BITEXACT) ? SWS_BITEXACT:0),
+               ifilter->interlaced_frame, ifilter->top_field_first);
     if (fr.num && fr.den)
         av_bprintf(&args, ":frame_rate=%d/%d", fr.num, fr.den);
     snprintf(name, sizeof(name), "graph %d input from stream %d:%d", fg->index,
@@ -824,14 +826,17 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     }
 
     /* Special case for HEVC interlaced */
-    AVFilterContext *fm_filter;
-    snprintf(name, sizeof(name), "fieldmerge_%d_%d", ist->file_index, ist->st->index);
-    if ((ret = avfilter_graph_create_filter(&fm_filter, avfilter_get_by_name("fieldmerge"),
-                                            name, "", NULL, fg->graph)) < 0)
-        return ret;
-    if ((ret = avfilter_link(last_filter, 0, fm_filter, 0)) < 0)
-        return ret;
-    last_filter = fm_filter;
+    if (height == 240 || height == 288 || height == 540) {
+        AVFilterContext *fm_filter;
+        snprintf(name, sizeof(name), "fieldmerge_%d_%d", ist->file_index, ist->st->index);
+        if ((ret = avfilter_graph_create_filter(&fm_filter, avfilter_get_by_name("fieldmerge"),
+                                                name, "", NULL, fg->graph)) < 0)
+            return ret;
+        if ((ret = avfilter_link(last_filter, 0, fm_filter, 0)) < 0)
+            return ret;
+        last_filter = fm_filter;
+        height *= 2;
+    }
 
     if (do_deinterlace) {
         AVFilterContext *yadif;
@@ -851,12 +856,12 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     }
 
     /* Special case for SD output to Decklink cards (which expect ITU-656 video) */
-    if (ifilter->height == 480) {
+    if (height == 480) {
         AVFilterContext *pad_filter;
         char args[255];
         int x = 0;
 
-        if (ifilter->width == 704) {
+        if (width == 704) {
             /* Original encoder encoded in D1, so we pad 8 pixels on
                each side per the standard convention... */
             x = 8;
@@ -890,6 +895,8 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
 
             last_filter = pad_filter;
         }
+        width = 720;
+        height = 486;
     }
 
     snprintf(name, sizeof(name), "trim_in_%d_%d",

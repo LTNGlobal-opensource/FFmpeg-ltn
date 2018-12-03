@@ -113,6 +113,8 @@ static int config_out_props(AVFilterLink *outlink)
         outlink->h = inlink->h * 2;
         outlink->time_base = inlink->time_base;
         outlink->frame_rate = inlink->frame_rate;
+        outlink->interlaced_frame = inlink->interlaced_frame;
+        outlink->top_field_first = inlink->top_field_first;
 
         /* half framerate */
         outlink->time_base.num *= 2;
@@ -125,8 +127,14 @@ static int config_out_props(AVFilterLink *outlink)
         outlink->h = inlink->h;
         outlink->time_base = inlink->time_base;
         outlink->frame_rate = inlink->frame_rate;
+        outlink->interlaced_frame = inlink->interlaced_frame;
+        outlink->top_field_first = inlink->top_field_first;
         return 0;
     }
+
+    av_log(ctx, AV_LOG_VERBOSE, "Fieldmerge w:%d h:%d interlace: %d tff:%d\n",
+           outlink->w, outlink->h, inlink->interlaced_frame,
+           inlink->top_field_first);
 
     return 0;
 }

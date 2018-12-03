@@ -159,9 +159,11 @@ class decklink_output_callback : public IDeckLinkVideoOutputCallback, public IDe
 {
 public:
     struct decklink_cctx *_cctx;
-    decklink_output_callback(struct decklink_cctx *cctx)
+    AVFormatContext *_avctx;
+    decklink_output_callback(struct decklink_cctx *cctx, AVFormatContext *avctx)
     {
         _cctx = cctx;
+        _avctx = avctx;
     }
     virtual HRESULT STDMETHODCALLTYPE ScheduledFrameCompleted(IDeckLinkVideoFrame *_frame, BMDOutputFrameCompletionResult result)
     {
@@ -184,10 +186,12 @@ public:
             break;
         case bmdOutputFrameDisplayedLate:
             ctx->late++;
+            av_log(_avctx, AV_LOG_WARNING, "Video buffer late\n");
             av_vtune_log_stat(DECKLINK_BUFFERS_LATE, ctx->late, 0);
             break;
         case bmdOutputFrameDropped:
             ctx->dropped++;
+            av_log(_avctx, AV_LOG_WARNING, "Video buffer dropped\n");
             av_vtune_log_stat(DECKLINK_BUFFERS_DROPPED, ctx->dropped, 0);
             break;
         }
@@ -329,7 +333,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     avpacket_queue_init (avctx, &ctx->vanc_queue);
 
     /* Set callback. */
-    ctx->output_callback = new decklink_output_callback(cctx);
+    ctx->output_callback = new decklink_output_callback(cctx, avctx);
     ctx->dlo->SetScheduledFrameCompletionCallback(ctx->output_callback);
     ctx->dlo->SetAudioCallback(ctx->output_callback);
 

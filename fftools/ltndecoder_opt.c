@@ -2261,8 +2261,16 @@ static int open_output_file(OptionsContext *o, const char *filename)
                 if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
                     /* Include all audio streams */
                     for (i = 0; i < prg->nb_stream_indexes; i++) {
-                        if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                        if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                            if (input_streams[prg->stream_index[i]]->st->codecpar->channels == 0 ||
+                                input_streams[prg->stream_index[i]]->st->codecpar->sample_rate == 0) {
+                                av_log(NULL, AV_LOG_WARNING, "Insufficent data to add audio stream %d. chan=%d sr=%d\n",
+                                       i, input_streams[prg->stream_index[i]]->st->codecpar->channels,
+                                       input_streams[prg->stream_index[i]]->st->codecpar->sample_rate);
+                                continue;
+                            }
                             new_audio_stream(o, oc, i);
+                        }
                     }
                 } else {
                     audio_idx = av_find_best_stream(input_files[0]->ctx, AVMEDIA_TYPE_AUDIO, -1,
@@ -2316,8 +2324,16 @@ static int open_output_file(OptionsContext *o, const char *filename)
                 if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
                     /* Enable all streams */
                     for (i = 0; i < nb_input_streams; i++) {
-                        if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+                        if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                            if (input_streams[prg->stream_index[i]]->st->codecpar->channels == 0 ||
+                                input_streams[prg->stream_index[i]]->st->codecpar->sample_rate == 0) {
+                                av_log(NULL, AV_LOG_WARNING, "Insufficent data to add audio stream %d. chan=%d sr=%d\n",
+                                       i, input_streams[prg->stream_index[i]]->st->codecpar->channels,
+                                       input_streams[prg->stream_index[i]]->st->codecpar->sample_rate);
+                                continue;
+                            }
                             new_audio_stream(o, oc, i);
+                        }
                     }
                 } else {
                     /* Use legacy heuristic to pick single best audio stream */

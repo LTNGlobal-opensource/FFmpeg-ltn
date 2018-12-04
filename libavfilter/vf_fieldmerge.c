@@ -190,15 +190,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     if (!s->cur || !s->next)
         return 0;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-    if (!out)
-        return AVERROR(ENOMEM);
-
-    av_frame_copy_props(out, s->cur);
-    out->interlaced_frame = 1;
-    out->top_field_first  = s->cur->top_field_first;
-    out->pts             /= 2;  // adjust pts to new framerate
-
     /* AVFrame doesn't support just sending an individual field, so as a
        hack let's look for some metadata associated with the AVFrame to
        tell us whether it's the top field or bottom (and hevcdec.c sets
@@ -214,6 +205,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     if (entry != NULL) {
         pic_struct_next = atoi(entry->value);
     }
+
+    if (pic_struct_cur == AV_PICTURE_STRUCTURE_BOTTOM_FIELD) {
+        /* Throw away first BFF field so we re-align frames as TFF */
+        return 0;
+    }
+
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out)
+        return AVERROR(ENOMEM);
+
+    av_frame_copy_props(out, s->cur);
+    out->interlaced_frame = 1;
+    out->top_field_first  = s->cur->top_field_first;
+    out->pts             /= 2;  // adjust pts to new framerate
 
     /* Combine any captions from the two fields */
     AVFrameSideData *f1_side_data = NULL;

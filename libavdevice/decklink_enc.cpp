@@ -876,7 +876,7 @@ static int create_s337_payload(AVPacket *pkt, enum AVCodecID codec_id, uint8_t *
     int i;
 
     /* Encapsulate AC3 syncframe into SMPTE 337 packet */
-    *outsize = (pkt->size + 4) * sizeof(uint16_t);
+    *outsize = pkt->size + 8;
     s337_payload = (uint8_t *) av_mallocz(*outsize);
     if (s337_payload == NULL)
         return AVERROR(ENOMEM);
@@ -943,11 +943,13 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     if (st->codecpar->codec_id == AV_CODEC_ID_AC3) {
         /* Encapsulate AC3 syncframe into SMPTE 337 packet */
+        int outbuf_size;
         ret = create_s337_payload(pkt, st->codecpar->codec_id,
-                                  &outbuf, &sample_count);
+                                  &outbuf, &outbuf_size);
         if (ret != 0)
             goto done;
         sample_size = 4;
+        sample_count = outbuf_size / 4;
     } else {
         sample_count = pkt->size / (c->channels << 1);
         sample_size = st->codecpar->channels * 2;
@@ -994,7 +996,7 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
             /* Yes, interleave */
             sample_offset = (dst_offset * ctx->channels + interleave_offset) * 2;
             for (i = 0; i < num_copy; i++) {
-                memcpy(&cur->pkt.data[sample_offset], &pkt->data[(i + src_offset) * sample_size], sample_size);
+                memcpy(&cur->pkt.data[sample_offset], &outbuf[(i + src_offset) * sample_size], sample_size);
                 sample_offset += (ctx->channels * 2);
             }
             pkt->pts += num_copy;

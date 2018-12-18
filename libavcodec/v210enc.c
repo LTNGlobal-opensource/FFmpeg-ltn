@@ -187,16 +187,31 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             u += pic->linesize[1] / 2 - avctx->width / 2;
             v += pic->linesize[2] / 2 - avctx->width / 2;
         }
-    } else if(pic->format == AV_PIX_FMT_YUV422P) {
+    } else if(pic->format == AV_PIX_FMT_YUV422P ||
+              pic->format == AV_PIX_FMT_YUV420P) {
         const uint8_t *y = pic->data[0];
         const uint8_t *u = pic->data[1];
         const uint8_t *v = pic->data[2];
+        const uint8_t *u_even = u;
+        const uint8_t *v_even = v;
 
         const int sample_size = 12 * s->sample_factor_8;
         const int sample_w    = avctx->width / sample_size;
 
         for (h = 0; h < avctx->height; h++) {
             uint32_t val;
+
+            if (pic->format == AV_PIX_FMT_YUV420P) {
+                if (h % 2 == 1) {
+                    /* Reuse previous chroma line */
+                    u = u_even;
+                    v = v_even;
+                } else {
+                    u_even = u;
+                    v_even = v;
+                }
+            }
+
             w = sample_w * sample_size;
             s->pack_line_8(y, u, v, dst, w);
 
@@ -280,5 +295,5 @@ AVCodec ff_v210_encoder = {
     .priv_data_size = sizeof(V210EncContext),
     .init           = encode_init,
     .encode2        = encode_frame,
-    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV422P, AV_PIX_FMT_NONE },
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE },
 };

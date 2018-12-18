@@ -778,6 +778,32 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     t1 = av_vtune_get_timestamp();
     ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
 
+    BMDTimeValue streamtime;
+    int64_t delta;
+    ctx->dlo->GetScheduledStreamTime(ctx->bmd_tb_den, &streamtime, NULL);
+    delta = pkt->pts - (streamtime / ctx->bmd_tb_num);
+#if 0
+    av_log(avctx, AV_LOG_INFO,
+           "started=%d streamtime=%ld delta=%ld first=%ld fb=%d\n",
+           ctx->playback_started, streamtime, delta, ctx->first_pts,
+           ctx->frames_buffer);
+#endif
+    if (ctx->playback_started && (delta < -100 || delta > ctx->frames_buffer)) {
+        /* We're way too far behind realtime, so restart clocks */
+        av_log(avctx, AV_LOG_ERROR, "Scheduled frames received too %s.  "
+               "Restarting output.  Delta=%" PRId64 "\n", delta < 0 ? "late" : "far into future", delta);
+        if (ctx->dlo->StopScheduledPlayback(0, NULL, 0) != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to stop scheduled playback\n");
+            return AVERROR(EIO);
+        }
+        ctx->first_pts = pkt->pts;
+        ctx->playback_started = 0;
+        if (ctx->audio && ctx->dlo->BeginAudioPreroll() != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Could not begin audio preroll!\n");
+            return -1;
+        }
+    }
+
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
         if (tmp->format != AV_PIX_FMT_UYVY422 ||
             tmp->width  != ctx->bmd_width ||
@@ -937,7 +963,7 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     }
 
     ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
-    if (pkt->pts > 1 && !buffered)
+    if (ctx->playback_started && !buffered)
         av_log(avctx, AV_LOG_WARNING, "There's no buffered audio."
                " Audio will misbehave!\n");
 

@@ -788,8 +788,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
            ctx->playback_started, streamtime, delta, ctx->first_pts,
            ctx->frames_buffer);
 #endif
-    if (ctx->playback_started && (delta < -100 || delta > ctx->frames_buffer)) {
-        /* We're way too far behind realtime, so restart clocks */
+    if (ctx->playback_started && (delta < 0 || delta > ctx->frames_buffer)) {
+        /* We're behind realtime, or way too far ahead, so restart clocks */
         av_log(avctx, AV_LOG_ERROR, "Scheduled frames received too %s.  "
                "Restarting output.  Delta=%" PRId64 "\n", delta < 0 ? "late" : "far into future", delta);
         if (ctx->dlo->StopScheduledPlayback(0, NULL, 0) != S_OK) {

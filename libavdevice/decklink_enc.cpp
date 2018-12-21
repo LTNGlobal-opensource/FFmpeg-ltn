@@ -782,6 +782,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     int64_t delta;
     ctx->dlo->GetScheduledStreamTime(ctx->bmd_tb_den, &streamtime, NULL);
     delta = pkt->pts - (streamtime / ctx->bmd_tb_num);
+    av_vtune_log_stat(DECKLINK_QUEUE_DELTA, delta, 0);
 #if 0
     av_log(avctx, AV_LOG_INFO,
            "started=%d streamtime=%ld delta=%ld first=%ld fb=%d\n",

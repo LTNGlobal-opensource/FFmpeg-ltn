@@ -37,6 +37,7 @@ static const char *event_names[] = {
     "DecklinkBuffersFree.INST",
     "DecklinkBuffersDropped.INST",
     "DecklinkBuffersLate.INST",
+    "DecklinkQueueDelta.INST",
     "UDPFifoRxSize.INST",
 };
 

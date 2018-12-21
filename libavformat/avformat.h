@@ -1049,6 +1049,11 @@ typedef struct AVStream {
 
     int pts_wrap_bits; /**< number of bits in pts (used for wrapping control) */
 
+    /* LTN wrap algorithm (handles multiple wraps) */
+    int64_t rollover_next;
+    int64_t rollover_current;
+    int rolled_over;
+
     // Timestamp generation support:
     /**
      * Timestamp corresponding to the last dts sync point.

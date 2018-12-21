@@ -104,8 +104,9 @@ static int is_relative(int64_t ts) {
  * @param timestamp the time stamp to wrap
  * @return resulting time stamp
  */
-static int64_t wrap_timestamp(const AVStream *st, int64_t timestamp)
+static int64_t wrap_timestamp(AVStream *st, int64_t timestamp)
 {
+#ifdef LTN_ORIGINAL_WRAP_LOGIC
     if (st->pts_wrap_behavior != AV_PTS_WRAP_IGNORE &&
         st->pts_wrap_reference != AV_NOPTS_VALUE && timestamp != AV_NOPTS_VALUE) {
         if (st->pts_wrap_behavior == AV_PTS_WRAP_ADD_OFFSET &&
@@ -116,6 +117,42 @@ static int64_t wrap_timestamp(const AVStream *st, int64_t timestamp)
             return timestamp - (1ULL << st->pts_wrap_bits);
     }
     return timestamp;
+#else
+    int64_t x = (1ULL << 33) - (60 * 90000);
+    int64_t y = 60 * 90000;
+
+    if (timestamp == AV_NOPTS_VALUE)
+        return timestamp;
+
+    if (timestamp > x && st->rolled_over == 0) {
+#if 0
+        fprintf(stderr, "Incrementing rollover1 ts=%ld > x=%ld ro=%d rn=%ld rc=%ld\n",
+                timestamp, x, st->rolled_over, st->rollover_next, st->rollover_current);
+#endif
+        st->rollover_next++;
+        st->rolled_over = 1;
+    } else if (timestamp > y && (timestamp < (y + (60 * 9000))) && st->rolled_over == 1) {
+#if 0
+        fprintf(stderr, "Incrementing rollover2 y=%ld < ts=%ld < x=%ld ro=%d rn=%ld rc=%ld\n",
+                y, timestamp, x, st->rolled_over, st->rollover_next, st->rollover_current);
+#endif
+        st->rollover_current = st->rollover_next;
+        st->rolled_over = 0;
+    }
+
+    if (timestamp < y) {
+#if 0
+        fprintf(stderr, "Adding1 %ld\n", (st->rollover_next << 33));
+#endif
+        timestamp += st->rollover_next << 33;
+    } else {
+#if 0
+        fprintf(stderr, "Adding2 %ld\n", (st->rollover_current << 33));
+#endif
+        timestamp += st->rollover_current << 33;
+    }
+    return timestamp;
+#endif
 }
 
 #if FF_API_FORMAT_GET_SET

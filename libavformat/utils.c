@@ -104,9 +104,8 @@ static int is_relative(int64_t ts) {
  * @param timestamp the time stamp to wrap
  * @return resulting time stamp
  */
-static int64_t wrap_timestamp(AVStream *st, int64_t timestamp)
+static int64_t wrap_timestamp(const AVStream *st, int64_t timestamp)
 {
-#ifdef LTN_ORIGINAL_WRAP_LOGIC
     if (st->pts_wrap_behavior != AV_PTS_WRAP_IGNORE &&
         st->pts_wrap_reference != AV_NOPTS_VALUE && timestamp != AV_NOPTS_VALUE) {
         if (st->pts_wrap_behavior == AV_PTS_WRAP_ADD_OFFSET &&
@@ -115,44 +114,24 @@ static int64_t wrap_timestamp(AVStream *st, int64_t timestamp)
         else if (st->pts_wrap_behavior == AV_PTS_WRAP_SUB_OFFSET &&
             timestamp >= st->pts_wrap_reference)
             return timestamp - (1ULL << st->pts_wrap_bits);
+        else if (st->pts_wrap_behavior == AV_PTS_WRAP_LTN &&
+            timestamp < st->pts_wrap_reference) {
+#if 0
+            fprintf(stderr, "%d Adding1 %ld ro=%d ts=%ld\n", st->index,
+                    (st->rollover_next << 33), st->rolled_over, timestamp);
+#endif
+            timestamp += st->rollover_next << 33;
+        } else if (st->pts_wrap_behavior == AV_PTS_WRAP_LTN &&
+            timestamp >= st->pts_wrap_reference) {
+#if 0
+            fprintf(stderr, "%d Adding2 %ld ro=%d ts=%ld pwr=%ld\n", st->index,
+                    (st->rollover_current << 33), st->rolled_over, timestamp, st->pts_wrap_reference);
+#endif
+            timestamp += st->rollover_current << 33;
+        }
+
     }
     return timestamp;
-#else
-    int64_t x = (1ULL << 33) - (60 * 90000);
-    int64_t y = 60 * 90000;
-
-    if (timestamp == AV_NOPTS_VALUE)
-        return timestamp;
-
-    if (timestamp > x && st->rolled_over == 0) {
-#if 0
-        fprintf(stderr, "Incrementing rollover1 ts=%ld > x=%ld ro=%d rn=%ld rc=%ld\n",
-                timestamp, x, st->rolled_over, st->rollover_next, st->rollover_current);
-#endif
-        st->rollover_next++;
-        st->rolled_over = 1;
-    } else if (timestamp > y && (timestamp < (y + (60 * 9000))) && st->rolled_over == 1) {
-#if 0
-        fprintf(stderr, "Incrementing rollover2 y=%ld < ts=%ld < x=%ld ro=%d rn=%ld rc=%ld\n",
-                y, timestamp, x, st->rolled_over, st->rollover_next, st->rollover_current);
-#endif
-        st->rollover_current = st->rollover_next;
-        st->rolled_over = 0;
-    }
-
-    if (timestamp < y) {
-#if 0
-        fprintf(stderr, "Adding1 %ld\n", (st->rollover_next << 33));
-#endif
-        timestamp += st->rollover_next << 33;
-    } else {
-#if 0
-        fprintf(stderr, "Adding2 %ld\n", (st->rollover_current << 33));
-#endif
-        timestamp += st->rollover_current << 33;
-    }
-    return timestamp;
-#endif
 }
 
 #if FF_API_FORMAT_GET_SET
@@ -786,7 +765,11 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
     int i, pts_wrap_behavior;
     int64_t pts_wrap_reference;
     AVProgram *first_program;
+    int rollover_current = st->rollover_current;
+    int rollover_next = st->rollover_next;
+    int rolled_over = st->rolled_over;
 
+#ifdef LTN_ORIGINAL_WRAP_LOGIC
     if (ref == AV_NOPTS_VALUE)
         ref = pkt->pts;
     if (st->pts_wrap_reference != AV_NOPTS_VALUE || st->pts_wrap_bits >= 63 || ref == AV_NOPTS_VALUE || !s->correct_ts_overflow)
@@ -799,6 +782,41 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
     pts_wrap_behavior = (ref < (1LL << st->pts_wrap_bits) - (1LL << st->pts_wrap_bits-3)) ||
         (ref < (1LL << st->pts_wrap_bits) - av_rescale(60, st->time_base.den, st->time_base.num)) ?
         AV_PTS_WRAP_ADD_OFFSET : AV_PTS_WRAP_SUB_OFFSET;
+#else
+    if (ref == AV_NOPTS_VALUE || pkt->pts > pkt->dts)
+        ref = pkt->pts;
+
+    if (st->pts_wrap_bits >= 63 || ref == AV_NOPTS_VALUE)
+        return 0;
+    ref &= (1LL << st->pts_wrap_bits)-1;
+
+    pts_wrap_behavior = AV_PTS_WRAP_LTN;
+
+    int64_t prewrap_point = (1ULL << st->pts_wrap_bits) - (60 * 90000);
+    int64_t postwrap_point = 60 * 90000;
+    int64_t postwrap_point2 = postwrap_point + (60 * 9000);
+    pts_wrap_reference = postwrap_point;
+
+    if (ref > prewrap_point && rolled_over == 0) {
+#if 0
+        fprintf(stderr, "Incrementing rollover1 st=%d ts=%ld > x=%ld ro=%d rn=%ld rc=%ld\n",
+                st->index, ref, prewrap_point, rolled_over, rollover_next,
+                rollover_current);
+#endif
+        rollover_next++;
+        rolled_over = 1;
+    } else if (ref > postwrap_point && ref < postwrap_point2 && rolled_over == 1) {
+#if 0
+        fprintf(stderr, "Incrementing rollover2 st=%d y=%ld < ts=%ld < x=%ld ro=%d rn=%ld rc=%ld\n",
+                st->index, postwrap_point, ref, prewrap_point, rolled_over, rollover_next,
+                rollover_current);
+#endif
+        rollover_current = rollover_next;
+        rolled_over = 0;
+    } else {
+        return 0;
+    }
+#endif
 
     first_program = av_find_program_from_stream(s, NULL, stream_index);
 
@@ -810,11 +828,17 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
                     continue;
                 s->streams[i]->pts_wrap_reference = pts_wrap_reference;
                 s->streams[i]->pts_wrap_behavior = pts_wrap_behavior;
+                s->streams[i]->rollover_next = rollover_next;
+                s->streams[i]->rollover_current = rollover_current;
+                s->streams[i]->rolled_over = rolled_over;
             }
         }
         else {
             st->pts_wrap_reference = s->streams[default_stream_index]->pts_wrap_reference;
             st->pts_wrap_behavior = s->streams[default_stream_index]->pts_wrap_behavior;
+            st->rollover_next = rollover_next;
+            st->rollover_current = rollover_current;
+            st->rolled_over = rolled_over;
         }
     }
     else {
@@ -831,10 +855,17 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
         // update every program with differing pts_wrap_reference
         program = first_program;
         while (program) {
+#ifdef LTN_ORIGINAL_WRAP_LOGIC
             if (program->pts_wrap_reference != pts_wrap_reference) {
+#else
+            if (1) {
+#endif
                 for (i = 0; i<program->nb_stream_indexes; i++) {
                     s->streams[program->stream_index[i]]->pts_wrap_reference = pts_wrap_reference;
                     s->streams[program->stream_index[i]]->pts_wrap_behavior = pts_wrap_behavior;
+                    s->streams[program->stream_index[i]]->rollover_next = rollover_next;
+                    s->streams[program->stream_index[i]]->rollover_current = rollover_current;
+                    s->streams[program->stream_index[i]]->rolled_over = rolled_over;
                 }
 
                 program->pts_wrap_reference = pts_wrap_reference;

@@ -60,6 +60,10 @@ extern "C" {
    audio block.  */
 #define AUDIO_PTS_FUDGEFACTOR 15
 
+/* Throw the first X frames so that all intermediate FIFOs have the opportunity
+   to flush (to reduce realtime latency) */
+#define DISCARD_INITIAL_DISCARD 30
+
 static void udp_monitor_report(int fd, const char *str, uint64_t val)
 {
     char *buf;
@@ -344,6 +348,11 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     /* Buffer twice as many frames as the preroll. */
     ctx->frames_buffer = ctx->frames_preroll * 2;
     ctx->frames_buffer = FFMIN(ctx->frames_buffer, 60);
+
+    /* Discard the first few frames to allow all upstream FIFOs to
+       empty out */
+    ctx->frames_discard = DISCARD_INITIAL_DISCARD;
+
     pthread_mutex_init(&ctx->mutex, NULL);
     pthread_mutex_init(&ctx->audio_mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);
@@ -783,6 +792,15 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     ctx->dlo->GetScheduledStreamTime(ctx->bmd_tb_den, &streamtime, NULL);
     delta = pkt->pts - (streamtime / ctx->bmd_tb_num);
     av_vtune_log_stat(DECKLINK_QUEUE_DELTA, delta, 0);
+
+    if (ctx->frames_discard-- > 0) {
+        av_log(avctx, AV_LOG_ERROR, "Discarding frame with PTS %" PRId64 " discard=%d\n",
+               pkt->pts, ctx->frames_discard);
+        av_frame_free(&avframe);
+        av_packet_free(&avpacket);
+        return 0;
+    }
+
 #if 0
     av_log(avctx, AV_LOG_INFO,
            "started=%d streamtime=%ld delta=%ld first=%ld fb=%d\n",
@@ -797,7 +815,9 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
             av_log(avctx, AV_LOG_ERROR, "Failed to stop scheduled playback\n");
             return AVERROR(EIO);
         }
-        ctx->first_pts = pkt->pts;
+
+        ctx->frames_discard = DISCARD_INITIAL_DISCARD;
+        ctx->first_pts = pkt->pts + ctx->frames_discard;
         ctx->playback_started = 0;
         if (ctx->audio && ctx->dlo->BeginAudioPreroll() != S_OK) {
             av_log(avctx, AV_LOG_ERROR, "Could not begin audio preroll!\n");

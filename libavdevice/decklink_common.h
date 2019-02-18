@@ -126,6 +126,7 @@ struct decklink_ctx {
 
     int frames_preroll;
     int frames_buffer;
+    int frames_discard;
 
     pthread_mutex_t mutex;
     pthread_cond_t cond;

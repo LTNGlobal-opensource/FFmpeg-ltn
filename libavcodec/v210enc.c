@@ -138,6 +138,10 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     }
     dst = pkt->data;
 
+    int64_t *orig_pts = av_packet_new_side_data(pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+    if (orig_pts)
+        *orig_pts = pic->pkt_pts;
+
     if (pic->format == AV_PIX_FMT_YUV422P10) {
         const uint16_t *y = (const uint16_t *)pic->data[0];
         const uint16_t *u = (const uint16_t *)pic->data[1];

@@ -149,6 +149,7 @@ OBJS-$(CONFIG_SINE_FILTER)                   += asrc_sine.o
 OBJS-$(CONFIG_ANULLSINK_FILTER)              += asink_anullsink.o
 
 # video filters
+OBJS-$(CONFIG_A53_FILTER)                    += vf_a53.o
 OBJS-$(CONFIG_ALPHAEXTRACT_FILTER)           += vf_extractplanes.o
 OBJS-$(CONFIG_ALPHAMERGE_FILTER)             += vf_alphamerge.o
 OBJS-$(CONFIG_AMPLIFY_FILTER)                += vf_amplify.o

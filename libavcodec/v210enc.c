@@ -206,13 +206,26 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             uint32_t val;
 
             if (pic->format == AV_PIX_FMT_YUV420P) {
-                if (h % 2 == 1) {
-                    /* Reuse previous chroma line */
-                    u = u_even;
-                    v = v_even;
+                if (pic->interlaced_frame == 1) {
+                    /* Interlaced chroma */
+                    if (h % 4 == 0) {
+                        u_even = u;
+                        v_even = v;
+                    } else if (h % 4 == 2) {
+                        /* Go back and use first line */
+                        u = u_even;
+                        v = v_even;
+                    }
                 } else {
-                    u_even = u;
-                    v_even = v;
+                    /* Non-interlaced chroma */
+                    if (h % 2 == 1) {
+                        /* Reuse previous chroma line */
+                        u = u_even;
+                        v = v_even;
+                    } else {
+                        u_even = u;
+                        v_even = v;
+                    }
                 }
             }
 

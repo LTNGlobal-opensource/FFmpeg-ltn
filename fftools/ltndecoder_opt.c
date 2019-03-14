@@ -2243,8 +2243,9 @@ static int open_output_file(OptionsContext *o, const char *filename)
             if (!o->video_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
                                                     AVMEDIA_TYPE_VIDEO) != AV_CODEC_ID_NONE) {
                 for (i = 0; i < prg->nb_stream_indexes; i++) {
-                    if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-                        video_idx = i;
+                    AVStream *st = input_streams[prg->stream_index[i]]->st;
+                    if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                        video_idx = st->index;
                         new_video_stream(o, oc, video_idx);
                         break;
                     }
@@ -2281,10 +2282,10 @@ static int open_output_file(OptionsContext *o, const char *filename)
                     if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
                         if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
                             && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
-                            new_data_stream(o, oc, i);
+                            new_data_stream(o, oc, st->index);
                         } else if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
                                    && getenv("LTN_ENABLE_SCTE35") != NULL) {
-                            new_data_stream(o, oc, i);
+                            new_data_stream(o, oc, st->index);
                         }
                     }
                 }
@@ -2318,15 +2319,16 @@ static int open_output_file(OptionsContext *o, const char *filename)
                 if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
                     /* Enable all streams */
                     for (i = 0; i < nb_input_streams; i++) {
-                        if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-                            if (input_streams[i]->st->codecpar->channels == 0 ||
-                                input_streams[i]->st->codecpar->sample_rate == 0) {
+                        AVStream *st = input_streams[i]->st;
+                        if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                            if (st->codecpar->channels == 0 ||
+                                st->codecpar->sample_rate == 0) {
                                 av_log(NULL, AV_LOG_WARNING, "Insufficent data to add audio stream %d. chan=%d sr=%d\n",
-                                       i, input_streams[i]->st->codecpar->channels,
-                                       input_streams[i]->st->codecpar->sample_rate);
+                                       i, st->codecpar->channels,
+                                       st->codecpar->sample_rate);
                                 continue;
                             }
-                            new_audio_stream(o, oc, i);
+                            new_audio_stream(o, oc, st->index);
                         }
                     }
                 } else {
@@ -2379,13 +2381,14 @@ static int open_output_file(OptionsContext *o, const char *filename)
             if (!o->data_disable ) {
                 enum AVCodecID codec_id = av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_DATA);
                 for (i = 0; codec_id != AV_CODEC_ID_NONE && i < nb_input_streams; i++) {
-                    if (input_streams[i]->st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
-                        if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
+                    AVStream *st = input_streams[i]->st;
+                    if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
+                        if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
                             && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
-                            new_data_stream(o, oc, i);
-                        } else if (input_streams[i]->st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
+                            new_data_stream(o, oc, st->index);
+                        } else if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
                                    && getenv("LTN_ENABLE_SCTE35") != NULL) {
-                            new_data_stream(o, oc, i);
+                            new_data_stream(o, oc, st->index);
                         }
                     }
                 }

@@ -2659,7 +2659,9 @@ static int mpegts_read_header(AVFormatContext *s)
         handle_packets(ts, probesize / ts->raw_packet_size);
         /* if could not find service, enable auto_guess */
 
+#ifdef LTN_CONTINUE_EVEN_IF_PMT_NOT_FOUND
         ts->auto_guess = 1;
+#endif
 
         av_log(ts->stream, AV_LOG_TRACE, "tuning done\n");
 

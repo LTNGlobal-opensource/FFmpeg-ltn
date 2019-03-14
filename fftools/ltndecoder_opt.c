@@ -2252,12 +2252,6 @@ static int open_output_file(OptionsContext *o, const char *filename)
             }
             if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
                                                     AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
-                int related_stream;
-                if (video_idx >= 0)
-                    related_stream = video_idx;
-                else
-                    related_stream = prg->stream_index[0];
-
                 if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
                     /* Include all audio streams */
                     for (i = 0; i < prg->nb_stream_indexes; i++) {
@@ -2274,7 +2268,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
                     }
                 } else {
                     audio_idx = av_find_best_stream(input_files[0]->ctx, AVMEDIA_TYPE_AUDIO, -1,
-                                                    related_stream, NULL, 0);
+                                                    video_idx, NULL, 0);
                     if (audio_idx >= 0)
                         new_audio_stream(o, oc, audio_idx);
                 }

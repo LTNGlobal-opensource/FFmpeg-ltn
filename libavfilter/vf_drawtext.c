@@ -197,6 +197,7 @@ typedef struct DrawTextContext {
     int text_shaping;               ///< 1 to shape the text before drawing it
 #endif
     AVDictionary *metadata;
+    AVFrame *frame;
 } DrawTextContext;
 
 #define OFFSET(x) offsetof(DrawTextContext, x)
@@ -961,6 +962,22 @@ static int func_metadata(AVFilterContext *ctx, AVBPrint *bp,
     return 0;
 }
 
+static int func_afd(AVFilterContext *ctx, AVBPrint *bp,
+                    char *fct, unsigned argc, char **argv, int tag)
+{
+    DrawTextContext *s = ctx->priv;
+    AVFrameSideData *side_data;
+
+    side_data = av_frame_get_side_data(s->frame, AV_FRAME_DATA_AFD);
+    if (side_data) {
+        av_bprintf(bp, "0x%02x", side_data->data[0]);
+    } else {
+        av_bprintf(bp, "none");
+    }
+
+    return 0;
+}
+
 static int func_strftime(AVFilterContext *ctx, AVBPrint *bp,
                          char *fct, unsigned argc, char **argv, int tag)
 {
@@ -1074,6 +1091,7 @@ static const struct drawtext_function {
     { "frame_num", 0, 0, 0,   func_frame_num },
     { "n",         0, 0, 0,   func_frame_num },
     { "metadata",  1, 2, 0,   func_metadata },
+    { "afd",       0, 0, 0,   func_afd },
 };
 
 static int eval_function(AVFilterContext *ctx, AVBPrint *bp, char *fct,
@@ -1453,6 +1471,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
     s->var_values[VAR_PICT_TYPE] = frame->pict_type;
     s->metadata = frame->metadata;
+    s->frame = frame;
 
     draw_text(ctx, frame, frame->width, frame->height);
 

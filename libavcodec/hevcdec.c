@@ -2741,6 +2741,16 @@ static int set_side_data(HEVCContext *s)
                metadata->MaxCLL, metadata->MaxFALL);
     }
 
+    if (s->sei.afd.present) {
+        AVFrameSideData *sd = av_frame_new_side_data(out, AV_FRAME_DATA_AFD,
+                                                     sizeof(uint8_t));
+
+        if (sd) {
+            *sd->data = s->sei.afd.active_format_description;
+            s->sei.afd.present = 0;
+        }
+    }
+
     if (s->sei.a53_caption.a53_caption) {
         AVFrameSideData* sd = av_frame_new_side_data(out,
                                                      AV_FRAME_DATA_A53_CC,

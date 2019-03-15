@@ -206,6 +206,27 @@ static int decode_nal_sei_pic_timing(HEVCSEI *s, GetBitContext *gb, const HEVCPa
     return 0;
 }
 
+static int decode_registered_user_data_afd(HEVCSEIAFD *h, GetBitContext *gb, int size)
+{
+    int flag;
+
+    if (size-- < 1)
+        return AVERROR_INVALIDDATA;
+    skip_bits(gb, 1);               // 0
+    flag = get_bits(gb, 1);         // active_format_flag
+    skip_bits(gb, 6);               // reserved
+
+    if (flag) {
+        if (size-- < 1)
+            return AVERROR_INVALIDDATA;
+        skip_bits(gb, 4);           // reserved
+        h->active_format_description = get_bits(gb, 4);
+        h->present                   = 1;
+    }
+
+    return 0;
+}
+
 static int decode_registered_user_data_closed_caption(HEVCSEIA53Caption *s, GetBitContext *gb,
                                                       int size)
 {
@@ -279,6 +300,8 @@ static int decode_nal_sei_user_data_registered_itu_t_t35(HEVCSEI *s, GetBitConte
     user_identifier = get_bits_long(gb, 32);
 
     switch (user_identifier) {
+        case MKBETAG('D', 'T', 'G', '1'):       // afd_data
+            return decode_registered_user_data_afd(&s->afd, gb, size);
         case MKBETAG('G', 'A', '9', '4'):
             return decode_registered_user_data_closed_caption(&s->a53_caption, gb, size);
         default:

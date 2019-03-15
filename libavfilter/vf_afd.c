@@ -33,11 +33,13 @@ typedef struct AFDContext {
     const AVClass *class;
     int enable_afd;
     int afd_code;
+    int afd_cycle;
     int enable_bardata;
     int top;
     int bottom;
     int left;
     int right;
+    int fcount;
 } AFDContext;
 
 static int filter_frame(AVFilterLink *link, AVFrame *frame)
@@ -45,6 +47,15 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
     AFDContext *s = link->dst->priv;
     AVFrameSideData *side_data;
     AVBarData *bar_data;
+
+    /* Support incremeting the AFD every 10 seconds.  This is really
+       just a feature for creating test streams... */
+    if (s->afd_cycle && s->fcount++ % 600 == 0) {
+        if (s->afd_code == 15)
+            s->afd_code = 0;
+        else
+            s->afd_code++;
+    }
 
     /* Insert/tweak the side-data for AFD */
     if (s->enable_afd) {
@@ -92,6 +103,7 @@ static const AVOption setafd_options[] = {
     /* AFD Options */
     { "afd",    "Enable AFD insertion", OFFSET(enable_afd), AV_OPT_TYPE_BOOL, { .i64 = 0}, 0, 1, .flags = FLAGS },
     { "code",   "AFD code to insert", OFFSET(afd_code), AV_OPT_TYPE_INT, {.i64=0}, 0, 0x0F, FLAGS },
+    { "cycle",  "Cycle through AFD codes for testing/debug", OFFSET(afd_cycle), AV_OPT_TYPE_BOOL, { .i64 = 0}, 0, 1, .flags = FLAGS },
 
     /* Bar data Options */
     { "bardata","Enable Bar Data insertion", OFFSET(enable_bardata), AV_OPT_TYPE_BOOL, { .i64 = 0}, 0, 1, .flags = FLAGS },

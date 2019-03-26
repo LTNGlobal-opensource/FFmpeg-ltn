@@ -99,6 +99,11 @@ typedef struct HEVCSEIPictureTiming {
     enum AVFieldOrder field_order;
 } HEVCSEIPictureTiming;
 
+typedef struct HEVCSEIAFD {
+    int present;
+    uint8_t active_format_description;
+} HEVCSEIAFD;
+
 typedef struct HEVCSEIA53Caption {
     int a53_caption_size;
     uint8_t *a53_caption;
@@ -128,6 +133,7 @@ typedef struct HEVCSEI {
     HEVCSEIFramePacking frame_packing;
     HEVCSEIDisplayOrientation display_orientation;
     HEVCSEIPictureTiming picture_timing;
+    HEVCSEIAFD afd;
     HEVCSEIA53Caption a53_caption;
     HEVCSEIMasteringDisplay mastering_display;
     HEVCSEIContentLight content_light;

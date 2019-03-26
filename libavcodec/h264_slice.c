@@ -1287,6 +1287,8 @@ static int h264_export_frame_props(H264Context *h)
             bardata->right = h->sei.a53_bardata.right;
             if (bardata->top || bardata->bottom)
                 bardata->top_bottom = 1;
+            else
+                bardata->top_bottom = 0;
             h->sei.a53_bardata.present = 0;
         }
     }

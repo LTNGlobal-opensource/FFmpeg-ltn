@@ -31,6 +31,7 @@ static const AVOption options[] = {
     { "list_devices", "list available devices"  , OFFSET(list_devices), AV_OPT_TYPE_INT   , { .i64 = 0   }, 0, 1, ENC },
     { "list_formats", "list supported formats"  , OFFSET(list_formats), AV_OPT_TYPE_INT   , { .i64 = 0   }, 0, 1, ENC },
     { "preroll"     , "video preroll in seconds", OFFSET(preroll     ), AV_OPT_TYPE_DOUBLE, { .dbl = 0.5 }, 0, 5, ENC },
+    { "discard"     , "discard initial seconds of video", OFFSET(discard), AV_OPT_TYPE_DOUBLE, { .dbl = 1.5 }, 0, 5, ENC },
     { "queue_size",   "output queue buffer size", OFFSET(queue_size  ), AV_OPT_TYPE_INT64, { .i64 = (1024 * 1024 * 1024)}, 0, INT64_MAX, ENC },
     { "afd_line"    , "VANC line to insert AFD packets", OFFSET(afd_line), AV_OPT_TYPE_INT, { .i64 = 11 }, -1, INT64_MAX, ENC },
     { "cea708_line" , "VANC line to insert CEA-708 CC packets", OFFSET(cea708_line), AV_OPT_TYPE_INT, { .i64 = 12 }, -1, INT64_MAX, ENC },

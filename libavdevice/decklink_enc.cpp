@@ -60,10 +60,6 @@ extern "C" {
    audio block.  */
 #define AUDIO_PTS_FUDGEFACTOR 15
 
-/* Throw the first X frames so that all intermediate FIFOs have the opportunity
-   to flush (to reduce realtime latency) */
-#define DISCARD_INITIAL_DISCARD 30
-
 static void udp_monitor_report(int fd, const char *str, uint64_t val)
 {
     char *buf;
@@ -349,9 +345,9 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     ctx->frames_buffer = ctx->frames_preroll * 2;
     ctx->frames_buffer = FFMIN(ctx->frames_buffer, 60);
 
-    /* Discard the first few frames to allow all upstream FIFOs to
-       empty out */
-    ctx->frames_discard = DISCARD_INITIAL_DISCARD;
+    /* Throw the first X frames so that all upstream FIFOs have the opportunity
+       to flush (to reduce realtime latency) */
+    ctx->frames_discard = st->time_base.den * cctx->discard / st->time_base.num;
 
     pthread_mutex_init(&ctx->mutex, NULL);
     pthread_mutex_init(&ctx->audio_mutex, NULL);
@@ -816,7 +812,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
             return AVERROR(EIO);
         }
 
-        ctx->frames_discard = DISCARD_INITIAL_DISCARD;
+        ctx->frames_discard = st->time_base.den * cctx->discard / st->time_base.num;
         ctx->first_pts = pkt->pts + ctx->frames_discard;
         ctx->playback_started = 0;
         if (ctx->audio && ctx->dlo->BeginAudioPreroll() != S_OK) {

@@ -1618,6 +1618,7 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
     ts->pkt->stream_index = idx;
     prg = av_find_program_from_stream(ts->stream, NULL, idx);
     if (prg && prg->pcr_pid != -1 && prg->discard != AVDISCARD_ALL) {
+#ifdef LEGACY_SCTE35_INSERTION_TIMING
         MpegTSFilter *f = ts->pids[prg->pcr_pid];
         if (f && f->last_pcr != -1)
             ts->pkt->pts = ts->pkt->dts = f->last_pcr/300;
@@ -1626,6 +1627,27 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
             if (orig_pts)
                 *orig_pts = ts->pkt->pts;
         }
+#else
+        /* Find the video stream in the program, and grab the most recent PTS */
+        int i;
+        AVFormatContext *s = ts->stream;
+        for (i = 0; i < prg->nb_stream_indexes; i++) {
+            AVStream *pst = s->streams[prg->stream_index[i]];
+            if (pst) {
+                if (pst->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                    int64_t *orig_pts;
+                    ts->pkt->pts = ts->pkt->dts = pst->cur_dts;
+                    orig_pts = (int64_t *) av_packet_new_side_data(ts->pkt,
+                                                                   AV_PKT_DATA_ORIG_PTS,
+                                                                   sizeof(int64_t));
+                    if (orig_pts)
+                        *orig_pts = ts->pkt->pts;
+		    break;
+                }
+            }
+        }
+#endif
+
     }
     ts->stop_parse = 1;
 

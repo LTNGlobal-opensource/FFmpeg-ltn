@@ -81,7 +81,7 @@ static int query_formats(AVFilterContext *ctx)
 	int fmt, ret;
 
 	for (fmt = 0; av_pix_fmt_desc_get(fmt); fmt++) {
-		if (fmt != AV_PIX_FMT_RGB32)
+		if (fmt != AV_PIX_FMT_RGB32 && fmt != AV_PIX_FMT_YUV422P10)
 			continue;
 		if ((ret = ff_add_format(&formats, fmt)) < 0)
 			return ret;
@@ -122,24 +122,60 @@ static void writeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_t 
         ctx->frameCounter++;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+static void writeFrame422p10(BurnContext *ctx, AVFrame *frame, uint32_t sizeBytes)
 {
-	BurnContext *ctx = inlink->dst->priv;
+	uint16_t color;
 
-	AVFilterLink *outlink = inlink->dst->outputs[0];
-	AVFrame *out = ff_get_video_buffer(outlink, in->width, in->height);
-	if (!out) {
-		av_frame_free(&in);
-		return AVERROR(ENOMEM);
+	uint16_t *pic = (uint16_t *) frame->data[0];
+	for (int i = ctx->line; i < (ctx->line + ctx->bitheight); i++) {
+		uint16_t *p = pic + (i * (frame->width));
+
+		for (int c = 31; c >= 0; c--) {
+			int bit = (ctx->frameCounter >> c) & 1;
+			if (bit)
+				color = 0x3ac;
+			else
+				color = 0x10;
+			for (int z = 0; z < ctx->bitwidth; z++) {
+				*p++ = color;
+			}
+		}
 	}
 
-	av_frame_copy_props(out, in);
-	av_frame_copy(out, in);
+	/* Fill U/V planes */
+	color = 0x200;
+	for (int x = 1; x < 3; x++) {
+		pic = (uint16_t *) frame->data[x];
+		for (int i = ctx->line; i < (ctx->line + ctx->bitheight); i++) {
+			uint16_t *p = pic + (i * frame->width / 2);
+			for (int c = 31; c >= 0; c--) {
+				for (int z = 0; z < ctx->bitwidth / 2; z++) {
+					*p++ = color;
+				}
+			}
+		}
+	}
 
-	writeFrame(ctx, out, out->data[0], out->width * out->height);
+	printf("Frame %dx%d fmt:%s buf:%p bytes:%d burned-in-frame#%08d totalframes#%08d\n",
+		frame->width, frame->height, av_get_pix_fmt_name(frame->format), pic, sizeBytes,
+		ctx->frameCounter, ctx->framesProcessed);
 
-	av_frame_free(&in);
-	return ff_filter_frame(outlink, out);
+        ctx->framesProcessed++;
+        ctx->frameCounter++;
+}
+
+static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
+{
+	BurnContext *ctx = inlink->dst->priv;
+	AVFilterLink *outlink = inlink->dst->outputs[0];
+
+	if (frame->format == AV_PIX_FMT_RGB32)
+		writeFrame(ctx, frame, frame->data[0], frame->width * frame->height);
+	else {
+		writeFrame422p10(ctx, frame, frame->width * frame->height);
+	}
+
+	return ff_filter_frame(outlink, frame);
 }
 
 static const AVFilterPad avfilter_vf_burnwriter_inputs[] = {
@@ -148,6 +184,7 @@ static const AVFilterPad avfilter_vf_burnwriter_inputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = filter_frame,
 	.config_props = config_input,
+	.needs_writable = 1,
     },
     { NULL }
 };

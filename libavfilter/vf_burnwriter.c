@@ -81,7 +81,7 @@ static int query_formats(AVFilterContext *ctx)
 	int fmt, ret;
 
 	for (fmt = 0; av_pix_fmt_desc_get(fmt); fmt++) {
-		if (fmt != AV_PIX_FMT_RGB32)
+		if (fmt != AV_PIX_FMT_RGB32 && fmt != AV_PIX_FMT_YUV422P10)
 			continue;
 		if ((ret = ff_add_format(&formats, fmt)) < 0)
 			return ret;
@@ -122,6 +122,48 @@ static void writeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_t 
         ctx->frameCounter++;
 }
 
+static void writeFrame422p10(BurnContext *ctx, AVFrame *frame, uint32_t sizeBytes)
+{
+	uint16_t color;
+
+	uint16_t *pic = (uint16_t *) frame->data[0];
+	for (int i = ctx->line; i < (ctx->line + ctx->bitheight); i++) {
+		uint16_t *p = pic + (i * (frame->width));
+
+		for (int c = 31; c >= 0; c--) {
+			int bit = (ctx->frameCounter >> c) & 1;
+			if (bit)
+				color = 0x3ac;
+			else
+				color = 0x10;
+			for (int z = 0; z < ctx->bitwidth; z++) {
+				*p++ = color;
+			}
+		}
+	}
+
+	/* Fill U/V planes */
+	color = 0x200;
+	for (int x = 1; x < 3; x++) {
+		pic = (uint16_t *) frame->data[x];
+		for (int i = ctx->line; i < (ctx->line + ctx->bitheight); i++) {
+			uint16_t *p = pic + (i * frame->width / 2);
+			for (int c = 31; c >= 0; c--) {
+				for (int z = 0; z < ctx->bitwidth / 2; z++) {
+					*p++ = color;
+				}
+			}
+		}
+	}
+
+	printf("Frame %dx%d fmt:%s buf:%p bytes:%d burned-in-frame#%08d totalframes#%08d\n",
+		frame->width, frame->height, av_get_pix_fmt_name(frame->format), pic, sizeBytes,
+		ctx->frameCounter, ctx->framesProcessed);
+
+        ctx->framesProcessed++;
+        ctx->frameCounter++;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
 	BurnContext *ctx = inlink->dst->priv;
@@ -136,7 +178,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 	av_frame_copy_props(out, in);
 	av_frame_copy(out, in);
 
-	writeFrame(ctx, out, out->data[0], out->width * out->height);
+	if (out->format == AV_PIX_FMT_RGB32)
+		writeFrame(ctx, out, out->data[0], out->width * out->height);
+	else {
+		writeFrame422p10(ctx, out, out->width * out->height);
+	}
 
 	av_frame_free(&in);
 	return ff_filter_frame(outlink, out);

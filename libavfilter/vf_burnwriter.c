@@ -164,28 +164,18 @@ static void writeFrame422p10(BurnContext *ctx, AVFrame *frame, uint32_t sizeByte
         ctx->frameCounter++;
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
 	BurnContext *ctx = inlink->dst->priv;
-
 	AVFilterLink *outlink = inlink->dst->outputs[0];
-	AVFrame *out = ff_get_video_buffer(outlink, in->width, in->height);
-	if (!out) {
-		av_frame_free(&in);
-		return AVERROR(ENOMEM);
-	}
 
-	av_frame_copy_props(out, in);
-	av_frame_copy(out, in);
-
-	if (out->format == AV_PIX_FMT_RGB32)
-		writeFrame(ctx, out, out->data[0], out->width * out->height);
+	if (frame->format == AV_PIX_FMT_RGB32)
+		writeFrame(ctx, frame, frame->data[0], frame->width * frame->height);
 	else {
-		writeFrame422p10(ctx, out, out->width * out->height);
+		writeFrame422p10(ctx, frame, frame->width * frame->height);
 	}
 
-	av_frame_free(&in);
-	return ff_filter_frame(outlink, out);
+	return ff_filter_frame(outlink, frame);
 }
 
 static const AVFilterPad avfilter_vf_burnwriter_inputs[] = {
@@ -194,6 +184,7 @@ static const AVFilterPad avfilter_vf_burnwriter_inputs[] = {
         .type         = AVMEDIA_TYPE_VIDEO,
         .filter_frame = filter_frame,
 	.config_props = config_input,
+	.needs_writable = 1,
     },
     { NULL }
 };

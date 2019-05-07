@@ -97,8 +97,11 @@ static int query_formats(AVFilterContext *ctx)
 	return ff_set_common_formats(ctx, formats);
 }
 
-static void analyzeFrame(BurnContext *ctx, AVFrame *frame)
-{       
+static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
+{
+	BurnContext *ctx = inlink->dst->priv;
+	AVFilterLink *outlink = inlink->dst->outputs[0];
+
         char t[160]; 
         uint32_t bits = 0;
         time_t now;
@@ -161,26 +164,8 @@ static void analyzeFrame(BurnContext *ctx, AVFrame *frame)
 	printf("%s: Frame %dx%d fmt:%s bytes:%d burned-in-frame#%08d totalframes#%08d totalErrors#%" PRIu64 "\n",
 		t, frame->width, frame->height, av_get_pix_fmt_name(frame->format), sizeBytes,
 		bits, ctx->framesProcessed, ctx->totalErrors);
-}
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
-{
-	BurnContext *ctx = inlink->dst->priv;
-
-	AVFilterLink *outlink = inlink->dst->outputs[0];
-	AVFrame *out = ff_get_video_buffer(outlink, in->width, in->height);
-	if (!out) {
-		av_frame_free(&in);
-		return AVERROR(ENOMEM);
-	}
-
-	av_frame_copy_props(out, in);
-	av_frame_copy(out, in);
-
-	analyzeFrame(ctx, out);
-
-	av_frame_free(&in);
-	return ff_filter_frame(outlink, out);
+	return ff_filter_frame(outlink, frame);
 }
 
 static const AVFilterPad avfilter_vf_burnreader_inputs[] = {

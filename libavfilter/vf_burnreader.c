@@ -88,7 +88,7 @@ static int query_formats(AVFilterContext *ctx)
 	int fmt, ret;
 
 	for (fmt = 0; av_pix_fmt_desc_get(fmt); fmt++) {
-		if (fmt != AV_PIX_FMT_YUV420P)
+		if (fmt != AV_PIX_FMT_YUV420P && fmt != AV_PIX_FMT_YUV422P10)
 			continue;
 		if ((ret = ff_add_format(&formats, fmt)) < 0)
 			return ret;
@@ -97,26 +97,71 @@ static int query_formats(AVFilterContext *ctx)
 	return ff_set_common_formats(ctx, formats);
 }
 
-static void analyzeFrame(BurnContext *ctx, AVFrame *frame)
-{       
+static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
+{
+	BurnContext *ctx = inlink->dst->priv;
+	AVFilterLink *outlink = inlink->dst->outputs[0];
+
         char t[160]; 
         uint32_t bits = 0;
         time_t now;
-        uint8_t *x;
-	uint8_t *pic = frame->data[0];
 	int startline, c, sizeBytes;
+        int bitcount = 0;
         FILE *fh;
 
 	/* Figure out where the vertical center of row of digits should be */
 	startline = ctx->line + (ctx->bitheight / 2);
-	x = pic + (startline * frame->width);
 
-	/* Decode 32 bits */
-	for (c = 31; c >= 0; c--) {
-		x += (ctx->bitwidth / 2);
-		if (*x > 0x80)
-			bits |= (1 << c);
-		x += (ctx->bitwidth / 2);
+	if (frame->format == AV_PIX_FMT_YUV420P) {
+		uint8_t *x;
+		uint8_t *pic = frame->data[0];
+		uint8_t *u_plane = frame->data[1];
+
+		/* Check to ensure counters are actually present */
+		x = u_plane + (startline / 2 * frame->linesize[1]);
+		for (c = 30; c >= 0; c--) {
+			x += (ctx->bitwidth / 4);
+			if (*x > 0x75 && *x < 0x85)
+				bitcount++;
+			x += (ctx->bitwidth / 4);
+		}
+
+		/* Decode 32 bits from luma */
+		x = pic + (startline * frame->width);
+		for (c = 31; c >= 0; c--) {
+			x += (ctx->bitwidth / 2);
+			if (*x > 0x80)
+				bits |= (1 << c);
+			x += (ctx->bitwidth / 2);
+		}
+		sizeBytes = (frame->linesize[0] * frame->height) +
+			(frame->linesize[1] * frame->height / 2) +
+			(frame->linesize[2] * frame->height / 2);
+	} else {
+		uint16_t *x;
+		uint16_t *pic = (uint16_t *) frame->data[0];
+		uint16_t *u_plane = (uint16_t *) frame->data[1];
+
+		/* Check to ensure counters are actually present */
+		x = u_plane + (startline / 2 * frame->linesize[1]);
+		for (c = 30; c >= 0; c--) {
+			x += (ctx->bitwidth / 4);
+			if (*x > 0x195 && *x < 0x205)
+				bitcount++;
+			x += (ctx->bitwidth / 4);
+		}
+
+		/* Decode 32 bits from luma */
+		x = pic + (startline * frame->width);
+		for (c = 31; c >= 0; c--) {
+			x += (ctx->bitwidth / 2);
+			if (*x > 0x200)
+				bits |= (1 << c);
+			x += (ctx->bitwidth / 2);
+		}
+		sizeBytes = (frame->linesize[0] * frame->height) +
+			(frame->linesize[1] * frame->height) +
+			(frame->linesize[2] * frame->height);
 	}
 
         now = time(0);
@@ -124,6 +169,14 @@ static void analyzeFrame(BurnContext *ctx, AVFrame *frame)
         t[strlen(t) - 1] = 0;
         
         ctx->framesProcessed++;
+
+	if (bitcount != 31 || bits == 0x00) {
+		printf("%s: Frame %dx%d fmt:%s bytes:%d nocountersfound totalframes#%08d totalErrors#%" PRIu64 "\n",
+		       t, frame->width, frame->height, av_get_pix_fmt_name(frame->format), sizeBytes,
+		       ctx->framesProcessed, ctx->totalErrors);
+		return ff_filter_frame(outlink, frame);
+	}
+
 #if 0
         /* Fake an error for test purposes. */
         if (ctx->framecnt == 58000)
@@ -155,32 +208,11 @@ static void analyzeFrame(BurnContext *ctx, AVFrame *frame)
 		}
 	}
 
-	sizeBytes = (frame->width * frame->height) +
-		((frame->width * frame->height) / 4) + ((frame->width * frame->height) / 4);
-
 	printf("%s: Frame %dx%d fmt:%s bytes:%d burned-in-frame#%08d totalframes#%08d totalErrors#%" PRIu64 "\n",
 		t, frame->width, frame->height, av_get_pix_fmt_name(frame->format), sizeBytes,
 		bits, ctx->framesProcessed, ctx->totalErrors);
-}
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
-{
-	BurnContext *ctx = inlink->dst->priv;
-
-	AVFilterLink *outlink = inlink->dst->outputs[0];
-	AVFrame *out = ff_get_video_buffer(outlink, in->width, in->height);
-	if (!out) {
-		av_frame_free(&in);
-		return AVERROR(ENOMEM);
-	}
-
-	av_frame_copy_props(out, in);
-	av_frame_copy(out, in);
-
-	analyzeFrame(ctx, out);
-
-	av_frame_free(&in);
-	return ff_filter_frame(outlink, out);
+	return ff_filter_frame(outlink, frame);
 }
 
 static const AVFilterPad avfilter_vf_burnreader_inputs[] = {

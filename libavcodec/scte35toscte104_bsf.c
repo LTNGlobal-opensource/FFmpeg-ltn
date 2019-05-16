@@ -58,7 +58,13 @@ static int scte35toscte104_filter(AVBSFContext *ctx, AVPacket *out)
     ret = scte35_create_scte104_message(s, &buf, &byteCount, orig_pts ? *orig_pts : 0);
     if (ret != 0) {
         fprintf(stderr, "Unable to convert SCTE35 to SCTE104, ret = %d\n", ret);
-        return ret;
+	goto fail;
+    } else if (byteCount == 0) {
+	    /* It's possible the SCTE-35 doens't actually result in a SCTE-104 message,
+	       for example, if it's a SCTE-35 bandwidth_reservation message.  In
+	       that case, just drop it on the floor */
+	    ret = AVERROR(EAGAIN);
+	    goto fail;
     }
 
     ret = av_new_packet(out, byteCount);

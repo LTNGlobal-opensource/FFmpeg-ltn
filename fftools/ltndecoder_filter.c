@@ -899,6 +899,45 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         height = 486;
     }
 
+    struct sdi_video_modes {
+        int width;
+        int height;
+    };
+
+    const static struct sdi_video_modes modes[] = {
+        {1920, 1080},
+        {1280, 720},
+        {720, 576},
+        {720, 486},
+    };
+
+    int target_width = 0;
+    for (int i = 0; i < (sizeof(modes) / sizeof(struct sdi_video_modes)); i++) {
+        if (height == modes[i].height &&
+            width != modes[i].width) {
+            /* Horizontal scaling required */
+            target_width = modes[i].width;
+        }
+    }
+
+    if (target_width != 0) {
+        AVFilterContext *filter;
+        char args[255];
+
+        snprintf(args, sizeof(args), "%d:%d", target_width, height);
+        snprintf(name, sizeof(name), "scaler_in_%d_%d",
+                 ist->file_index, ist->st->index);
+        if ((ret = avfilter_graph_create_filter(&filter, avfilter_get_by_name("scale"),
+                                                name, args, NULL, fg->graph)) < 0)
+            return ret;
+        if ((ret = avfilter_link(last_filter, pad_idx, filter, 0)) < 0)
+            return ret;
+
+        last_filter = filter;
+        pad_idx = 0;
+        width = target_width;
+    }
+
     snprintf(name, sizeof(name), "trim_in_%d_%d",
              ist->file_index, ist->st->index);
     if (copy_ts) {

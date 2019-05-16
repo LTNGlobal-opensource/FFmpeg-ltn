@@ -703,6 +703,17 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
         if (!av_fifo_space(ost->muxing_queue)) {
             int new_size = FFMIN(2 * av_fifo_size(ost->muxing_queue),
                                  ost->max_muxing_queue_size);
+#ifndef LTN_EXIT_ON_MUXQUEUE_FULL
+            if (new_size <= av_fifo_size(ost->muxing_queue)) {
+                AVPacket pkt1;
+                av_fifo_generic_read(ost->muxing_queue, &pkt1, sizeof(pkt1), NULL);
+                av_packet_unref(&pkt1);
+            } else {
+                ret = av_fifo_realloc2(ost->muxing_queue, new_size);
+                if (ret < 0)
+                    exit_program(1);
+            }
+#else
             if (new_size <= av_fifo_size(ost->muxing_queue)) {
                 av_log(NULL, AV_LOG_ERROR,
                        "Too many packets buffered for output stream %d:%d.\n",
@@ -712,6 +723,7 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
             ret = av_fifo_realloc2(ost->muxing_queue, new_size);
             if (ret < 0)
                 exit_program(1);
+#endif
         }
         ret = av_packet_ref(&tmp_pkt, pkt);
         if (ret < 0)

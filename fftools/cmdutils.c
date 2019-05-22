@@ -66,6 +66,8 @@
 #include <windows.h>
 #endif
 
+extern const char *ltn_version();
+
 static int init_report(const char *env);
 
 AVDictionary *sws_dict;
@@ -1117,6 +1119,7 @@ static void print_program_info(int flags, int level)
         av_log(NULL, level, " Copyright (c) %d-%d the FFmpeg developers",
                program_birth_year, CONFIG_THIS_YEAR);
     av_log(NULL, level, "\n");
+    av_log(NULL, level, "LTN version %s\n", ltn_version());
     av_log(NULL, level, "%sbuilt with %s\n", indent, CC_IDENT);
 
     av_log(NULL, level, "%sconfiguration: " FFMPEG_CONFIGURATION "\n", indent);

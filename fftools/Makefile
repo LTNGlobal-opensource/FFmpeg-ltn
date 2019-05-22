@@ -28,7 +28,7 @@ OBJS-ltndecoder-$(CONFIG_VIDEOTOOLBOX) += fftools/ffmpeg_videotoolbox.o
 OBJS-ffserver                      += fftools/ffserver_config.o
 
 define DOFFTOOL
-OBJS-$(1) += fftools/cmdutils.o fftools/$(1).o $(OBJS-$(1)-yes)
+OBJS-$(1) += fftools/cmdutils.o fftools/ltnversion.o fftools/$(1).o $(OBJS-$(1)-yes)
 $(1)$(PROGSSUF)_g$(EXESUF): $$(OBJS-$(1))
 $$(OBJS-$(1)): | fftools
 $$(OBJS-$(1)): CFLAGS  += $(CFLAGS-$(1))
@@ -40,6 +40,11 @@ endef
 $(foreach P,$(AVPROGS-yes),$(eval $(call DOFFTOOL,$(P))))
 
 all: $(AVPROGS)
+
+ltnversion:
+	echo "#define LTN_VERSION \""`git describe --tags --dirty`"\"" > fftools/ltnversion.h
+
+fftools/ltnversion.o: ltnversion
 
 fftools/ffprobe.o fftools/cmdutils.o: libavutil/ffversion.h | fftools
 OBJDIRS += fftools

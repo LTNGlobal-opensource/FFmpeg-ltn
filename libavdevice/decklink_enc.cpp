@@ -283,6 +283,58 @@ static void reset_output(AVFormatContext *avctx, IDeckLink *p_card, IDeckLinkOut
 }
 #endif
 
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a040000
+static int setup_3g_level_a(AVFormatContext *avctx)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+    DECKLINK_BOOL supports_level_a = false;
+    DECKLINK_BOOL level_a = false;
+    DECKLINK_BOOL desired_level_a = false;
+    HRESULT res;
+
+    if (cctx->use_3glevel_a)
+        desired_level_a = true;
+    else
+        desired_level_a = false;
+
+    /* First check to see if the card supports 3G-SDI Level A */
+    res = ctx->attr->GetFlag(BMDDeckLinkSupportsSMPTELevelAOutput, &supports_level_a);
+    if (res != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to determine if card supports Level A");
+        return -1;
+    }
+
+    if (desired_level_a && !supports_level_a) {
+        av_log(avctx, AV_LOG_ERROR, "User requested 3G Level A but not supported by card");
+        return -1;
+    }
+
+    /* Grab the current value so we only change it if needed */
+    res = ctx->cfg->GetFlag(bmdDeckLinkConfigSMPTELevelAOutput, &level_a);
+    if (res != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to get current status of 3G Level A\n");
+        return -1;
+    }
+
+    if (level_a != desired_level_a) {
+        av_log(avctx, AV_LOG_INFO, "Need to %s 3G-Level A\n",
+               desired_level_a ? "Enable" : "Disable");
+        res = ctx->cfg->SetFlag(bmdDeckLinkConfigSMPTELevelAOutput, desired_level_a);
+        if (res != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to select set output to Level A\n");
+            return -1;
+        }
+        res = ctx->cfg->WriteConfigurationToPreferences();
+        if (res != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Failed writing updated configuration\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
@@ -322,6 +374,14 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
 
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080000
     reset_output(avctx, ctx->dl, ctx->dlo);
+#endif
+
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a040000
+    if (ctx->bmd_mode == bmdModeHD1080p50 ||
+        ctx->bmd_mode == bmdModeHD1080p5994 ||
+        ctx->bmd_mode == bmdModeHD1080p6000) {
+        setup_3g_level_a(avctx);
+    }
 #endif
 
     if (ctx->dlo->EnableVideoOutput(ctx->bmd_mode,

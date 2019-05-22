@@ -312,6 +312,7 @@ int ff_decklink_list_devices(AVFormatContext *avctx,
     IDeckLink *dl = NULL;
     IDeckLinkIterator *iter = CreateDeckLinkIteratorInstance();
     int ret = 0;
+    int i = 0;
 
     if (!iter) {
         av_log(avctx, AV_LOG_ERROR, "Could not create DeckLink iterator\n");
@@ -347,11 +348,12 @@ int ff_decklink_list_devices(AVFormatContext *avctx,
                 ret = AVERROR(ENOMEM);
                 goto next;
             }
-            new_device->device_name = av_strdup(displayName);
+            new_device->device_name = av_asprintf("decklink%d", i);
             if (!new_device->device_name) {
                 ret = AVERROR(ENOMEM);
                 goto next;
             }
+            i++;
 
             new_device->device_description = av_strdup(displayName);
             if (!new_device->device_description) {
@@ -477,6 +479,8 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     IDeckLink *dl = NULL;
     IDeckLinkIterator *iter = CreateDeckLinkIteratorInstance();
+    int dev_no = -1;
+    int i = 0, ret;
 
     av_log(avctx, AV_LOG_VERBOSE, "Using BlackMagic SDK version %s\n",
            BLACKMAGIC_DECKLINK_API_VERSION_STRING);
@@ -486,16 +490,20 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
         return AVERROR_EXTERNAL;
     }
 
+    /* See if the name passed is a device name, or a device description */
+    ret = sscanf(name, "decklink%d", &dev_no);
+
     while (iter->Next(&dl) == S_OK) {
         const char *displayName;
         ff_decklink_get_display_name(dl, &displayName);
-        if (!strcmp(name, displayName)) {
+        if (dev_no == i || !strcmp(name, displayName)) {
             av_free((void *)displayName);
             ctx->dl = dl;
             break;
         }
         av_free((void *)displayName);
         dl->Release();
+        i++;
     }
     iter->Release();
     if (!ctx->dl)

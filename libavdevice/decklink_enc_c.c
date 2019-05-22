@@ -37,7 +37,7 @@ static const AVOption options[] = {
     { "cea708_line" , "VANC line to insert CEA-708 CC packets", OFFSET(cea708_line), AV_OPT_TYPE_INT, { .i64 = 12 }, -1, INT64_MAX, ENC },
     { "scte104_line", "VANC line to insert SCTE-104 packets", OFFSET(scte104_line), AV_OPT_TYPE_INT, { .i64 = 13 }, -1, INT64_MAX, ENC },
     { "udp_monitor",  "URL to controller monitor", OFFSET(udp_monitor),  AV_OPT_TYPE_STRING, { .str = NULL}, 0, 0, ENC },
-    { "use_3glevel_a","use Level A if output 3G-SDI", OFFSET(use_3glevel_a), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, ENC },
+    { "use_3glevel_a","use Level A if output 3G-SDI", OFFSET(use_3glevel_a), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, ENC },
     { NULL },
 };
 

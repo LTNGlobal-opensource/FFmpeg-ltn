@@ -293,6 +293,12 @@ static int setup_3g_level_a(AVFormatContext *avctx)
     DECKLINK_BOOL desired_level_a = false;
     HRESULT res;
 
+    if (cctx->use_3glevel_a == -1) {
+        /* The user didn't specify which mode they wanted to use, so output
+           in whatever format the system was already configured for */
+        return 0;
+    }
+
     if (cctx->use_3glevel_a)
         desired_level_a = true;
     else

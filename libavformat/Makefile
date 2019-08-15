@@ -28,7 +28,7 @@ OBJS-$(HAVE_LIBC_MSVCRT)                 += file_open.o
 
 # subsystems
 OBJS-$(CONFIG_ISO_MEDIA)                 += isom.o
-OBJS-$(CONFIG_NETWORK)                   += network.o
+OBJS-$(CONFIG_NETWORK)                   += network.o ltnlog.o
 OBJS-$(CONFIG_RIFFDEC)                   += riffdec.o
 OBJS-$(CONFIG_RIFFENC)                   += riffenc.o
 OBJS-$(CONFIG_RTPDEC)                    += rdt.o                       \
@@ -609,7 +609,7 @@ OBJS-$(CONFIG_IEC61883_INDEV)            += dv.o
 SLIBOBJS-$(HAVE_GNU_WINDRES)             += avformatres.o
 
 SKIPHEADERS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh.h
-SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h
+SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h ltnlog.h
 
 TESTPROGS = seek                                                        \
             url                                                         \

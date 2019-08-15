@@ -36,8 +36,7 @@ extern "C" {
 
 extern "C" {
 #include "libavformat/avformat.h"
-#include "libavformat/network.h"
-#include "libavformat/os_support.h"
+#include "libavformat/ltnlog.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/avstring.h"
 #include "libavutil/vtune.h"
@@ -59,22 +58,6 @@ extern "C" {
    the audio blocks, or we end up overwriting the last few samples of the previous
    audio block.  */
 #define AUDIO_PTS_FUDGEFACTOR 15
-
-static void udp_monitor_report(int fd, const char *str, uint64_t val)
-{
-    char *buf;
-
-    if (fd < 0)
-        return;
-
-    buf = av_asprintf("%s: %" PRId64 "\n", str, val);
-    if (!buf)
-        return;
-
-    send(fd, buf, strlen(buf), 0);
-    av_free(buf);
-}
-
 
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame
@@ -188,11 +171,13 @@ public:
             ctx->late++;
             av_log(_avctx, AV_LOG_WARNING, "Video buffer late\n");
             av_vtune_log_stat(DECKLINK_BUFFERS_LATE, ctx->late, 0);
+            ltnlog_stat("VIDEOLATE", ctx->late);
             break;
         case bmdOutputFrameDropped:
             ctx->dropped++;
             av_log(_avctx, AV_LOG_WARNING, "Video buffer dropped\n");
             av_vtune_log_stat(DECKLINK_BUFFERS_DROPPED, ctx->dropped, 0);
+            ltnlog_stat("VIDEODROP", ctx->dropped);
             break;
         }
 
@@ -227,9 +212,9 @@ public:
                                                                 bmdAudioSampleRate48kHz,
                                                                 &written);
                 if (result != S_OK)
-                    udp_monitor_report(ctx->udp_fd, "ERROR AUDIO", result);
+                    ltnlog_stat("ERROR AUDIO", result);
                 else
-                    udp_monitor_report(ctx->udp_fd, "PLAY AUDIO BYTES", written);
+                    ltnlog_stat("PLAY AUDIO BYTES", written);
 
                 ctx->output_audio_list = cur->next;
                 next = cur->next;
@@ -607,7 +592,7 @@ static void construct_cc(AVFormatContext *avctx, struct decklink_cctx *cctx,
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return;
         }
-        udp_monitor_report(ctx->udp_fd, "CC COUNT", cc_count);
+        ltnlog_stat("CC COUNT", cc_count);
     }
 }
 
@@ -951,7 +936,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         return AVERROR(EIO);
     }
 
-    udp_monitor_report(ctx->udp_fd, "PICTURE", pkt->pts);
+    ltnlog_stat("PICTURE", pkt->pts);
 
     ctx->dlo->GetBufferedVideoFrameCount(&buffered);
     av_log(avctx, AV_LOG_DEBUG, "Buffered video frames: %d.\n", (int) buffered);
@@ -1164,11 +1149,6 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     unsigned int n;
     uint64_t t1;
     int ret;
-    char hostname[256];
-    int port;
-    int error;
-    char sport[16];
-    struct addrinfo hints = { 0 }, *res = 0;
 
     t1 = av_vtune_get_timestamp();
 
@@ -1247,38 +1227,9 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     /* Setup the UDP monitor callback */
 
     if (cctx->udp_monitor) {
-        av_url_split(NULL, 0, NULL, 0, hostname, sizeof(hostname), &port, NULL,
-                     0, cctx->udp_monitor);
-
-        /* This is all cribbed from libavformat/udp.c */
-        snprintf(sport, sizeof(sport), "%d", port);
-        hints.ai_socktype = SOCK_DGRAM;
-        hints.ai_family   = AF_UNSPEC;
-
-        if ((error = getaddrinfo(hostname, sport, &hints, &res))) {
-            res = NULL;
-            av_log(avctx, AV_LOG_ERROR, "getaddrinfo(%s, %s): %s\n",
-                   hostname, sport, gai_strerror(error));
-        } else {
-            struct sockaddr_storage dest_addr;
-            int dest_addr_len;
-
-            memcpy(&dest_addr, res->ai_addr, res->ai_addrlen);
-            dest_addr_len = res->ai_addrlen;
-
-            ctx->udp_fd = ff_socket(res->ai_family, SOCK_DGRAM, 0);
-            if (ctx->udp_fd < 0) {
-                av_log(avctx, AV_LOG_ERROR, "Call to ff_socket failed\n");
-            } else {
-                if (connect(ctx->udp_fd, (struct sockaddr *) &dest_addr,
-                            dest_addr_len)) {
-                    av_log(avctx, AV_LOG_ERROR, "Failure to connect to monitor port\n");
-                    closesocket(ctx->udp_fd);
-                    ctx->udp_fd = -1;
-                    goto error;
-                }
-            }
-        }
+        ret = ltnlog_setup(cctx->udp_monitor);
+        if (ret < 0)
+            av_log(avctx, AV_LOG_ERROR, "Failed to setup LTN logger");
     }
 
     return 0;

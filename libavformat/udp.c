@@ -40,6 +40,7 @@
 #include "network.h"
 #include "os_support.h"
 #include "url.h"
+#include "ltnlog.h"
 #include "libavutil/vtune.h"
 
 #ifdef __APPLE__
@@ -109,6 +110,7 @@ typedef struct UDPContext {
     struct sockaddr_storage local_addr_storage;
     char *sources;
     char *block;
+    int warn_src_change;
 } UDPContext;
 
 #define OFFSET(x) offsetof(UDPContext, x)
@@ -133,6 +135,7 @@ static const AVOption options[] = {
     { "timeout",        "set raise error timeout (only in read mode)",     OFFSET(timeout),        AV_OPT_TYPE_INT,    { .i64 = 0 },      0, INT_MAX, D },
     { "sources",        "Source list",                                     OFFSET(sources),        AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
     { "block",          "Block list",                                      OFFSET(block),          AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
+    { "warn_src_change","log warnings if UDP source IP changes",           OFFSET(warn_src_change),AV_OPT_TYPE_BOOL,   { .i64 = 1  },     0, 1,       D },
     { NULL }
 };
 
@@ -496,7 +499,11 @@ static void *circular_buffer_task_rx( void *_URLContext)
 {
     URLContext *h = _URLContext;
     UDPContext *s = h->priv_data;
+    struct sockaddr_in srcaddr;
+    struct sockaddr_in prev_srcaddr = { };
+    int srclen;
     int old_cancelstate;
+    time_t last_warning;
 
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancelstate);
     pthread_mutex_lock(&s->mutex);
@@ -510,12 +517,15 @@ static void *circular_buffer_task_rx( void *_URLContext)
 
         av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);
 
+        srclen = sizeof(srcaddr);
+
         pthread_mutex_unlock(&s->mutex);
         /* Blocking operations are always cancellation points;
            see "General Information" / "Thread Cancelation Overview"
            in Single Unix. */
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_cancelstate);
-        len = recv(s->udp_fd, s->tmp+4, sizeof(s->tmp)-4, 0);
+        len = recvfrom(s->udp_fd, s->tmp+4, sizeof(s->tmp)-4, 0,
+                       (struct sockaddr *) &srcaddr, &srclen);
         pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancelstate);
         pthread_mutex_lock(&s->mutex);
         if (len < 0) {
@@ -526,6 +536,31 @@ static void *circular_buffer_task_rx( void *_URLContext)
             continue;
         }
         AV_WL32(s->tmp, len);
+
+        /* See if it came from a different address than previous packet */
+        if (s->warn_src_change) {
+            if (prev_srcaddr.sin_port == 0) {
+                /* Set initial value */
+                prev_srcaddr = srcaddr;
+            } else if (memcmp(&prev_srcaddr, &srcaddr, sizeof(srcaddr)) != 0) {
+                time_t now;
+                time(&now);
+                if (now != last_warning) {
+                    char prev[INET_ADDRSTRLEN];
+                    char cur[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &(prev_srcaddr.sin_addr), prev, INET_ADDRSTRLEN);
+                    inet_ntop(AF_INET, &(srcaddr.sin_addr), cur, INET_ADDRSTRLEN);
+                    ltnlog_msg("UDPWARN", "Datagram's IP address changed %s:%d (was %s:%d)\n",
+                               cur, (int) ntohs(srcaddr.sin_port),
+                               prev, (int) ntohs(prev_srcaddr.sin_port));
+                    av_log(h, AV_LOG_WARNING, "Datagram's IP address changed %s:%d (was %s:%d)\n",
+                           cur, (int) ntohs(srcaddr.sin_port),
+                           prev, (int) ntohs(prev_srcaddr.sin_port));
+                    last_warning = now;
+                    prev_srcaddr = srcaddr;
+                }
+            }
+        }
 
         if(av_fifo_space(s->fifo) < len + 4) {
             /* No Space left */

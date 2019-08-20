@@ -1203,6 +1203,30 @@ int configure_filtergraph(FilterGraph *fg)
     if ((ret = avfilter_graph_config(fg->graph, NULL)) < 0)
         goto fail;
 
+    char *dot_dir = getenv("FFMPEG_DEBUG_DUMP_DOT_DIR");
+    if (dot_dir) {
+        char *dump = avfilter_graph_dump(fg->graph, "1");
+        FILE *outfile = NULL;
+        char filename[255];
+
+        snprintf(filename, sizeof(filename), "%s/graph_%d.dot", dot_dir,
+                 fg->index);
+        outfile = fopen(filename, "w");
+        if (outfile == NULL) {
+            av_log(NULL, AV_LOG_WARNING,
+                   "Failed to open file for graph dumping %s\n", filename);
+        } else {
+            fprintf(outfile, "digraph g {\n");
+            fprintf(outfile, "\tnode [style=\"filled\",shape=\"box\"]\n");
+            fprintf(outfile, "\trankdir=LR\n");
+            fputs(dump, outfile);
+            fprintf(outfile, "}\n");
+            fclose(outfile);
+        }
+
+        av_free(dump);
+    }
+
     /* limit the lists of allowed formats to the ones selected, to
      * make sure they stay the same if the filtergraph is reconfigured later */
     for (i = 0; i < fg->nb_outputs; i++) {

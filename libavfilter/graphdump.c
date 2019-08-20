@@ -27,6 +27,8 @@
 #include "avfilter.h"
 #include "internal.h"
 
+#define GRAPHDUMP_TO_DOT 1
+
 static int print_link_prop(AVBPrint *buf, AVFilterLink *link)
 {
     char *format;
@@ -38,10 +40,22 @@ static int print_link_prop(AVBPrint *buf, AVFilterLink *link)
     switch (link->type) {
         case AVMEDIA_TYPE_VIDEO:
             format = av_x_if_null(av_get_pix_fmt_name(link->format), "?");
+#ifdef GRAPHDUMP_TO_DOT
+            av_bprintf(buf, "resolution:%dx%d\\nSAR:%d:%d\\nFormat:%s\\nInterlaced:%d\\nTFF:%d\\nTimebase:%d/%d\\nFramerate:%d/%d\n",
+                       link->w, link->h,
+                       link->sample_aspect_ratio.num,
+                       link->sample_aspect_ratio.den,
+                       format,
+                       link->interlaced_frame,
+                       link->top_field_first,
+                       link->time_base.num, link->time_base.den,
+                       link->frame_rate.num, link->frame_rate.den);
+#else
             av_bprintf(buf, "[%dx%d %d:%d %s]", link->w, link->h,
                     link->sample_aspect_ratio.num,
                     link->sample_aspect_ratio.den,
                     format);
+#endif
             break;
 
         case AVMEDIA_TYPE_AUDIO:
@@ -58,7 +72,45 @@ static int print_link_prop(AVBPrint *buf, AVFilterLink *link)
     }
     return buf->len;
 }
+#ifdef GRAPHDUMP_TO_DOT
+ static void avfilter_graph_dump_to_buf(AVBPrint *buf, AVFilterGraph *graph)
+ {
+     unsigned i, j, x, e;
 
+     for (i = 0; i < graph->nb_filters; i++) {
+         AVFilterContext *filter = graph->filters[i];
+
+        /* First print properties of filter */
+        av_bprintf(buf, "subgraph \"cluster_%p\"\n{\n\tlabel=\"%s\\n(%s)\"\n\trankdir=LR\n", filter, filter->name, filter->filter->name);
+        av_bprintf(buf, "subgraph \"cluster_inputs\"\n{\n\tlabel=\"inputs\"\nstyle=\"invis\"\n");
+        for (int j = 0; j < filter->nb_inputs; j++) {
+            av_bprintf(buf, "\t\"%p\" [label=\"%s\", color=lightpink2]\n", filter->inputs[j]->srcpad, avfilter_pad_get_name(filter->input_pads, j));
+        }
+        av_bprintf(buf, "}\n");
+        av_bprintf(buf, "subgraph \"cluster_outputs\"\n{\n\tlabel=\"outputs\"\nstyle=\"invis\"\n");
+        for (int j = 0; j < filter->nb_outputs; j++) {
+            av_bprintf(buf, "\t\"%p\" [label=\"%s\", color=lightblue2]\n", filter->outputs[j]->dstpad, avfilter_pad_get_name(filter->output_pads, j));
+        }
+        av_bprintf(buf, "}\n");
+        /* Draw an invisible link between the sink and source to impact layout */
+        for (int j = 0; j < filter->nb_inputs && j < filter->nb_outputs; j++) {
+            av_bprintf(buf, "\t\"%p\" -> \"%p\" [style=\"invis\"]\n", filter->inputs[j]->srcpad, filter->outputs[j]->dstpad);
+        }
+        av_bprintf(buf, "}\n");
+    }
+    for (i = 0; i < graph->nb_filters; i++) {
+        AVFilterContext *filter = graph->filters[i];
+
+        /* Show links */
+        for (j = 0; j < filter->nb_inputs; j++) {
+            AVFilterLink *l = filter->inputs[j];
+            av_bprintf(buf, "\t\"%p\" -> \"%p\" [label=\"", l->dstpad, l->srcpad);
+            print_link_prop(buf, l);
+            av_bprintf(buf, "\"]\n");
+        }
+    }
+}
+#else
 static void avfilter_graph_dump_to_buf(AVBPrint *buf, AVFilterGraph *graph)
 {
     unsigned i, j, x, e;
@@ -150,6 +202,7 @@ static void avfilter_graph_dump_to_buf(AVBPrint *buf, AVFilterGraph *graph)
         av_bprintf(buf, "\n");
     }
 }
+#endif
 
 char *avfilter_graph_dump(AVFilterGraph *graph, const char *options)
 {

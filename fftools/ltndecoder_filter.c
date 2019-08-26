@@ -463,7 +463,12 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     if (ret < 0)
         return ret;
 
-    if (ofilter->width || ofilter->height) {
+    /* Note, skip the scaler if the source is 704x480, since we will just
+       pad it further down the pipeline */
+    if ((ofilter->width || ofilter->height) &&
+        !(of->ctx && of->ctx->oformat && strcmp(of->ctx->oformat->name, "decklink") == 0 &&
+          ofilter->width == 720 && ofilter->height == 480 &&
+          ofilter->in_width == 704 && ofilter->in_height == 480)) {
         char args[255];
         AVFilterContext *filter;
         AVDictionaryEntry *e = NULL;

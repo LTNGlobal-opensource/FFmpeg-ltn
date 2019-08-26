@@ -209,6 +209,9 @@ static int config_out_props(AVFilterLink *outlink)
     outlink->w = inlink->w;
     outlink->h = tinterlace->mode == MODE_MERGE || tinterlace->mode == MODE_PAD || tinterlace->mode == MODE_MERGEX2?
         inlink->h*2 : inlink->h;
+
+    outlink->interlaced_frame = 1;
+    outlink->top_field_first = 1;
     if (tinterlace->mode == MODE_MERGE || tinterlace->mode == MODE_PAD || tinterlace->mode == MODE_MERGEX2)
         outlink->sample_aspect_ratio = av_mul_q(inlink->sample_aspect_ratio,
                                                 av_make_q(2, 1));
@@ -396,6 +399,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
         out = av_frame_clone(tinterlace->mode == MODE_DROP_EVEN ? cur : next);
         if (!out)
             return AVERROR(ENOMEM);
+        out->interlaced_frame = 1;
+        out->top_field_first = 1;
         av_frame_free(&tinterlace->next);
         break;
 

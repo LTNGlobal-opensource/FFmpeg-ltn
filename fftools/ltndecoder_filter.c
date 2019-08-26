@@ -512,11 +512,12 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
         pad_idx     = 0;
     }
 
-    if (ost->frame_rate.num && 0) {
+    if (ost->frame_rate.num) {
         AVFilterContext *fps;
         char args[255];
 
-        snprintf(args, sizeof(args), "fps=%d/%d", ost->frame_rate.num,
+        snprintf(args, sizeof(args), "fps=%d/%d",
+                 do_interlace ? ost->frame_rate.num * 2 : ost->frame_rate.num,
                  ost->frame_rate.den);
         snprintf(name, sizeof(name), "fps_out_%d_%d",
                  ost->file_index, ost->index);
@@ -530,6 +531,25 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
             return ret;
         last_filter = fps;
         pad_idx = 0;
+    }
+
+    if (do_interlace) {
+        AVFilterContext *tinterlace;
+
+        snprintf(name, sizeof(name), "interlace_out_%d_%d",
+                 ost->file_index, ost->st->index);
+        if ((ret = avfilter_graph_create_filter(&tinterlace,
+                                                avfilter_get_by_name("tinterlace"),
+                                                name, "mode=interleave_top", NULL,
+                                                fg->graph)) < 0)
+            return ret;
+
+        if ((ret = avfilter_link(last_filter, 0, tinterlace, 0)) < 0)
+            return ret;
+
+        interlaced = 1;
+        top_field_first = 1;
+        last_filter = tinterlace;
     }
 
     if (of->ctx && of->ctx->oformat && strcmp(of->ctx->oformat->name, "decklink") == 0) {

@@ -609,6 +609,7 @@ extern float frame_drop_threshold;
 extern int do_benchmark;
 extern int do_benchmark_all;
 extern int do_deinterlace;
+extern int do_interlace;
 extern int do_hex_dump;
 extern int do_pkt_dump;
 extern int copy_ts;

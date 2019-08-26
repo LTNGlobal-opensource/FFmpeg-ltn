@@ -452,6 +452,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     int pad_idx = out->pad_idx;
     int ret;
     char name[255];
+    int interlaced = ofilter->in_interlaced_frame;
+    int top_field_first = ofilter->in_top_field_first;
 
     snprintf(name, sizeof(name), "out_%d_%d", ost->file_index, ost->index);
     ret = avfilter_graph_create_filter(&ofilter->filter,
@@ -754,6 +756,8 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
     int width = ifilter->width;
     int height = ifilter->height;
+    int interlaced_frame = ifilter->interlaced_frame;
+    int top_field_first = ifilter->top_field_first;
 
     if (!par)
         return AVERROR(ENOMEM);
@@ -852,6 +856,7 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         if ((ret = avfilter_link(last_filter, 0, yadif, 0)) < 0)
             return ret;
 
+        interlaced_frame = 0;
         last_filter = yadif;
     }
 
@@ -953,6 +958,14 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
 
     if ((ret = avfilter_link(last_filter, 0, in->filter_ctx, in->pad_idx)) < 0)
         return ret;
+
+    /* Preserve where we ended up so we can make that info available to the OutputFilter chain */
+    ifilter->out_width = width;
+    ifilter->out_height = height;
+    ifilter->out_sample_aspect_ratio = sar;
+    ifilter->out_interlaced_frame = interlaced_frame;
+    ifilter->out_top_field_first = top_field_first;
+
     return 0;
 fail:
     av_freep(&par);
@@ -1196,8 +1209,15 @@ int configure_filtergraph(FilterGraph *fg)
         }
     avfilter_inout_free(&inputs);
 
-    for (cur = outputs, i = 0; cur; cur = cur->next, i++)
+    for (cur = outputs, i = 0; cur; cur = cur->next, i++) {
+        /* FIXME: we only expose the output of the first input */
+        fg->outputs[i]->in_width = fg->inputs[0]->out_width;
+        fg->outputs[i]->in_height = fg->inputs[0]->out_height;
+        fg->outputs[i]->in_sample_aspect_ratio = fg->inputs[0]->out_sample_aspect_ratio;
+        fg->outputs[i]->in_interlaced_frame = fg->inputs[0]->out_interlaced_frame;
+        fg->outputs[i]->in_top_field_first = fg->inputs[0]->out_top_field_first;
         configure_output_filter(fg, fg->outputs[i], cur);
+    }
     avfilter_inout_free(&outputs);
 
     if ((ret = avfilter_graph_config(fg->graph, NULL)) < 0)
@@ -1237,6 +1257,7 @@ int configure_filtergraph(FilterGraph *fg)
 
         ofilter->width  = av_buffersink_get_w(sink);
         ofilter->height = av_buffersink_get_h(sink);
+        ofilter->frame_rate = av_buffersink_get_frame_rate(sink);
         ofilter->interlaced_frame = av_buffersink_get_interlaced_frame(sink);
         ofilter->top_field_first = av_buffersink_get_top_field_first(sink);
 

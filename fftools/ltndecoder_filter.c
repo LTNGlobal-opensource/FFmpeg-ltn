@@ -475,8 +475,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
                                 AV_DICT_IGNORE_SUFFIX))) {
             av_strlcatf(args, sizeof(args), ":%s=%s", e->key, e->value);
         }
-        av_strlcatf(args, sizeof(args), ":interlaced=%d:top_field_first=%d",
-                    ofilter->interlaced_frame, ofilter->top_field_first);
+        av_strlcatf(args, sizeof(args), ":interl=%d",
+                    -                    ofilter->interlaced_frame);
 
         snprintf(name, sizeof(name), "scaler_out_%d_%d",
                  ost->file_index, ost->index);

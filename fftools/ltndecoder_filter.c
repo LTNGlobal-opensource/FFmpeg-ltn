@@ -918,14 +918,17 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         height *= 2;
     }
 
-    if (do_deinterlace) {
+    if (interlaced_frame && do_deinterlace) {
         AVFilterContext *yadif;
+        char args[255];
 
         snprintf(name, sizeof(name), "deinterlace_in_%d_%d",
                  ist->file_index, ist->st->index);
+        snprintf(args, sizeof(args), "mode=1");
+
         if ((ret = avfilter_graph_create_filter(&yadif,
                                                 avfilter_get_by_name("yadif"),
-                                                name, "", NULL,
+                                                name, args, NULL,
                                                 fg->graph)) < 0)
             return ret;
 

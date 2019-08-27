@@ -138,9 +138,6 @@ struct decklink_ctx {
     AVPacketList *output_audio_list;
     int audio_pkt_numsamples = 0;
 
-    /* Monitoring feedback to controller */
-    int udp_fd;
-
 #if CONFIG_LIBKLVANC
     struct klvanc_context_s *vanc_ctx;
 #endif

@@ -524,9 +524,6 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
     pthread_mutex_destroy(&ctx->mutex);
     pthread_cond_destroy(&ctx->cond);
 
-    if (ctx->udp_fd >= 0)
-        closesocket(ctx->udp_fd);
-
     av_freep(&cctx->ctx);
 
     return 0;
@@ -1159,7 +1156,6 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     ctx->list_formats = cctx->list_formats;
     ctx->preroll      = cctx->preroll;
     cctx->ctx = ctx;
-    ctx->udp_fd = -1;
 #if CONFIG_LIBKLVANC
     klvanc_context_create(&ctx->vanc_ctx);
 #endif

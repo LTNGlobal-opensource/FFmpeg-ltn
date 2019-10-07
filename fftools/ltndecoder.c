@@ -325,6 +325,7 @@ void term_exit(void)
 }
 
 static volatile int received_sigterm = 0;
+static volatile int received_sighup = 0;
 static volatile int received_nb_signals = 0;
 static atomic_int transcode_init_done = ATOMIC_VAR_INIT(0);
 static volatile int ffmpeg_exited = 0;
@@ -343,6 +344,12 @@ sigterm_handler(int sig)
         if (ret < 0) { /* Do nothing */ };
         exit(123);
     }
+}
+
+static void
+sighup_handler(int sig)
+{
+    received_sighup = sig;
 }
 
 #if HAVE_SETCONSOLECTRLHANDLER
@@ -379,6 +386,7 @@ static BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 
 void term_init(void)
 {
+    struct sigaction sa;
 #if HAVE_TERMIOS_H
     if (!run_as_daemon && stdin_interaction) {
         struct termios tty;
@@ -403,6 +411,13 @@ void term_init(void)
 
     signal(SIGINT , sigterm_handler); /* Interrupt (ANSI).    */
     signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
+
+    /* Close/reopen logfile  */
+    sa.sa_handler = sighup_handler;
+    sigemptyset(&(sa.sa_mask));
+    sigaddset(&(sa.sa_mask), SIGHUP);
+    sigaction(SIGHUP, &sa, NULL);
+
 #ifdef SIGXCPU
     signal(SIGXCPU, sigterm_handler);
 #endif
@@ -4819,6 +4834,23 @@ static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
     struct tm *timeinfo;
     unsigned tint = 0;
     static int print_prefix = 1;
+    static FILE *logfile = NULL;
+
+    if (received_sighup && logfile && log_filename) {
+        /* Close and reopen logfile */
+        received_sighup = 0;
+        fclose(logfile);
+        logfile = NULL;
+    }
+
+    if (logfile == NULL && log_filename) {
+        logfile = fopen(log_filename, "a");
+        if (logfile == NULL)
+            return;
+    } else if (log_filename == NULL) {
+        /* Fall back to default behavior */
+        logfile = stderr;
+    }
 
     if (level >= 0) {
         tint = level & 0xff00;
@@ -4839,8 +4871,9 @@ static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
     av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
 
     av_strlcat(line2, line, sizeof(line2));
-    fprintf(stderr, "%s", line2);
+    fprintf(logfile, "%s", line2);
     ff_mutex_unlock(&log_mutex);
+    fflush(logfile);
 }
 
 int main(int argc, char **argv)

@@ -924,7 +924,13 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
 
         snprintf(name, sizeof(name), "deinterlace_in_%d_%d",
                  ist->file_index, ist->st->index);
-        snprintf(args, sizeof(args), "mode=1");
+
+        /* Do higher quality deinterlace for SD, since we're going to downscale
+           anyway... */
+        if (height > 576)
+            snprintf(args, sizeof(args), "mode=%d", deinterlace_hd_mode);
+        else
+            snprintf(args, sizeof(args), "mode=%d", deinterlace_sd_mode);
 
         if ((ret = avfilter_graph_create_filter(&yadif,
                                                 avfilter_get_by_name("yadif"),

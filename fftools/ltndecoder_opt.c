@@ -92,6 +92,8 @@ int audio_sync_method = 0;
 int video_sync_method = VSYNC_AUTO;
 float frame_drop_threshold = 0;
 int do_deinterlace    = 0;
+int deinterlace_hd_mode = 0;
+int deinterlace_sd_mode = 1;
 int do_interlace      = 0;
 int do_benchmark      = 0;
 int do_benchmark_all  = 0;
@@ -3693,6 +3695,10 @@ const OptionDef options[] = {
         "select two pass log file name prefix", "prefix" },
     { "deinterlace",  OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_deinterlace },
         "this option is deprecated, use the yadif filter instead" },
+    { "deinterlace_hd_mode",  OPT_VIDEO | HAS_ARG | OPT_INT | OPT_EXPERT,        { &deinterlace_hd_mode },
+        "Deinterlace HD resolution with specified yadif mode" },
+    { "deinterlace_sd_mode",  OPT_VIDEO | HAS_ARG | OPT_INT | OPT_EXPERT,        { &deinterlace_sd_mode },
+        "Deinterlace SD resolution with specified yadif mode" },
     { "interlace",  OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_interlace },
         "interlace the video prior to output" },
     { "psnr",         OPT_VIDEO | OPT_BOOL | OPT_EXPERT,                         { &do_psnr },

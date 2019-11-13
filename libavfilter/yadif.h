@@ -20,6 +20,7 @@
 #define AVFILTER_YADIF_H
 
 #include "libavutil/pixdesc.h"
+#include "libavutil/cc_fifo.h"
 #include "avfilter.h"
 
 enum YADIFMode {
@@ -67,6 +68,7 @@ typedef struct YADIFContext {
     int eof;
     uint8_t *temp_line;
     int temp_line_size;
+    AVCCFifo *cc_fifo;
 } YADIFContext;
 
 void ff_yadif_init_x86(YADIFContext *yadif);

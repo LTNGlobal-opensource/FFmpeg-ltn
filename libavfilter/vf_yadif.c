@@ -273,6 +273,7 @@ static int return_frame(AVFilterContext *ctx, int is_second)
             return AVERROR(ENOMEM);
 
         av_frame_copy_props(yadif->out, yadif->cur);
+        av_cc_enqueue_avframe(yadif->cc_fifo, yadif->out);
         yadif->out->interlaced_frame = 0;
     }
 
@@ -324,6 +325,8 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
 
     av_assert0(frame);
 
+    av_cc_dequeue_avframe(yadif->cc_fifo, frame);
+
     if (yadif->frame_pending)
         return_frame(ctx, 1);
 
@@ -361,6 +364,8 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
         yadif->out  = av_frame_clone(yadif->cur);
         if (!yadif->out)
             return AVERROR(ENOMEM);
+
+        av_cc_enqueue_avframe(yadif->cc_fifo, yadif->out);
 
         av_frame_free(&yadif->prev);
         if (yadif->out->pts != AV_NOPTS_VALUE)
@@ -421,6 +426,9 @@ static av_cold void uninit(AVFilterContext *ctx)
     av_frame_free(&yadif->prev);
     av_frame_free(&yadif->cur );
     av_frame_free(&yadif->next);
+
+    if (yadif->cc_fifo)
+        av_cc_fifo_free(yadif->cc_fifo);
 }
 
 static int query_formats(AVFilterContext *ctx)
@@ -486,6 +494,11 @@ static int config_props(AVFilterLink *link)
     if(s->mode & 1)
         link->frame_rate = av_mul_q(ctx->inputs[0]->frame_rate,
                                     (AVRational){2, 1});
+    else
+        link->frame_rate = ctx->inputs[0]->frame_rate;
+
+    if (!(s->cc_fifo = av_cc_fifo_alloc(&link->frame_rate, ctx)))
+        return AVERROR(ENOMEM);
 
     if (link->w < 3 || link->h < 3) {
         av_log(ctx, AV_LOG_ERROR, "Video of less than 3 columns or lines is not supported\n");

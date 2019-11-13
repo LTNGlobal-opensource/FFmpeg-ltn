@@ -16,6 +16,7 @@ HEADERS = adler32.h                                                     \
           buffer.h                                                      \
           cast5.h                                                       \
           camellia.h                                                    \
+          cc_fifo.h                                                     \
           channel_layout.h                                              \
           common.h                                                      \
           cpu.h                                                         \
@@ -100,6 +101,7 @@ OBJS = adler32.o                                                        \
        buffer.o                                                         \
        cast5.o                                                          \
        camellia.o                                                       \
+       cc_fifo.o                                                        \
        channel_layout.o                                                 \
        color_utils.o                                                    \
        cpu.o                                                            \

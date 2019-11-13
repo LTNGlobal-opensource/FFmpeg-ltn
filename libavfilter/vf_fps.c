@@ -29,6 +29,7 @@
 #include <stdint.h>
 
 #include "libavutil/common.h"
+#include "libavutil/cc_fifo.h"
 #include "libavutil/fifo.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
@@ -51,6 +52,8 @@ typedef struct FPSContext {
 
     AVFifoBuffer *fifo;     ///< store frames until we get two successive timestamps
 
+    AVCCFifo *cc_fifo;
+
     /* timestamps in input timebase */
     int64_t first_pts;      ///< pts of the first frame that arrived on this filter
 
@@ -59,12 +62,6 @@ typedef struct FPSContext {
     AVRational framerate;   ///< target framerate
     int rounding;           ///< AVRounding method for timestamps
     int eof_action;         ///< action performed for last frame in FIFO
-
-    AVFifoBuffer *cc_608_fifo;
-    AVFifoBuffer *cc_708_fifo;
-    int expected_cc_count;
-    int expected_608;
-    int cc_detected;
 
     /* statistics */
     int frames_in;             ///< number of frames on input
@@ -93,23 +90,6 @@ static const AVOption fps_options[] = {
 
 AVFILTER_DEFINE_CLASS(fps);
 
-#define MAX_CC_ELEMENTS 128
-#define CC_BYTES_PER_ENTRY 3
-
-struct cc_lookup {
-    int num;
-    int den;
-    int cc_count;
-    int num_608;
-};
-
-const static struct cc_lookup cc_lookup_vals[] = {
-    { 15, 1, 40, 4 },
-    { 30, 1, 20, 2 },
-    { 30000, 1001, 20, 2},
-    { 60, 1, 10, 1 },
-    { 60000, 1001, 10, 1},
-};
 
 static av_cold int init(AVFilterContext *ctx)
 {
@@ -119,30 +99,11 @@ static av_cold int init(AVFilterContext *ctx)
     if (!(s->fifo = av_fifo_alloc_array(2, sizeof(AVFrame*))))
         return AVERROR(ENOMEM);
 
-    if (!(s->cc_708_fifo = av_fifo_alloc_array(MAX_CC_ELEMENTS, CC_BYTES_PER_ENTRY)))
-        return AVERROR(ENOMEM);
-
-    if (!(s->cc_608_fifo = av_fifo_alloc_array(MAX_CC_ELEMENTS, CC_BYTES_PER_ENTRY)))
+    if (!(s->cc_fifo = av_cc_fifo_alloc(&s->framerate, ctx)))
         return AVERROR(ENOMEM);
 
     s->first_pts    = AV_NOPTS_VALUE;
 
-    /* Based on the target FPS, figure out the expected cc_count and number of
-       608 tuples per packet.  See ANSI/CTA-708-E Sec 4.3.6.1. */
-    for (i = 0; i < (sizeof(cc_lookup_vals) / sizeof(struct cc_lookup)); i++) {
-        if (s->framerate.num == cc_lookup_vals[i].num &&
-            s->framerate.den == cc_lookup_vals[i].den) {
-            s->expected_cc_count = cc_lookup_vals[i].cc_count;
-            s->expected_608 = cc_lookup_vals[i].num_608;
-            break;
-        }
-    }
-
-    if (s->expected_608 == 0) {
-        av_log(ctx, AV_LOG_WARNING, "fps cannot transcode captions fps=%d/%d\n", s->framerate.num, s->framerate.den);
-    }
-
-    av_log(ctx, AV_LOG_VERBOSE, "fps=%d/%d\n", s->framerate.num, s->framerate.den);
     return 0;
 }
 
@@ -163,10 +124,9 @@ static av_cold void uninit(AVFilterContext *ctx)
         flush_fifo(s->fifo);
         av_fifo_freep(&s->fifo);
     }
-    if (s->cc_608_fifo)
-        av_fifo_freep(&s->cc_608_fifo);
-    if (s->cc_708_fifo)
-        av_fifo_freep(&s->cc_708_fifo);
+
+    if (s->cc_fifo)
+        av_cc_fifo_free(s->cc_fifo);
 
     av_log(ctx, AV_LOG_VERBOSE, "%d frames in, %d frames out; %d frames dropped, "
            "%d frames duplicated.\n", s->frames_in, s->frames_out, s->drop, s->dup);
@@ -182,51 +142,6 @@ static int config_props(AVFilterLink* link)
     link->h         = link->src->inputs[0]->h;
 
     return 0;
-}
-
-static void handle_frame_cc(AVFilterContext *ctx, AVFrame *buf)
-{
-    FPSContext        *s = ctx->priv;
-    AVFrameSideData *sd;
-    int cc_filled = 0;
-    int i;
-
-    if (s->cc_detected == 0 || s->expected_cc_count == 0)
-        return;
-
-    sd = av_frame_new_side_data(buf, AV_FRAME_DATA_A53_CC,
-                                s->expected_cc_count * CC_BYTES_PER_ENTRY);
-    if (!sd)
-        return;
-
-    for (i = 0; i < s->expected_608; i++) {
-        if (av_fifo_size(s->cc_608_fifo) >= CC_BYTES_PER_ENTRY) {
-            av_fifo_generic_read(s->cc_608_fifo, &sd->data[cc_filled * CC_BYTES_PER_ENTRY],
-                                 CC_BYTES_PER_ENTRY, NULL);
-            cc_filled++;
-        } else {
-            break;
-        }
-    }
-
-    /* Insert any available data from the 708 FIFO */
-    while (cc_filled < s->expected_cc_count) {
-        if (av_fifo_size(s->cc_708_fifo) >= CC_BYTES_PER_ENTRY) {
-            av_fifo_generic_read(s->cc_708_fifo, &sd->data[cc_filled * CC_BYTES_PER_ENTRY],
-                                 CC_BYTES_PER_ENTRY, NULL);
-            cc_filled++;
-        } else {
-            break;
-        }
-    }
-
-    /* Insert 708 padding into any remaining fields */
-    while (cc_filled < s->expected_cc_count) {
-        sd->data[cc_filled * CC_BYTES_PER_ENTRY]     = 0xfa;
-        sd->data[cc_filled * CC_BYTES_PER_ENTRY + 1] = 0x00;
-        sd->data[cc_filled * CC_BYTES_PER_ENTRY + 2] = 0x00;
-        cc_filled++;
-    }
 }
 
 static int request_frame(AVFilterLink *outlink)
@@ -247,7 +162,7 @@ static int request_frame(AVFilterLink *outlink)
             if (av_fifo_size(s->fifo)) {
                 buf->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
                                         outlink->time_base) + s->frames_out;
-                handle_frame_cc(ctx, buf);
+                av_cc_enqueue_avframe(s->cc_fifo, buf);
 
                 if ((ret = ff_filter_frame(outlink, buf)) < 0)
                     return ret;
@@ -272,7 +187,7 @@ static int request_frame(AVFilterLink *outlink)
                         av_log(ctx, AV_LOG_DEBUG, "Duplicating frame.\n");
                         dup->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
                                                 outlink->time_base) + s->frames_out;
-                        handle_frame_cc(ctx, dup);
+                        av_cc_enqueue_avframe(s->cc_fifo, dup);
 
                         if ((ret = ff_filter_frame(outlink, dup)) < 0)
                             return ret;
@@ -317,33 +232,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     int64_t delta;
     int i, ret;
 
-    /* Read the A53 side data, discard padding, and put 608/708 into
-       queues so we can ensure they get into the output frames at
-       the correct rate... */
-    if (s->expected_cc_count > 0) {
-        AVFrameSideData *side_data = av_frame_get_side_data(buf, AV_FRAME_DATA_A53_CC);
-        if (side_data) {
-            uint8_t *cc_bytes = side_data->data;
-            int cc_count = side_data->size / CC_BYTES_PER_ENTRY;
-            s->cc_detected = 1;
-
-            for (i = 0; i < cc_count; i++) {
-                /* See ANSI/CTA-708-E Sec 4.3, Table 3 */
-                uint8_t cc_valid = (cc_bytes[CC_BYTES_PER_ENTRY*i] & 0x04) >> 2;
-                uint8_t cc_type = cc_bytes[CC_BYTES_PER_ENTRY*i] & 0x03;
-                if (cc_type == 0x00 || cc_type == 0x01) {
-                    av_fifo_generic_write(s->cc_608_fifo, &cc_bytes[CC_BYTES_PER_ENTRY*i],
-                                          CC_BYTES_PER_ENTRY, NULL);
-                } else if (cc_valid && (cc_type == 0x02 || cc_type == 0x03)) {
-                    av_fifo_generic_write(s->cc_708_fifo, &cc_bytes[CC_BYTES_PER_ENTRY*i],
-                                          CC_BYTES_PER_ENTRY, NULL);
-                }
-            }
-            /* Remove the side data, as we will re-create it on the
-               output as needed */
-            av_frame_remove_side_data(buf, AV_FRAME_DATA_A53_CC);
-        }
-    }
+    av_cc_dequeue_avframe(s->cc_fifo, buf);
 
     s->frames_in++;
     /* discard frames until we get the first timestamp */
@@ -421,7 +310,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 
         buf_out->pts = av_rescale_q(s->first_pts, inlink->time_base,
                                     outlink->time_base) + s->frames_out;
-        handle_frame_cc(ctx, buf_out);
+        av_cc_enqueue_avframe(s->cc_fifo, buf_out);
 
         if ((ret = ff_filter_frame(outlink, buf_out)) < 0) {
             av_frame_free(&buf);

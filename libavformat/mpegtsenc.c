@@ -677,6 +677,13 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
                 *q++ = 0x8a; /* Cue Identifier Descriptor */
                 *q++ = 0x01; /* length */
                 *q++ = 0x01; /* Cue Stream Type (see Sec 8.2) */
+            } else if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038) {
+                *q++ = 0x05; /* MPEG-2 registration descriptor */
+                *q++ = 4;
+                *q++ = 'V';
+                *q++ = 'A';
+                *q++ = 'N';
+                *q++ = 'C';
             }
             break;
         }

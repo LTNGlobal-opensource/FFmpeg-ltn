@@ -1636,7 +1636,7 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
             if (pst) {
                 if (pst->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
                     int64_t *orig_pts;
-                    ts->pkt->pts = ts->pkt->dts = pst->cur_dts;
+                    ts->pkt->pts = ts->pkt->dts = pst->cur_dts & ((1ULL << 33) - 1);
                     orig_pts = (int64_t *) av_packet_new_side_data(ts->pkt,
                                                                    AV_PKT_DATA_ORIG_PTS,
                                                                    sizeof(int64_t));

@@ -1610,6 +1610,8 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
     AVProgram *prg = NULL;
     MpegTSContext *ts = filter->u.section_filter.opaque;
 
+    av_log(ts->stream, AV_LOG_DEBUG, "SCTE-35 message received in MPEG-TS\n");
+
     int idx = ff_find_stream_index(ts->stream, filter->pid);
     if (idx < 0)
         return;

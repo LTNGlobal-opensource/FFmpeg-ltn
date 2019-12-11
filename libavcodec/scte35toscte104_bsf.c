@@ -46,25 +46,27 @@ static int scte35toscte104_filter(AVBSFContext *ctx, AVPacket *out)
 
     /* Retrieve the original PTS, which will be used to calculate the pre-roll */
     orig_pts = (int64_t *) av_packet_get_side_data(in, AV_PKT_DATA_ORIG_PTS, &size);
+    av_log(ctx, AV_LOG_DEBUG, "%s pts=%" PRId64 " orig_pts=%" PRId64 "\n", __func__,
+           in->pts, orig_pts ? *orig_pts : 0);
 
     /* Parse the SCTE-35 packet */
     s = scte35_splice_info_section_parse(in->data, in->size);
     if (s == NULL) {
-        fprintf(stderr, "Failed to splice section \n");
+        av_log(ctx, AV_LOG_ERROR, "Failed to splice section.");
         return -1;
     }
 
     /* Convert the SCTE35 message into a SCTE104 command */
     ret = scte35_create_scte104_message(s, &buf, &byteCount, orig_pts ? *orig_pts : 0);
     if (ret != 0) {
-        fprintf(stderr, "Unable to convert SCTE35 to SCTE104, ret = %d\n", ret);
+        av_log(ctx, AV_LOG_ERROR, "Unable to convert SCTE35 to SCTE104, ret = %d\n", ret);
 	goto fail;
     } else if (byteCount == 0) {
-	    /* It's possible the SCTE-35 doens't actually result in a SCTE-104 message,
-	       for example, if it's a SCTE-35 bandwidth_reservation message.  In
-	       that case, just drop it on the floor */
-	    ret = AVERROR(EAGAIN);
-	    goto fail;
+        /* It's possible the SCTE-35 doens't actually result in a SCTE-104 message,
+           for example, if it's a SCTE-35 bandwidth_reservation message.  In
+           that case, just drop it on the floor */
+        ret = AVERROR(EAGAIN);
+        goto fail;
     }
 
     ret = av_new_packet(out, byteCount);
@@ -86,6 +88,7 @@ fail:
     av_packet_free(&in);
     free(buf);
 
+    av_log(ctx, AV_LOG_DEBUG, "returning ret=%d byteCount=%d\n", ret, byteCount);
     return ret;
 }
 

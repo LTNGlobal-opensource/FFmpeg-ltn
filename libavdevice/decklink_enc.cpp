@@ -737,6 +737,8 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
             }
             klvanc_smpte2038_anc_data_packet_free(pkt_2038);
         } else if (vanc_st->codecpar->codec_id == AV_CODEC_ID_SCTE_104) {
+            av_log(avctx, AV_LOG_DEBUG, "SCTE-104 message to be output on decklink pts=%" PRId64 "\n",
+                   vanc_pkt.pts);
             if (cctx->scte104_line == -1) {
                 av_packet_unref(&vanc_pkt);
                 continue;
@@ -775,6 +777,9 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
                 av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
                 break;
             }
+        } else {
+            av_log(avctx, AV_LOG_ERROR, "Unknown packet type received: %d\n",
+                   vanc_st->codecpar->codec_id);
         }
         av_packet_unref(&vanc_pkt);
     }

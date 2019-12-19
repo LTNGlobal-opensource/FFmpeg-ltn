@@ -503,7 +503,7 @@ static void *circular_buffer_task_rx( void *_URLContext)
     struct sockaddr_in prev_srcaddr = { };
     int srclen;
     int old_cancelstate;
-    time_t last_warning;
+    time_t last_warning, last_fifo_warning;
 
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancelstate);
     pthread_mutex_lock(&s->mutex);
@@ -565,8 +565,13 @@ static void *circular_buffer_task_rx( void *_URLContext)
         if(av_fifo_space(s->fifo) < len + 4) {
             /* No Space left */
             if (s->overrun_nonfatal) {
-                av_log(h, AV_LOG_WARNING, "Circular buffer overrun. "
-                        "Surviving due to overrun_nonfatal option\n");
+                time_t now;
+                time(&now);
+                if (now != last_fifo_warning) {
+                    av_log(h, AV_LOG_WARNING, "Circular buffer overrun. "
+                           "Surviving due to overrun_nonfatal option\n");
+                }
+                last_fifo_warning = now;
                 continue;
             } else {
                 av_log(h, AV_LOG_ERROR, "Circular buffer overrun. "

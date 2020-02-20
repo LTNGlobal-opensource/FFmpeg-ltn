@@ -104,6 +104,7 @@ int start_at_zero     = 0;
 int copy_tb           = -1;
 int debug_ts          = 0;
 int exit_on_error     = 0;
+int exit_on_dts_error = 0;
 int abort_on_flags    = 0;
 int print_stats       = -1;
 int qp_hist           = 0;
@@ -3593,6 +3594,8 @@ const OptionDef options[] = {
         "timestamp error delta threshold", "threshold" },
     { "xerror",         OPT_BOOL | OPT_EXPERT,                       { &exit_on_error },
         "exit on error", "error" },
+    { "xdtserror",      OPT_BOOL | OPT_EXPERT,                       { &exit_on_dts_error },
+        "exit on DTS error", "dtserror" },
     { "abort_on",       HAS_ARG | OPT_EXPERT,                        { .func_arg = opt_abort_on },
         "abort on the specified condition flags", "flags" },
     { "copyinkf",       OPT_BOOL | OPT_EXPERT | OPT_SPEC |

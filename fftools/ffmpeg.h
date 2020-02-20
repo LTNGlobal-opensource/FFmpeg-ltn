@@ -619,6 +619,7 @@ extern int start_at_zero;
 extern int copy_tb;
 extern int debug_ts;
 extern int exit_on_error;
+extern int exit_on_dts_error;
 extern int abort_on_flags;
 extern int print_stats;
 extern int qp_hist;

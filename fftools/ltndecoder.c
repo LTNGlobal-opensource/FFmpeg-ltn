@@ -798,7 +798,7 @@ static void write_packet(OutputFile *of, AVPacket *pkt, OutputStream *ost, int u
                 av_log(s, loglevel, "Non-monotonous DTS in output stream "
                        "%d:%d; previous: %"PRId64", current: %"PRId64"; ",
                        ost->file_index, ost->st->index, ost->last_mux_dts, pkt->dts);
-                if (exit_on_error) {
+                if (exit_on_error || exit_on_dts_error) {
                     av_log(NULL, AV_LOG_FATAL, "aborting.\n");
                     exit_program(1);
                 }

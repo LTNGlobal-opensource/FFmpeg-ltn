@@ -114,5 +114,4 @@ void ltnlog_msg(const char *msgtype, const char *fmt, ...)
     av_strlcatf(final, sizeof(final), "%s: %s", msgtype, buf);
 
     send(ltn_log_fd, final, strlen(final), 0);
-    av_free(buf);
 }

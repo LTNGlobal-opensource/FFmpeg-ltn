@@ -37,6 +37,7 @@
 #include "avio_internal.h"
 #include "mpeg.h"
 #include "isom.h"
+#include <sys/time.h>
 
 /* maximum size in which we look for synchronization if
  * synchronization is lost */
@@ -889,6 +890,7 @@ static void new_data_packet(const uint8_t *buffer, int len, AVPacket *pkt)
 static int new_pes_packet(PESContext *pes, AVPacket *pkt)
 {
     char *sd;
+    int64_t *orig_pts;
 
     av_init_packet(pkt);
 
@@ -922,6 +924,14 @@ static int new_pes_packet(PESContext *pes, AVPacket *pkt)
     if (!sd)
         return AVERROR(ENOMEM);
     *sd = pes->stream_id;
+
+    orig_pts = (int64_t *) av_packet_new_side_data(pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+    if (orig_pts) {
+        struct timeval tv;
+        gettimeofday(&tv,NULL);
+        fprintf(stderr, "%d.%06d Orig PTS set=%ld\n", tv.tv_sec, tv.tv_usec, pkt->pts);
+        *orig_pts = pkt->pts;
+    }
 
     return 0;
 }

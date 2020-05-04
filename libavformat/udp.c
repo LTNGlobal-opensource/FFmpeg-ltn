@@ -26,6 +26,7 @@
 
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE     /* Needed for using struct ip_mreq with recent glibc */
+#include <sys/time.h>
 #include "avformat.h"
 #include "avio_internal.h"
 #include "libavutil/avassert.h"
@@ -494,6 +495,48 @@ static int udp_get_file_handle(URLContext *h)
     return s->udp_fd;
 }
 
+static void show_pts(unsigned char *pkt, uint16_t pid, const char *prefix)
+{
+    uint16_t pkt_pid;
+    pkt_pid = ((pkt[1] & 0x1f) << 8) | pkt[2];
+#if 0
+    av_log(h, AV_LOG_ERROR, "foo1 %d %02x %02x %02x %02x pid=%04x\n", i, pkt[0], pkt[1], pkt[2], pkt[3], pid);
+#endif
+
+    if ((pkt[0] == 0x47) && (pkt[1] & 0x40) && (pid == pkt_pid) && (pkt[3] & 0x10)) {
+        uint64_t v = 0, pts = 0;
+        unsigned char *pes;
+#if 0
+        for (int x = 0; x < 32; x++) {
+            fprintf(stderr, "%02x ", pkt[x]);
+        }
+        fprintf(stderr, "\n");
+#endif
+#if 1
+        if (pkt[3] & 0x20) {
+            /* Adaptation field present */
+            uint8_t adaptation_len = pkt[4];
+            pes = pkt + 4 + 1 + adaptation_len;
+        } else {
+            pes = pkt + 4;
+        }
+
+        uint64_t x = pes[9] & 0x0f;
+        v |= (uint64_t) x << 32;
+        v |= (uint64_t) pes[10] << 24;
+        v |= (uint64_t) pes[11] << 16;
+        v |= pes[12] << 8;
+        v |= pes[13];
+        pts |= (v >> 3) & (0x0007 << 30); // top 3 bits, shifted left by 3, other bits zeroed out
+        pts |= (v >> 2) & (0x7fff << 15); // middle 15 bits
+        pts |= (v >> 1) & (0x7fff <<  0); // bottom 15 bits
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        fprintf(stderr, "%ld.%06ld %s v=%lx PTS=%lu\n", tv.tv_sec, tv.tv_usec, prefix, v, pts);
+#endif
+    }
+}
+
 #if HAVE_PTHREAD_CANCEL
 static void *circular_buffer_task_rx( void *_URLContext)
 {
@@ -562,6 +605,11 @@ static void *circular_buffer_task_rx( void *_URLContext)
             }
         }
 
+        for (int i = 0; i < len; i += 188) {
+            unsigned char *pkt = s->tmp + i + 4;
+            show_pts(pkt, 0x31, "UDPIN");
+        }
+
         if(av_fifo_space(s->fifo) < len + 4) {
             /* No Space left */
             if (s->overrun_nonfatal) {
@@ -603,6 +651,8 @@ static void *circular_buffer_task_tx( void *_URLContext)
     int64_t burst_interval = s->bitrate ? (s->burst_bits * 1000000 / s->bitrate) : 0;
     int64_t max_delay = s->bitrate ?  ((int64_t)h->max_packet_size * 8 * 1000000 / s->bitrate + 1) : 0;
 
+    fprintf(stderr, "djh Starting task tx\n");
+
     pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &old_cancelstate);
     pthread_mutex_lock(&s->mutex);
 
@@ -618,6 +668,7 @@ static void *circular_buffer_task_tx( void *_URLContext)
         uint8_t tmp[4];
         int64_t timestamp;
 
+//        av_log(h, AV_LOG_ERROR, "djh loop top\n");
         len=av_fifo_size(s->fifo);
 
         while (len<4) {
@@ -638,18 +689,23 @@ static void *circular_buffer_task_tx( void *_URLContext)
         av_fifo_generic_read(s->fifo, s->tmp, len, NULL);
 
         pthread_mutex_unlock(&s->mutex);
+//        av_log(h, AV_LOG_ERROR, "djh loop t2 len=%d\n", len);
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_cancelstate);
 
         if (s->bitrate) {
             timestamp = av_gettime_relative();
             if (timestamp < target_timestamp) {
+                int64_t t1, t2;
                 int64_t delay = target_timestamp - timestamp;
                 if (delay > max_delay) {
                     delay = max_delay;
                     start_timestamp = timestamp + delay;
                     sent_bits = 0;
                 }
+                t1 = av_gettime_relative();
                 av_usleep(delay);
+                t2 = av_gettime_relative();
+//                av_log(h, AV_LOG_ERROR, "djh delay=%ld t1=%ld t2=%ld delta=%ld err=%ld\n", delay, t1, t2, t2 - t1, t2 - t1 - delay);
             } else {
                 if (timestamp - burst_interval > target_timestamp) {
                     start_timestamp = timestamp - burst_interval;
@@ -664,6 +720,13 @@ static void *circular_buffer_task_tx( void *_URLContext)
         while (len) {
             int ret;
             av_assert0(len > 0);
+
+#if 1
+            for (int i = 0; i < len; i += 188) {
+                unsigned char *pkt = s->tmp + i;
+                show_pts(pkt, 0x100, "UDPOUT2");
+            }
+#endif
             if (!s->is_connected) {
                 ret = sendto (s->udp_fd, p, len, 0,
                             (struct sockaddr *) &s->dest_addr,
@@ -1118,10 +1181,19 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
     return ret < 0 ? ff_neterrno() : ret;
 }
 
+
 static int udp_write(URLContext *h, const uint8_t *buf, int size)
 {
     UDPContext *s = h->priv_data;
     int ret;
+
+#if 1
+    for (int i = 0; i < size; i += 188) {
+        unsigned char *pkt = buf + i;
+        show_pts(pkt, 0x100, "UDPOUT1");
+    }
+#endif
+
 
 #if HAVE_PTHREAD_CANCEL
     if (s->fifo) {
@@ -1139,6 +1211,7 @@ static int udp_write(URLContext *h, const uint8_t *buf, int size)
             return err;
         }
 
+//        av_log(h, AV_LOG_ERROR, "FIFO space free=%d size=%d\n", av_fifo_space(s->fifo), size + 4);
         if(av_fifo_space(s->fifo) < size + 4) {
             /* What about a partial packet tx ? */
             pthread_mutex_unlock(&s->mutex);

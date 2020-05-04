@@ -125,6 +125,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int stride = aligned_width * 8 / 3;
     int line_padding = stride - ((avctx->width * 8 + 11) / 12) * 4;
     AVFrameSideData *side_data;
+    AVFrameSideData *frame_orig_pts;
     int h, w, ret;
     uint8_t *dst;
     uint64_t t1;
@@ -137,10 +138,18 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         return ret;
     }
     dst = pkt->data;
-
+#if 0
     int64_t *orig_pts = av_packet_new_side_data(pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
     if (orig_pts)
         *orig_pts = pic->pkt_pts;
+#else
+    frame_orig_pts = av_frame_get_side_data(pic, AV_FRAME_DATA_ORIG_PTS);
+    if (frame_orig_pts) {
+        int64_t *orig_pts = (int64_t *) av_packet_new_side_data(pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+        if (orig_pts)
+            memcpy(orig_pts, frame_orig_pts->data, sizeof(int64_t));
+    }
+#endif
 
     if (pic->format == AV_PIX_FMT_YUV422P10) {
         const uint16_t *y = (const uint16_t *)pic->data[0];

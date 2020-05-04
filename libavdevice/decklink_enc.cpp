@@ -824,12 +824,19 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     buffercount_type buffered;
     HRESULT hr;
     uint64_t t1;
+    const int64_t *orig_pts;
+    int side_data_size;
 #if CONFIG_LIBKLVANC
     int ret;
 #endif
 
     t1 = av_vtune_get_timestamp();
     ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
+
+    orig_pts = (int64_t *) av_packet_get_side_data(pkt, AV_PKT_DATA_ORIG_PTS, &side_data_size);
+    if (orig_pts) {
+        av_log(avctx, AV_LOG_INFO, "%s Orig PTS=%ld (type=%d) pts=%ld\n", __func__, *orig_pts, st->codecpar->codec_type, pkt->pts);
+    }
 
     BMDTimeValue streamtime;
     int64_t delta;

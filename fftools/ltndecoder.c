@@ -4863,8 +4863,12 @@ static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
     ff_mutex_lock(&log_mutex);
     time(&now);
     timeinfo = localtime(&now);
+    struct timeval tv;
+    gettimeofday(&tv,NULL);
+
     if (print_prefix == 1)
-        strftime(line2, sizeof(line2), "%F %T ", timeinfo);
+        snprintf(line2, sizeof(line2), "%d.%06d ", tv.tv_sec, tv.tv_usec);
+        //strftime(line2, sizeof(line2), "%F %T ", timeinfo);
     else
         line2[0] = '\0';
 

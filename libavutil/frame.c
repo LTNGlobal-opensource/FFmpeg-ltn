@@ -782,6 +782,7 @@ const char *av_frame_side_data_name(enum AVFrameSideDataType type)
     case AV_FRAME_DATA_DISPLAYMATRIX:   return "3x3 displaymatrix";
     case AV_FRAME_DATA_AFD:             return "Active format description";
     case AV_FRAME_DATA_BARDATA:         return "ATSC A53 bar data";
+    case AV_FRAME_DATA_ORIG_PTS:        return "Arrival PTS";
     case AV_FRAME_DATA_MOTION_VECTORS:  return "Motion vectors";
     case AV_FRAME_DATA_SKIP_SAMPLES:    return "Skip samples";
     case AV_FRAME_DATA_AUDIO_SERVICE_TYPE:          return "Audio service type";

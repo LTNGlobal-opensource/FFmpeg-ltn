@@ -146,7 +146,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 		x = u_plane + (startline / 2 * frame->linesize[1]);
 		for (c = 30; c >= 0; c--) {
 			x += (ctx->bitwidth / 4);
-			if (*x > 0x195 && *x < 0x205)
+			if (*x > 0x190 && *x < 0x220)
 				bitcount++;
 			x += (ctx->bitwidth / 4);
 		}
@@ -171,9 +171,26 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
         ctx->framesProcessed++;
 
 	if (bitcount != 31 || bits == 0x00) {
-		printf("%s: Frame %dx%d fmt:%s bytes:%d nocountersfound totalframes#%08d totalErrors#%" PRIu64 "\n",
+		uint16_t *x;
+		uint16_t *u_plane = (uint16_t *) frame->data[1];
+		printf("%s: Frame %dx%d fmt:%s bytes:%d nocountersfound totalframes#%08d totalErrors#%" PRIu64 " bc=%d bits=%d\n",
 		       t, frame->width, frame->height, av_get_pix_fmt_name(frame->format), sizeBytes,
-		       ctx->framesProcessed, ctx->totalErrors);
+		       ctx->framesProcessed, ctx->totalErrors, bitcount, bits);
+		/* Check to ensure counters are actually present */
+
+		x = u_plane + (startline / 2 * frame->linesize[1]);
+		for (c = 30; c >= 0; c--) {
+			x += (ctx->bitwidth / 4);
+			printf("djh x=%ld 0x%x=", (x - u_plane), *x);
+			if (*x > 0x195 && *x < 0x205) {
+				printf("1\n");
+				bitcount++;
+			} else {
+				printf("0\n");
+			}
+			x += (ctx->bitwidth / 4);
+		}
+
 		return ff_filter_frame(outlink, frame);
 	}
 

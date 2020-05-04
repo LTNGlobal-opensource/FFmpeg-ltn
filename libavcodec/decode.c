@@ -1669,6 +1669,7 @@ int ff_init_buffer_info(AVCodecContext *avctx, AVFrame *frame)
         { AV_PKT_DATA_A53_CC,                     AV_FRAME_DATA_A53_CC },
         { AV_PKT_DATA_AFD,                        AV_FRAME_DATA_AFD },
         { AV_PKT_DATA_BARDATA,                    AV_FRAME_DATA_BARDATA },
+        { AV_PKT_DATA_ORIG_PTS,                   AV_FRAME_DATA_ORIG_PTS },
     };
 
     if (pkt) {

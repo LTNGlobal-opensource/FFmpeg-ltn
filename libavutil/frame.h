@@ -93,6 +93,10 @@ enum AVFrameSideDataType {
      * Note: See SCTE-128-1 Sec 8.2.8 for the interaction between AFD and Bar Data
      */
     AV_FRAME_DATA_BARDATA,
+
+    /* Original Arrival PTS time before any mangling.  Used for instrumentation */
+    AV_FRAME_DATA_ORIG_PTS,
+
     /**
      * Motion vectors exported by some codecs (on demand through the export_mvs
      * flag set in the libavcodec AVCodecContext flags2 option).

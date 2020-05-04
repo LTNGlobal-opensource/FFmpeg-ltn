@@ -3654,6 +3654,50 @@ static int init_output_stream(OutputStream *ost, char *error, int error_len)
 
     ost->initialized = 1;
 
+    OutputFile *of = output_files[ost->file_index];
+    if (of->ctx && of->ctx->oformat && strcmp(of->ctx->oformat->name, "decklink") == 0) {
+        InputStream *ist;
+        double target_preroll = 0;
+        AVDictionaryEntry *t;
+
+        for(int i=0;i<nb_input_streams;i++) {
+            ist = input_streams[i];
+
+            double delay = (double) ist->st->pts_delta *
+                            (double) ist->st->time_base.num / (double) ist->st->time_base.den;
+            av_log(NULL, AV_LOG_DEBUG, "Delay for stream %d is %f\n", delay);
+            if ((ist->dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO) ||
+                (ist->dec_ctx->codec_type == AVMEDIA_TYPE_AUDIO) && delay > target_preroll)
+                target_preroll = delay;
+        }
+
+        target_preroll = target_preroll * 2;
+
+        if ((t = av_dict_get(of->opts, "preroll", NULL, AV_DICT_IGNORE_SUFFIX))) {
+            double user_preroll = atof(t->value);
+            av_log(NULL, AV_LOG_INFO, "User specified preroll was %f\n", user_preroll);
+            if (target_preroll < user_preroll) {
+                av_log(NULL, AV_LOG_WARNING, "Computed preroll lower than user specified, computed=%f user=%f\n",
+                       target_preroll, user_preroll);
+                target_preroll = user_preroll;
+            }
+        } else {
+            /* No user specified preroll, so force the lower bound to 0.1 sec */
+            if (target_preroll < 0.1)
+                target_preroll = 0.1;
+        }
+
+        /* No matter what, make sure it's never more than 5 seconds, as that would
+           cause the hardware to reject the setting and bail out */
+        if (target_preroll > 5)
+            target_preroll = 5;
+
+        av_log(NULL, AV_LOG_INFO, "Selecting preroll of %f\n", target_preroll);
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%f", target_preroll);
+        av_dict_set(&of->opts, "preroll", buf, 0);
+    }
+
     ret = check_init_output_file(output_files[ost->file_index], ost->file_index);
     if (ret < 0)
         return ret;

@@ -1055,6 +1055,10 @@ typedef struct AVStream {
     int64_t rollover_current;
     int rolled_over;
 
+    /* LTN computing of PTS delta for prerolls */
+    int64_t last_pts;
+    int64_t pts_delta;
+
     // Timestamp generation support:
     /**
      * Timestamp corresponding to the last dts sync point.

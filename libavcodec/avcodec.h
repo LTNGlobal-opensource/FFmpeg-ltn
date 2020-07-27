@@ -40,6 +40,7 @@
 #include "libavutil/log.h"
 #include "libavutil/pixfmt.h"
 #include "libavutil/rational.h"
+#include "libavutil/pipeline_stats.h"
 
 #include "version.h"
 
@@ -1370,6 +1371,14 @@ enum AVPacketSideDataType {
      * using the PTS values embedded in the packet content
      */
     AV_PKT_DATA_ORIG_PTS,
+
+    /**
+     * Pipeline timing information, for measuring traversal through various
+     * layers in the ffmpeg stack.
+     * The data is the AVPipelineStats struct defined in
+     * libavutil/pipeline_stats.h.
+     */
+    AV_PKT_DATA_PIPELINE_STATS,
 
     /**
      * The number of side data types.
@@ -4514,6 +4523,9 @@ int av_packet_copy_props(AVPacket *dst, const AVPacket *src);
  *               converted
  */
 void av_packet_rescale_ts(AVPacket *pkt, AVRational tb_src, AVRational tb_dst);
+
+void av_packet_update_pipelinestats(struct AVPacket *pkt, enum pipeline_stat stat, int64_t ts,
+                                    int64_t in_pts, int64_t out_pts);
 
 /**
  * @}

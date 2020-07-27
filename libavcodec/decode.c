@@ -36,6 +36,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/intmath.h"
+#include "libavutil/time.h"
 
 #include "avcodec.h"
 #include "bytestream.h"
@@ -664,6 +665,10 @@ int attribute_align_arg avcodec_send_packet(AVCodecContext *avctx, const AVPacke
             return ret;
     }
 
+    av_packet_update_pipelinestats(avci->buffer_pkt, AVCODEC_DECODE_START, av_gettime(),
+                                   -1, -1);
+
+
     ret = av_bsf_send_packet(avci->filter.bsfs[0], avci->buffer_pkt);
     if (ret < 0) {
         av_packet_unref(avci->buffer_pkt);
@@ -735,6 +740,9 @@ int attribute_align_arg avcodec_receive_frame(AVCodecContext *avctx, AVFrame *fr
             return ret;
         }
     }
+
+    avframe_update_pipelinestats(frame, AVCODEC_DECODE_END, av_gettime(),
+                                 -1, -1);
 
     avctx->frame_number++;
 
@@ -1670,6 +1678,7 @@ int ff_init_buffer_info(AVCodecContext *avctx, AVFrame *frame)
         { AV_PKT_DATA_AFD,                        AV_FRAME_DATA_AFD },
         { AV_PKT_DATA_BARDATA,                    AV_FRAME_DATA_BARDATA },
         { AV_PKT_DATA_ORIG_PTS,                   AV_FRAME_DATA_ORIG_PTS },
+        { AV_PKT_DATA_PIPELINE_STATS,             AV_FRAME_DATA_PIPELINE_STATS },
     };
 
     if (pkt) {

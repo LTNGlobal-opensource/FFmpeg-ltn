@@ -1879,6 +1879,9 @@ return_packet:
         av_add_index_entry(st, pkt->pos, pkt->dts, 0, 0, AVINDEX_KEYFRAME);
     }
 
+    av_packet_update_pipelinestats(pkt, AVFORMAT_READ_TIME, av_gettime(),
+                                   pkt->pts, -1);
+
     if (is_relative(pkt->dts))
         pkt->dts -= RELATIVE_TS_BASE;
     if (is_relative(pkt->pts))

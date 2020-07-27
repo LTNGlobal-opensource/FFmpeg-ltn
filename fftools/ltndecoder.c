@@ -952,6 +952,8 @@ static void do_audio_out(OutputFile *of, OutputStream *ost,
                enc->time_base.num, enc->time_base.den);
     }
 
+    avframe_update_pipelinestats(frame, AVCODEC_ENCODE_START, av_gettime(),
+                                 -1, -1);
     ret = avcodec_send_frame(enc, frame);
     if (ret < 0)
         goto error;
@@ -1301,6 +1303,8 @@ static void do_video_out(OutputFile *of,
 
         ost->frames_encoded++;
 
+        avframe_update_pipelinestats(in_picture, AVCODEC_ENCODE_START, av_gettime(),
+                                     -1, -1);
         ret = avcodec_send_frame(enc, in_picture);
         if (ret < 0)
             goto error;

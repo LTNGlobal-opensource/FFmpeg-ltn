@@ -862,6 +862,10 @@ int av_write_frame(AVFormatContext *s, AVPacket *pkt)
 {
     int ret;
 
+    if (pkt)
+        av_packet_update_pipelinestats(pkt, AVFORMAT_WRITE_TIME, av_gettime(),
+                                       -1, pkt->pts);
+
     ret = prepare_input_packet(s, pkt);
     if (ret < 0)
         return ret;
@@ -1170,6 +1174,10 @@ static int interleave_packet(AVFormatContext *s, AVPacket *out, AVPacket *in, in
 int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt)
 {
     int ret, flush = 0;
+
+    if (pkt)
+        av_packet_update_pipelinestats(pkt, AVFORMAT_WRITE_TIME, av_gettime(),
+                                       -1, pkt->pts);
 
     ret = prepare_input_packet(s, pkt);
     if (ret < 0)

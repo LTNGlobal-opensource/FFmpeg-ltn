@@ -28,6 +28,7 @@
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
 #include "libavutil/avassert.h"
+#include "libavutil/time.h"
 #include "libavcodec/bytestream.h"
 #include "libavcodec/get_bits.h"
 #include "libavcodec/opus.h"
@@ -893,7 +894,8 @@ static int new_pes_packet(PESContext *pes, AVPacket *pkt)
     int64_t *orig_pts;
 
     av_init_packet(pkt);
-
+    av_packet_update_pipelinestats(pkt, AVFORMAT_INPUT_TIME, av_gettime(),
+                                   -1, -1);
     pkt->buf  = pes->buffer;
     pkt->data = pes->buffer->data;
     pkt->size = pes->data_index;
@@ -2776,6 +2778,10 @@ static int mpegts_raw_read_packet(AVFormatContext *s, AVPacket *pkt)
 
     if (av_new_packet(pkt, TS_PACKET_SIZE) < 0)
         return AVERROR(ENOMEM);
+
+    av_packet_update_pipelinestats(pkt, AVFORMAT_INPUT_TIME, av_gettime(),
+                                   -1, -1);
+
     ret = read_packet(s, pkt->data, ts->raw_packet_size, &data);
     pkt->pos = avio_tell(s->pb);
     if (ret < 0) {

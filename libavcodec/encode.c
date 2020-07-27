@@ -24,6 +24,7 @@
 #include "libavutil/imgutils.h"
 #include "libavutil/internal.h"
 #include "libavutil/samplefmt.h"
+#include "libavutil/time.h"
 
 #include "avcodec.h"
 #include "frame_thread_encoder.h"
@@ -452,5 +453,7 @@ int attribute_align_arg avcodec_receive_packet(AVCodecContext *avctx, AVPacket *
 
     av_packet_move_ref(avpkt, avctx->internal->buffer_pkt);
     avctx->internal->buffer_pkt_valid = 0;
+    av_packet_update_pipelinestats(avpkt, AVCODEC_ENCODE_END, av_gettime(),
+                                   -1, -1);
     return 0;
 }

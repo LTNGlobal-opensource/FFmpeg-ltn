@@ -40,6 +40,7 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavutil/avstring.h"
 #include "libavutil/vtune.h"
+#include "libavutil/time.h"
 #include "avdevice.h"
 }
 
@@ -155,8 +156,11 @@ public:
 
         if (frame->_avframe)
             av_frame_unref(frame->_avframe);
-        if (frame->_avpacket)
+        if (frame->_avpacket) {
+            av_packet_update_pipelinestats(frame->_avpacket, AVFORMAT_OUTPUT_TIME, av_gettime(),
+                                         -1, -1);
             av_packet_unref(frame->_avpacket);
+        }
 
         pthread_mutex_lock(&ctx->mutex);
         ctx->frames_buffer_available_spots++;

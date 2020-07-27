@@ -666,6 +666,26 @@ FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 }
 
+void av_packet_update_pipelinestats(struct AVPacket *pkt, enum pipeline_stat stat, int64_t ts,
+                                   int64_t in_pts, int64_t out_pts)
+{
+    uint8_t *side_data;
+    int side_data_size;
+
+    side_data = av_packet_get_side_data(pkt, AV_PKT_DATA_PIPELINE_STATS, &side_data_size);
+    if (!side_data) {
+        side_data = av_packet_new_side_data(pkt, AV_PKT_DATA_PIPELINE_STATS,
+                                            sizeof(struct AVPipelineStats));
+        if (side_data) {
+            memset(side_data, 0, sizeof(struct AVPipelineStats));
+        }
+    }
+
+    if (side_data)
+        avutil_update_pipelinestats((struct AVPipelineStats *) side_data,
+                                    stat, ts, in_pts, out_pts);
+}
+
 int ff_side_data_set_encoder_stats(AVPacket *pkt, int quality, int64_t *error, int error_count, int pict_type)
 {
     uint8_t *side_data;

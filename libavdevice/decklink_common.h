@@ -136,7 +136,11 @@ struct decklink_ctx {
     /* Audio output interleaving */
     pthread_mutex_t audio_mutex;
     AVPacketList *output_audio_list;
-    int audio_pkt_numsamples = 0;
+    unsigned int audio_pkt_numsamples = 0;
+    int audio_offset;
+    int video_offset;
+    unsigned int audio_samples_per_frame;
+    void *empty_audio_buf;
 
 #if CONFIG_LIBKLVANC
     struct klvanc_context_s *vanc_ctx;

@@ -1030,10 +1030,6 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     }
 
     ltnlog_stat("PICTURE", pkt->pts);
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/lted1_024prep
 
     ctx->dlo->GetBufferedVideoFrameCount(&buffered);
 #if DECKLINK_TIMING_DEBUG

@@ -1356,14 +1356,6 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
 
     av_vtune_log_event("write_header", t1, av_vtune_get_timestamp(), 1);
 
-    /* Setup the UDP monitor callback */
-
-    if (cctx->udp_monitor) {
-        ret = ltnlog_setup(cctx->udp_monitor);
-        if (ret < 0)
-            av_log(avctx, AV_LOG_ERROR, "Failed to setup LTN logger");
-    }
-
     return 0;
 
 error:

@@ -916,7 +916,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     av_vtune_log_stat(DECKLINK_QUEUE_DELTA, delta, 0);
 
     if (ctx->frames_discard-- > 0) {
-        av_log(avctx, AV_LOG_ERROR, "Discarding frame with PTS %" PRId64 " discard=%d\n",
+        av_log(avctx, AV_LOG_DEBUG, "Discarding frame with PTS %" PRId64 " discard=%d\n",
                pkt->pts, ctx->frames_discard);
         av_frame_free(&avframe);
         av_packet_free(&avpacket);

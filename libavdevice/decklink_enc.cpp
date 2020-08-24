@@ -202,37 +202,6 @@ public:
 
         pthread_mutex_lock(&ctx->audio_mutex);
 
-        if (!preroll) {
-
-            buffercount_type buffered;
-            ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
-            if (ctx->playback_started && buffered < (48000 / 50) && ctx->output_audio_list) {
-                av_log(_avctx, AV_LOG_WARNING, "There's insufficient buffered audio2 (%d)."
-                       " Audio will misbehave Advancing audio by %d!\n", buffered,
-                       ctx->audio_samples_per_frame);
-
-                uint32_t written;
-                ctx->dlo->GetScheduledStreamTime(48000, &streamtime, &speed);
-                HRESULT result = ctx->dlo->ScheduleAudioSamples(ctx->empty_audio_buf,
-                                                                ctx->audio_samples_per_frame, streamtime + buffered,
-                                                                bmdAudioSampleRate48kHz,
-                                                                &written);
-                if (result != S_OK) {
-                    av_log(_avctx, AV_LOG_ERROR, "Failed to schedule audio: %d written=%d\n",
-                           result, written);
-                    ltnlog_stat("ERROR AUDIO", result);
-                } else if (written != ctx->audio_samples_per_frame) {
-                    av_log(_avctx, AV_LOG_ERROR, "Audio write failure: requested=%d written=%d\n",
-                           ctx->audio_samples_per_frame, written);
-                } else {
-                    ltnlog_stat("PLAY AUDIO BYTES", written);
-                }
-
-                ctx->audio_offset += ctx->audio_samples_per_frame;
-                ctx->video_offset++;
-            }
-        }
-
         ctx->dlo->GetScheduledStreamTime(48000, &streamtime, &speed);
         buffercount_type buffered;
         ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
@@ -294,6 +263,36 @@ public:
             next = cur->next;
             av_packet_unref(&cur->pkt);
             av_freep(&cur);
+        }
+
+        if (!preroll) {
+            buffercount_type buffered;
+            ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
+            if (ctx->playback_started && buffered < (48000 / 50) && ctx->output_audio_list) {
+                av_log(_avctx, AV_LOG_WARNING, "There's insufficient buffered audio2 (%d)."
+                       " Audio will misbehave Advancing audio by %d!\n", buffered,
+                       ctx->audio_samples_per_frame);
+
+                uint32_t written;
+                ctx->dlo->GetScheduledStreamTime(48000, &streamtime, &speed);
+                HRESULT result = ctx->dlo->ScheduleAudioSamples(ctx->empty_audio_buf,
+                                                                ctx->audio_samples_per_frame, streamtime + buffered,
+                                                                bmdAudioSampleRate48kHz,
+                                                                &written);
+                if (result != S_OK) {
+                    av_log(_avctx, AV_LOG_ERROR, "Failed to schedule audio: %d written=%d\n",
+                           result, written);
+                    ltnlog_stat("ERROR AUDIO", result);
+                } else if (written != ctx->audio_samples_per_frame) {
+                    av_log(_avctx, AV_LOG_ERROR, "Audio write failure: requested=%d written=%d\n",
+                           ctx->audio_samples_per_frame, written);
+                } else {
+                    ltnlog_stat("PLAY AUDIO BYTES", written);
+                }
+
+                ctx->audio_offset += ctx->audio_samples_per_frame;
+                ctx->video_offset++;
+            }
         }
 
         pthread_mutex_unlock(&ctx->audio_mutex);

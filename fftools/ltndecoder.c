@@ -130,6 +130,7 @@ static int nb_frames_dup = 0;
 static unsigned dup_warning = 1000;
 static int nb_frames_drop = 0;
 static int64_t decode_error_stat[2];
+static double target_preroll = 0;
 
 static int want_sdp = 1;
 
@@ -1068,6 +1069,60 @@ static void do_subtitle_out(OutputFile *of,
     }
 }
 
+static void latency_control(OutputFile *of, int64_t cur_time)
+{
+    static int64_t last_time = -1;
+    int64_t dts_vid = 0;
+    int64_t dts_aud = 0;
+    int64_t wall_video = 0;
+    int64_t wall_audio = 0;
+    static int call_count = 0;
+    int64_t configured_latency_us;
+    int vid_stream = -1;
+    int aud_stream = -1;
+    int n;
+
+    if (target_preroll == 0)
+        return;
+
+    if (last_time == -1) {
+        last_time = cur_time;
+        return;
+    }
+    if ((cur_time - last_time) < 500000)
+        return;
+    last_time = cur_time;
+
+    for (n = 0; n < of->ctx->nb_streams; n++) {
+        AVStream *st = of->ctx->streams[n];
+        AVCodecParameters *c = st->codecpar;
+        if (c->codec_type == AVMEDIA_TYPE_VIDEO && vid_stream == -1)
+            vid_stream = n;
+        if (c->codec_type == AVMEDIA_TYPE_AUDIO && aud_stream == -1)
+            aud_stream = n;
+    }
+    av_get_output_timestamp(of->ctx, vid_stream, &dts_vid, &wall_video);
+    av_get_output_timestamp(of->ctx, aud_stream, &dts_aud, &wall_audio);
+    configured_latency_us = target_preroll * 1000000;
+    fprintf(stderr, "delay video=%lld audio=%lld wv=%lld wa=%lld configured=%lld\n", dts_vid, dts_aud, wall_video, wall_audio, configured_latency_us);
+
+    if (dts_vid - configured_latency_us > 30000) {
+        /* We're slipping too far from our target latency, so drop a frame */
+        if (dts_aud < 20000) {
+            /* There isn't enough audio available to not have stuttering */
+            fprintf(stderr, "delay Beyond latency deadline but insufficient audio to drop frame (%lld)...\n", dts_aud);
+            return;
+        }
+//        if (call_count++ > 20) {
+          if (1) {
+            fprintf(stderr, "delay Dropping one frame...\n");
+//            avdevice_app_to_dev_control_message(of->ctx, AV_APP_TO_DEV_DROP_1_FRAME, NULL, 0);
+            call_count = 0;
+        }
+    }
+}
+
+
 static void do_video_out(OutputFile *of,
                          OutputStream *ost,
                          AVFrame *next_picture,
@@ -1352,6 +1407,9 @@ static void do_video_out(OutputFile *of,
      * flush, we need to limit them here, before they go into encoder.
      */
     ost->frame_number++;
+
+    /* DJH log stats */
+    latency_control(of, av_gettime_relative());
 
     if (vstats_filename && frame_size)
         do_video_stats(ost, frame_size);
@@ -3661,7 +3719,6 @@ static int init_output_stream(OutputStream *ost, char *error, int error_len)
     OutputFile *of = output_files[ost->file_index];
     if (of->ctx && of->ctx->oformat && strcmp(of->ctx->oformat->name, "decklink") == 0) {
         InputStream *ist;
-        double target_preroll = 0;
         AVDictionaryEntry *t;
 
         for(int i=0;i<nb_input_streams;i++) {

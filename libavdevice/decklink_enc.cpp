@@ -1049,20 +1049,24 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 #endif
     /* Preroll video frames. */
     if (!ctx->playback_started) {
-        if (pkt->pts >= (ctx->first_pts + ctx->frames_preroll - 3)) {
+        if (pkt->pts >= (ctx->first_pts + ctx->frames_preroll - 3) && ctx->audio_prerolling == 0) {
             /* We're about to start playback so start audio preroll */
-            av_log(avctx, AV_LOG_DEBUG, "Starting audio preroll...\n");
+            av_log(avctx, AV_LOG_INFO, "Starting audio preroll...\n");
             if (ctx->audio && ctx->dlo->BeginAudioPreroll() != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not begin audio preroll!\n");
                 return -1;
             }
+            ctx->audio_prerolling = 1;
         }
         if (pkt->pts >= (ctx->first_pts + ctx->frames_preroll - 1)) {
+            av_log(avctx, AV_LOG_INFO, "Ending audio preroll...\n");
             if (ctx->audio && ctx->dlo->EndAudioPreroll() != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not end audio preroll!\n");
                 return AVERROR(EIO);
             }
-            av_log(avctx, AV_LOG_DEBUG, "Starting scheduled playback.\n");
+            ctx->audio_prerolling = 0;
+            av_log(avctx, AV_LOG_INFO, "Starting scheduled playback at PTS %lld.\n",
+                   ctx->first_pts);
             if (ctx->dlo->StartScheduledPlayback(ctx->first_pts * ctx->bmd_tb_num, ctx->bmd_tb_den, 1.0) != S_OK) {
                 av_log(avctx, AV_LOG_ERROR, "Could not start scheduled playback!\n");
                 return AVERROR(EIO);
@@ -1198,6 +1202,11 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
         if (ret != 0)
             goto done_unlock;
         memset(ctx->output_audio_list->pkt.data, 0, ctx->audio_pkt_numsamples * ctx->channels * 2);
+        if (orig_pts) {
+            int64_t *new_orig_pts = (int64_t *) av_packet_new_side_data(&ctx->output_audio_list->pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+            if (new_orig_pts)
+                *new_orig_pts = *orig_pts;
+        }
         ctx->output_audio_list->pkt.pts = pkt->pts;
     }
 
@@ -1242,6 +1251,12 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
             if (ret != 0)
                 goto done_unlock;
             memset(cur->next->pkt.data, 0, ctx->audio_pkt_numsamples * ctx->channels * 2);
+        if (orig_pts) {
+            int64_t *new_orig_pts = (int64_t *) av_packet_new_side_data(&cur->next->pkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+            if (new_orig_pts)
+                *new_orig_pts = *orig_pts;
+        }
+
             cur->next->pkt.pts = cur->pkt.pts + ctx->audio_pkt_numsamples;
         }
     }
@@ -1381,6 +1396,56 @@ int ff_decklink_write_packet(AVFormatContext *avctx, AVPacket *pkt)
 int ff_decklink_list_output_devices(AVFormatContext *avctx, struct AVDeviceInfoList *device_list)
 {
     return ff_decklink_list_devices(avctx, device_list, 0, 1);
+}
+
+void
+ff_decklink_get_output_timestamp(AVFormatContext *avctx, int stream,
+                                 int64_t *dts, int64_t *wall)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+    AVStream *st;
+    buffercount_type buffered;
+    int n;
+
+    if (stream >= avctx->nb_streams)
+        return;
+
+    st = avctx->streams[stream];
+    if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+        ctx->dlo->GetBufferedVideoFrameCount(&buffered);
+    else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+        ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
+    else
+        return;
+
+    /* return latency in microseconds */
+    if (dts) {
+        *dts = (int64_t) buffered * 1000000 * (int64_t) st->time_base.num / (int64_t) st->time_base.den;
+        fprintf(stderr, "djh dts=%lld buffered=%lld num=%d den=%d\n", *dts, buffered, st->time_base.num, st->time_base.den);
+    }
+}
+
+static int drop_one_frame(AVFormatContext *avctx)
+{
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
+
+    pthread_mutex_lock(&ctx->mutex);
+    ctx->audio_offset -= ctx->audio_samples_per_frame;
+    ctx->video_offset--;
+    pthread_mutex_unlock(&ctx->mutex);
+    return 0;
+}
+
+int ff_decklink_control_message(AVFormatContext *h, int type, void *data,
+                                size_t data_size)
+{
+    switch(type) {
+    case AV_APP_TO_DEV_DROP_1_FRAME:
+        return drop_one_frame(h);
+    }
+    return AVERROR(ENOSYS);
 }
 
 } /* extern "C" */

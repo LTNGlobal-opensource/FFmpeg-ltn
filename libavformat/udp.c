@@ -512,7 +512,7 @@ static void show_pts(unsigned char *pkt, uint16_t pid, const char *prefix)
         }
         fprintf(stderr, "\n");
 #endif
-#if 1
+#if 0
         if (pkt[3] & 0x20) {
             /* Adaptation field present */
             uint8_t adaptation_len = pkt[4];

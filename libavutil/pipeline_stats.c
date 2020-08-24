@@ -93,7 +93,9 @@ void avutil_update_pipelinestats(struct AVPipelineStats *stats, enum pipeline_st
         stats->avformat_output_time = ts;
         break;
     }
-    if (stat == AVFORMAT_OUTPUT_TIME) {
+#if 1
+//    if (stat == AVFORMAT_OUTPUT_TIME) {
+    if (stat == AVFORMAT_WRITE_TIME) {
         fprintf(stderr, "stat=%d in_pts=%"PRId64" a=%"PRId64" i=%"PRId64" r=%"PRId64" d=%"PRId64" e=%"PRId64" gs=%"PRId64" ge=%"PRId64" es=%"PRId64" ee=%"PRId64" wt=%"PRId64" o=%"PRId64"\n",
                stat, stats->input_pts, stats->avprotocol_arrival_time, stats->avformat_input_time, stats->avformat_read_time,
                stats->avcodec_decode_start, stats->avcodec_decode_end, stats->avfilter_graph_start,
@@ -101,4 +103,5 @@ void avutil_update_pipelinestats(struct AVPipelineStats *stats, enum pipeline_st
                stats->avformat_write_time, stats->avformat_output_time
             );
     }
+#endif
 }

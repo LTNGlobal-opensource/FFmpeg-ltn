@@ -64,4 +64,6 @@ AVOutputFormat ff_decklink_muxer = {
     .write_header   = ff_decklink_write_header,
     .write_packet   = ff_decklink_write_packet,
     .write_trailer  = ff_decklink_write_trailer,
+    .control_message = ff_decklink_control_message,
+    .get_output_timestamp = ff_decklink_get_output_timestamp,
 };

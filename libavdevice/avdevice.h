@@ -190,6 +190,10 @@ enum AVAppToDevMessageType {
      */
     AV_APP_TO_DEV_GET_VOLUME = MKBETAG('G', 'V', 'O', 'L'),
     AV_APP_TO_DEV_GET_MUTE   = MKBETAG('G', 'M', 'U', 'T'),
+
+
+    /* Drop a frame */
+    AV_APP_TO_DEV_DROP_1_FRAME = MKBETAG('D','R','P','1'),
 };
 
 /**

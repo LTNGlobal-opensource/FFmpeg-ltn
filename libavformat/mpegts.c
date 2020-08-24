@@ -931,7 +931,7 @@ static int new_pes_packet(PESContext *pes, AVPacket *pkt)
     if (orig_pts) {
         struct timeval tv;
         gettimeofday(&tv,NULL);
-        fprintf(stderr, "%d.%06d Orig PTS set=%ld\n", tv.tv_sec, tv.tv_usec, pkt->pts);
+        //fprintf(stderr, "%d.%06d Orig PTS set=%ld\n", tv.tv_sec, tv.tv_usec, pkt->pts);
         *orig_pts = pkt->pts;
     }
 

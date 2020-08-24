@@ -93,6 +93,8 @@ static int pcm_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     const int64_t *samples_int64_t;
     const uint16_t *samples_uint16_t;
     const uint32_t *samples_uint32_t;
+    AVFrameSideData *side_data;
+    AVFrameSideData *frame_orig_pts;
 
     sample_size = av_get_bits_per_sample(avctx->codec->id) / 8;
     n           = frame->nb_samples * avctx->channels;
@@ -101,6 +103,23 @@ static int pcm_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
     if ((ret = ff_alloc_packet2(avctx, avpkt, n * sample_size, n * sample_size)) < 0)
         return ret;
     dst = avpkt->data;
+
+    frame_orig_pts = av_frame_get_side_data(frame, AV_FRAME_DATA_ORIG_PTS);
+    if (frame_orig_pts) {
+        int64_t *orig_pts = (int64_t *) av_packet_new_side_data(avpkt, AV_PKT_DATA_ORIG_PTS, sizeof(int64_t));
+        if (orig_pts) {
+            memcpy(orig_pts, frame_orig_pts->data, sizeof(int64_t));
+        }
+    }
+
+    side_data = av_frame_get_side_data(frame, AV_FRAME_DATA_PIPELINE_STATS);
+    if (side_data && side_data->size) {
+        uint8_t *buf = av_packet_new_side_data(avpkt, AV_PKT_DATA_PIPELINE_STATS, side_data->size);
+        if (buf)
+            memcpy(buf, side_data->data, side_data->size);
+        else
+            return AVERROR(ENOMEM);
+    }
 
     switch (avctx->codec->id) {
     case AV_CODEC_ID_PCM_U32LE:

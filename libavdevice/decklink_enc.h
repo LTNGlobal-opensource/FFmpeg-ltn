@@ -30,6 +30,10 @@ int ff_decklink_write_header(AVFormatContext *avctx);
 int ff_decklink_write_packet(AVFormatContext *avctx, AVPacket *pkt);
 int ff_decklink_write_trailer(AVFormatContext *avctx);
 int ff_decklink_list_output_devices(AVFormatContext *avctx, struct AVDeviceInfoList *device_list);
+int ff_decklink_control_message(AVFormatContext *h, int type, void *data,
+                                size_t data_size);
+void ff_decklink_get_output_timestamp(AVFormatContext *avctx, int stream,
+                                      int64_t *dts, int64_t *wall);
 
 #ifdef __cplusplus
 } /* extern "C" */

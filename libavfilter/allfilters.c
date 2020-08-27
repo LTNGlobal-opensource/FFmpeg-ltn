@@ -209,6 +209,7 @@ static void register_all(void)
     REGISTER_FILTER(FIELDMATCH,     fieldmatch,     vf);
     REGISTER_FILTER(FIELDORDER,     fieldorder,     vf);
     REGISTER_FILTER(FIELDMERGE,     fieldmerge,     vf);
+    REGISTER_FILTER(FIELDEXTRACT,   fieldextract,   vf);
     REGISTER_FILTER(FILLBORDERS,    fillborders,    vf);
     REGISTER_FILTER(FIND_RECT,      find_rect,      vf);
     REGISTER_FILTER(FLOODFILL,      floodfill,      vf);

@@ -919,8 +919,8 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     }
 
     if (interlaced_frame && do_deinterlace) {
-        AVFilterContext *yadif;
-        char args[255];
+        AVFilterContext *deint_filter;
+        int deinterlace_mode;
 
         snprintf(name, sizeof(name), "deinterlace_in_%d_%d",
                  ist->file_index, ist->st->index);
@@ -928,21 +928,32 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         /* Do higher quality deinterlace for SD, since we're going to downscale
            anyway... */
         if (height > 576)
-            snprintf(args, sizeof(args), "mode=%d", deinterlace_hd_mode);
+            deinterlace_mode = deinterlace_hd_mode;
         else
-            snprintf(args, sizeof(args), "mode=%d", deinterlace_sd_mode);
+            deinterlace_mode = deinterlace_sd_mode;
 
-        if ((ret = avfilter_graph_create_filter(&yadif,
-                                                avfilter_get_by_name("yadif"),
-                                                name, args, NULL,
-                                                fg->graph)) < 0)
-            return ret;
+        if (deinterlace_mode == 0 || deinterlace_mode == 1) {
+            char args[255];
+            snprintf(args, sizeof(args), "mode=%d", deinterlace_mode);
+            if ((ret = avfilter_graph_create_filter(&deint_filter,
+                                                    avfilter_get_by_name("yadif"),
+                                                    name, args, NULL,
+                                                    fg->graph)) < 0)
+                return ret;
+        } else {
+            /* Fast mode where we just throw away half the field data */
+            if ((ret = avfilter_graph_create_filter(&deint_filter,
+                                                    avfilter_get_by_name("fieldextract"),
+                                                    name, NULL, NULL,
+                                                    fg->graph)) < 0)
+                return ret;
+        }
 
-        if ((ret = avfilter_link(last_filter, 0, yadif, 0)) < 0)
+        if ((ret = avfilter_link(last_filter, 0, deint_filter, 0)) < 0)
             return ret;
 
         interlaced_frame = 0;
-        last_filter = yadif;
+        last_filter = deint_filter;
     }
 
     struct sdi_video_modes {

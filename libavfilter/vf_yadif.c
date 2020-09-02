@@ -378,6 +378,7 @@ static int filter_frame(AVFilterLink *link, AVFrame *frame)
         return AVERROR(ENOMEM);
 
     av_frame_copy_props(yadif->out, yadif->cur);
+    av_cc_enqueue_avframe(yadif->cc_fifo, yadif->out);
     yadif->out->interlaced_frame = 0;
 
     if (yadif->out->pts != AV_NOPTS_VALUE)

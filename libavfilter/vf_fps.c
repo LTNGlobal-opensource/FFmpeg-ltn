@@ -100,7 +100,7 @@ static av_cold int init(AVFilterContext *ctx)
         return AVERROR(ENOMEM);
 
     if (!(s->cc_fifo = av_cc_fifo_alloc(&s->framerate, ctx)))
-        return AVERROR(ENOMEM);
+        av_log(ctx, AV_LOG_VERBOSE, "Failure to setup CC FIFO queue.  Captions will be passed through\n");
 
     s->first_pts    = AV_NOPTS_VALUE;
 

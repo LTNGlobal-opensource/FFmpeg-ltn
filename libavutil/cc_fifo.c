@@ -106,6 +106,9 @@ int av_cc_enqueue_avframe(AVCCFifo *ccf, AVFrame *frame)
     int cc_filled = 0;
     int i;
 
+    if (ccf)
+        return 0;
+
     if (ccf->cc_detected == 0 || ccf->expected_cc_count == 0)
         return 0;
 
@@ -148,6 +151,9 @@ int av_cc_enqueue_avframe(AVCCFifo *ccf, AVFrame *frame)
 int av_cc_dequeue_avframe(AVCCFifo *ccf, AVFrame *frame)
 {
     int i;
+
+    if (ccf)
+        return 0;
 
     /* Read the A53 side data, discard padding, and put 608/708 into
        queues so we can ensure they get into the output frames at

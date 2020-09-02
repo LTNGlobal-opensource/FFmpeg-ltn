@@ -498,7 +498,7 @@ static int config_props(AVFilterLink *link)
         link->frame_rate = ctx->inputs[0]->frame_rate;
 
     if (!(s->cc_fifo = av_cc_fifo_alloc(&link->frame_rate, ctx)))
-        return AVERROR(ENOMEM);
+        av_log(ctx, AV_LOG_VERBOSE, "Failure to setup CC FIFO queue.  Captions will be passed through\n");
 
     if (link->w < 3 || link->h < 3) {
         av_log(ctx, AV_LOG_ERROR, "Video of less than 3 columns or lines is not supported\n");

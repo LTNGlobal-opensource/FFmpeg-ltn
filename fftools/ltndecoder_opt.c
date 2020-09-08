@@ -2611,7 +2611,14 @@ loop_end:
                         exit_program(1);
                     memcpy(f->formats, ost->enc->sample_fmts, (count + 1) * sizeof(*f->formats));
                 }
-                if (ost->enc_ctx->sample_rate) {
+                if (!strcmp(file_oformat->name, "decklink")) {
+                    /* Regardless of what the encoder object claims, decklink
+                       output only supports 48Khz output */
+                    f->sample_rates = av_mallocz_array(2, sizeof(*f->sample_rates));
+                    if (!f->sample_rates)
+                        exit_program(1);
+                    f->sample_rates[0] = 48000;
+                } else if (ost->enc_ctx->sample_rate) {
                     f->sample_rate = ost->enc_ctx->sample_rate;
                 } else if (ost->enc->supported_samplerates) {
                     count = 0;

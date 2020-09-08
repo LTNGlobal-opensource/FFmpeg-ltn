@@ -947,7 +947,7 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         /* Keep track of the maximum delta in PTS, which is useful for determining
            how much preroll we need on output */
-        if (pkt->pts != AV_NOPTS_VALUE && !(s->pb->seekable & AVIO_SEEKABLE_NORMAL)) {
+        if (pkt->pts != AV_NOPTS_VALUE && s->pb && !(s->pb->seekable & AVIO_SEEKABLE_NORMAL)) {
             if (st->last_pts != 0 && (pkt->pts - st->last_pts) > st->pts_delta)
                 st->pts_delta = pkt->pts - st->last_pts;
             st->last_pts = pkt->pts;

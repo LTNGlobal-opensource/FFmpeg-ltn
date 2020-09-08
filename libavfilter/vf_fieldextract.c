@@ -101,8 +101,8 @@ static int config_out_props(AVFilterLink *outlink)
     outlink->h = inlink->h / 2;
     outlink->time_base = inlink->time_base;
     outlink->frame_rate = inlink->frame_rate;
-    outlink->interlaced_frame = inlink->interlaced_frame;
-    outlink->top_field_first = inlink->top_field_first;
+    outlink->interlaced_frame = 0;
+    outlink->top_field_first = 0;
     outlink->sample_aspect_ratio = inlink->sample_aspect_ratio;
     outlink->sample_aspect_ratio.den *= 2;
 

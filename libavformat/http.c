@@ -1605,7 +1605,8 @@ static int http_shutdown(URLContext *h, int flags)
     /* signal end of chunked encoding if used */
     if (((flags & AVIO_FLAG_WRITE) && s->chunked_post) ||
         ((flags & AVIO_FLAG_READ) && s->chunked_post && s->listen)) {
-        ret = ffurl_write(s->hd, footer, sizeof(footer) - 1);
+        if (s->hd)
+            ret = ffurl_write(s->hd, footer, sizeof(footer) - 1);
         ret = ret > 0 ? 0 : ret;
         s->end_chunked_post = 1;
     }

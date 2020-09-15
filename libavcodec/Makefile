@@ -1050,6 +1050,7 @@ OBJS-$(CONFIG_VP9_RAW_REORDER_BSF)        += vp9_raw_reorder_bsf.o
 OBJS-$(CONFIG_VP9_SUPERFRAME_BSF)         += vp9_superframe_bsf.o
 OBJS-$(CONFIG_VP9_SUPERFRAME_SPLIT_BSF)   += vp9_superframe_split_bsf.o
 OBJS-$(CONFIG_SCTE35TOSCTE104_BSF)        += scte35toscte104_bsf.o
+OBJS-$(CONFIG_SCTE35DUMP_BSF)             += scte35dump_bsf.o
 
 # thread libraries
 OBJS-$(HAVE_LIBC_MSVCRT)               += file_open.o

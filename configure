@@ -2897,6 +2897,7 @@ hevc_metadata_bsf_select="cbs_h265"
 mjpeg2jpeg_bsf_select="jpegtables"
 mpeg2_metadata_bsf_select="cbs_mpeg2"
 scte35toscte104_bsf_select="libklscte35"
+scte35dump_bsf_select="libklscte35"
 trace_headers_bsf_select="cbs_h264 cbs_h265 cbs_mpeg2"
 
 # external libraries

@@ -51,6 +51,7 @@ extern const AVBitStreamFilter ff_vp9_raw_reorder_bsf;
 extern const AVBitStreamFilter ff_vp9_superframe_bsf;
 extern const AVBitStreamFilter ff_vp9_superframe_split_bsf;
 extern const AVBitStreamFilter ff_scte35toscte104_bsf;
+extern const AVBitStreamFilter ff_scte35dump_bsf;
 
 #include "libavcodec/bsf_list.c"
 

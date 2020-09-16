@@ -913,6 +913,12 @@ static int mpegts_init(AVFormatContext *s)
             sect->cc           = 15;
             sect->discontinuity= ts->flags & MPEGTS_FLAG_DISCONT;
             st->priv_data = sect;
+#if CONFIG_SCTE35PTSADJUST_BSF
+            if (ff_stream_add_bitstream_filter(st, "scte35ptsadjust", NULL) < 0)
+                av_log(s, AV_LOG_ERROR, "Failed to add SCTE-35 pts_adjust bsf\n");
+#else
+            av_log(avctx, AV_LOG_ERROR, "SCTE-35 output over TS requires scte35ptsadjust BSF to be available\n");
+#endif
             continue;
         }
 

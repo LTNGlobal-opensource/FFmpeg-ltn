@@ -993,9 +993,6 @@ static int mpegts_init(AVFormatContext *s)
                                      (TS_PACKET_SIZE * 8 * 1000);
         ts->pat_packet_period      = (int64_t)ts->mux_rate * PAT_RETRANS_TIME /
                                      (TS_PACKET_SIZE * 8 * 1000);
-
-        if (ts->copyts < 1)
-            ts->first_pcr = av_rescale(s->max_delay, PCR_TIME_BASE, AV_TIME_BASE);
     } else {
         /* Arbitrary values, PAT/PMT will also be written on video key frames */
         ts->sdt_packet_period = 200;
@@ -1579,6 +1576,11 @@ static int mpegts_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (ts->copyts < 1) {
+        if (ts->mux_rate > 1 && dts != AV_NOPTS_VALUE && ts->first_pcr == 0) {
+            ts->first_pcr = av_rescale(s->max_delay, PCR_TIME_BASE, AV_TIME_BASE) + (dts * 300);
+            av_log(s, AV_LOG_DEBUG, "setting first PCR to %"PRId64"\n", ts->first_pcr);
+        }
+
         if (pts != AV_NOPTS_VALUE)
             pts += delay;
         if (dts != AV_NOPTS_VALUE)

@@ -2251,27 +2251,26 @@ static int open_output_file(OptionsContext *o, const char *filename)
             }
             if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
                                                     AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
-                if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
-                    /* Include all audio streams */
-                    for (i = 0; i < prg->nb_stream_indexes; i++) {
-                        if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-                            if (input_streams[prg->stream_index[i]]->st->codecpar->channels == 0 ||
-                                input_streams[prg->stream_index[i]]->st->codecpar->sample_rate == 0) {
-                                av_log(NULL, AV_LOG_WARNING, "Insufficent data to add audio stream %d. chan=%d sr=%d\n",
-                                       i, input_streams[prg->stream_index[i]]->st->codecpar->channels,
-                                       input_streams[prg->stream_index[i]]->st->codecpar->sample_rate);
-                                continue;
-                            }
-                            new_audio_stream(o, oc, i);
+                for (i = 0; i < prg->nb_stream_indexes; i++) {
+                    if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                        if (input_streams[prg->stream_index[i]]->st->codecpar->channels == 0 ||
+                            input_streams[prg->stream_index[i]]->st->codecpar->sample_rate == 0) {
+                            av_log(NULL, AV_LOG_WARNING, "Insufficent data to add audio stream %d. chan=%d sr=%d\n",
+                                   i, input_streams[prg->stream_index[i]]->st->codecpar->channels,
+                                   input_streams[prg->stream_index[i]]->st->codecpar->sample_rate);
+                            continue;
+                        }
+                        new_audio_stream(o, oc, i);
+
+                        if (getenv("LTN_ENABLE_AUDIO_ALL") == NULL) {
+                            /* We've successfully found one stream and we're not told
+                               to include all streams, so go no further */
+                            break;
                         }
                     }
-                } else {
-                    audio_idx = av_find_best_stream(input_files[0]->ctx, AVMEDIA_TYPE_AUDIO, -1,
-                                                    video_idx, NULL, 0);
-                    if (audio_idx >= 0)
-                        new_audio_stream(o, oc, audio_idx);
                 }
             }
+
             /* Data only if explicitly enabled through LTN environment variables */
             if (!o->data_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
                                                    AVMEDIA_TYPE_DATA) != AV_CODEC_ID_NONE) {

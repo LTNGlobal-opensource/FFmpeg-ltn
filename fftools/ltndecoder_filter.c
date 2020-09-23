@@ -516,7 +516,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
         char args[255];
 
         snprintf(args, sizeof(args), "fps=%d/%d",
-                 do_interlace ? ost->frame_rate.num * 2 : ost->frame_rate.num,
+                 (do_interlace && !interlaced) ? ost->frame_rate.num * 2 : ost->frame_rate.num,
                  ost->frame_rate.den);
         snprintf(name, sizeof(name), "fps_out_%d_%d",
                  ost->file_index, ost->index);
@@ -532,7 +532,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
         pad_idx = 0;
     }
 
-    if (do_interlace) {
+    if (do_interlace && !interlaced) {
         AVFilterContext *tinterlace;
 
         snprintf(name, sizeof(name), "interlace_out_%d_%d",

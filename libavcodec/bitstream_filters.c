@@ -53,6 +53,7 @@ extern const AVBitStreamFilter ff_opus_metadata_bsf;
 extern const AVBitStreamFilter ff_pcm_rechunk_bsf;
 extern const AVBitStreamFilter ff_prores_metadata_bsf;
 extern const AVBitStreamFilter ff_remove_extradata_bsf;
+extern const AVBitStreamFilter ff_scte35ptsadjust_bsf;
 extern const AVBitStreamFilter ff_text2movsub_bsf;
 extern const AVBitStreamFilter ff_trace_headers_bsf;
 extern const AVBitStreamFilter ff_truehd_core_bsf;

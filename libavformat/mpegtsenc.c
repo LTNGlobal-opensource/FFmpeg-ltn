@@ -1371,7 +1371,7 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
                     int st2_index = i < st->index ? i : (i + 1 == s->nb_streams ? st->index : i + 1);
                     AVStream *st2 = s->streams[st2_index];
                     MpegTSWriteStream *ts_st2 = st2->priv_data;
-                    if (ts_st2->pcr_period) {
+                    if (ts_st2->pcr_period && st2->codecpar->codec_id != AV_CODEC_ID_SCTE_35) {
                         if (pcr - ts_st2->last_pcr >= ts_st2->pcr_period) {
                             ts_st2->last_pcr = FFMAX(pcr - ts_st2->pcr_period, ts_st2->last_pcr + ts_st2->pcr_period);
                             if (st2 != st) {

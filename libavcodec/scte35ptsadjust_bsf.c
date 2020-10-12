@@ -64,7 +64,7 @@ static int scte35ptsadjust_filter(AVBSFContext *ctx, AVPacket *out)
                      ((int64_t) in->data[5] << 24) |
                      ((int64_t) in->data[6] << 16) |
                      ((int64_t) in->data[7] << 8) |
-                     ((int64_t) in->data[8] << 8);
+                     ((int64_t) in->data[8] );
 
     av_log(ctx, AV_LOG_DEBUG, "%s pts_adjust=%" PRId64 "\n", __func__,
            cur_pts_adjust);

@@ -569,7 +569,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
 
             /* Vertical padding is 2 on the top, 4 on the bottom, to preserve
                field dominance */
-            snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2:color=yellow", 720, 486, x);
+            snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2:color=black", 720, 486, x);
             snprintf(name, sizeof(name), "pad_out_%d_%d",
                      ost->file_index, ost->st->index);
 

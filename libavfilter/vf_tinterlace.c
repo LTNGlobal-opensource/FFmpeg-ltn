@@ -276,6 +276,9 @@ static int config_out_props(AVFilterLink *outlink)
             ff_tinterlace_init_x86(tinterlace);
     }
 
+    if (!(tinterlace->cc_fifo = av_cc_fifo_alloc(&outlink->frame_rate, ctx)))
+        av_log(ctx, AV_LOG_VERBOSE, "Failure to setup CC FIFO queue.  Captions will be passed through\n");
+
     av_log(ctx, AV_LOG_VERBOSE, "mode:%d filter:%s h:%d -> h:%d\n", tinterlace->mode,
            (tinterlace->flags & TINTERLACE_FLAG_CVLPF) ? "complex" :
            (tinterlace->flags & TINTERLACE_FLAG_VLPF) ? "linear" : "off",
@@ -360,6 +363,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
     tinterlace->cur  = tinterlace->next;
     tinterlace->next = picref;
 
+    av_cc_dequeue_avframe(tinterlace->cc_fifo, picref);
+
     cur = tinterlace->cur;
     next = tinterlace->next;
     /* we need at least two frames */
@@ -375,6 +380,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
         if (!out)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, cur);
+        av_cc_enqueue_avframe(tinterlace->cc_fifo, out);
         out->height = outlink->h;
         out->interlaced_frame = 1;
         out->top_field_first = 1;
@@ -399,6 +405,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
         out = av_frame_clone(tinterlace->mode == MODE_DROP_EVEN ? cur : next);
         if (!out)
             return AVERROR(ENOMEM);
+        av_cc_enqueue_avframe(tinterlace->cc_fifo, out);
         out->interlaced_frame = 1;
         out->top_field_first = 1;
         av_frame_free(&tinterlace->next);
@@ -410,6 +417,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
         if (!out)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, cur);
+        av_cc_enqueue_avframe(tinterlace->cc_fifo, out);
         out->height = outlink->h;
         out->sample_aspect_ratio = av_mul_q(cur->sample_aspect_ratio, av_make_q(2, 1));
 
@@ -435,6 +443,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
         if (!out)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, cur);
+        av_cc_enqueue_avframe(tinterlace->cc_fifo, out);
         out->interlaced_frame = 1;
         out->top_field_first = tff;
 
@@ -471,6 +480,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *picref)
         if (!out)
             return AVERROR(ENOMEM);
         av_frame_copy_props(out, next);
+        av_cc_enqueue_avframe(tinterlace->cc_fifo, out);
         out->interlaced_frame = 1;
         out->top_field_first = !tff;
 

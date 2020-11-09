@@ -77,6 +77,7 @@ AVDictionary *format_opts, *codec_opts, *resample_opts;
 static FILE *report_file;
 static int report_file_level = AV_LOG_DEBUG;
 int hide_banner = 0;
+char *log_filename = NULL;
 
 enum show_muxdemuxers {
     SHOW_DEFAULT,
@@ -532,6 +533,9 @@ void parse_loglevel(int argc, char **argv, const OptionDef *options)
     idx = locate_option(argc, argv, options, "hide_banner");
     if (idx)
         hide_banner = 1;
+    idx = locate_option(argc, argv, options, "logfile");
+    if (idx && argv[idx + 1])
+        log_filename = strdup(argv[idx + 1]);
 }
 
 static const AVOption *opt_find(void *obj, const char *name, const char *unit,

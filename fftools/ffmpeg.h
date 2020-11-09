@@ -249,6 +249,11 @@ typedef struct InputFilter {
     int interlaced_frame;
     int top_field_first;
 
+    int out_width, out_height;
+    AVRational out_sample_aspect_ratio;
+    int out_interlaced_frame;
+    int out_top_field_first;
+
     int sample_rate;
     int channels;
     uint64_t channel_layout;
@@ -267,6 +272,12 @@ typedef struct OutputFilter {
     /* temporary storage until stream maps are processed */
     AVFilterInOut       *out_tmp;
     enum AVMediaType     type;
+
+    /* Results of the Input Filter pipeline */
+    int in_width, in_height;
+    AVRational in_sample_aspect_ratio;
+    int in_interlaced_frame;
+    int in_top_field_first;
 
     /* desired output stream properties */
     int width, height;
@@ -598,6 +609,9 @@ extern float frame_drop_threshold;
 extern int do_benchmark;
 extern int do_benchmark_all;
 extern int do_deinterlace;
+extern int deinterlace_hd_mode;
+extern int deinterlace_sd_mode;
+extern int do_interlace;
 extern int do_hex_dump;
 extern int do_pkt_dump;
 extern int copy_ts;
@@ -605,6 +619,7 @@ extern int start_at_zero;
 extern int copy_tb;
 extern int debug_ts;
 extern int exit_on_error;
+extern int exit_on_dts_error;
 extern int abort_on_flags;
 extern int print_stats;
 extern int qp_hist;

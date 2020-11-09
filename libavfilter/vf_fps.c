@@ -29,6 +29,7 @@
 #include <stdint.h>
 
 #include "libavutil/common.h"
+#include "libavutil/cc_fifo.h"
 #include "libavutil/fifo.h"
 #include "libavutil/mathematics.h"
 #include "libavutil/opt.h"
@@ -50,6 +51,8 @@ typedef struct FPSContext {
     const AVClass *class;
 
     AVFifoBuffer *fifo;     ///< store frames until we get two successive timestamps
+
+    AVCCFifo *cc_fifo;
 
     /* timestamps in input timebase */
     int64_t first_pts;      ///< pts of the first frame that arrived on this filter
@@ -87,16 +90,20 @@ static const AVOption fps_options[] = {
 
 AVFILTER_DEFINE_CLASS(fps);
 
+
 static av_cold int init(AVFilterContext *ctx)
 {
     FPSContext *s = ctx->priv;
+    int i;
 
     if (!(s->fifo = av_fifo_alloc_array(2, sizeof(AVFrame*))))
         return AVERROR(ENOMEM);
 
+    if (!(s->cc_fifo = av_cc_fifo_alloc(&s->framerate, ctx)))
+        av_log(ctx, AV_LOG_VERBOSE, "Failure to setup CC FIFO queue.  Captions will be passed through\n");
+
     s->first_pts    = AV_NOPTS_VALUE;
 
-    av_log(ctx, AV_LOG_VERBOSE, "fps=%d/%d\n", s->framerate.num, s->framerate.den);
     return 0;
 }
 
@@ -117,6 +124,9 @@ static av_cold void uninit(AVFilterContext *ctx)
         flush_fifo(s->fifo);
         av_fifo_freep(&s->fifo);
     }
+
+    if (s->cc_fifo)
+        av_cc_fifo_free(s->cc_fifo);
 
     av_log(ctx, AV_LOG_VERBOSE, "%d frames in, %d frames out; %d frames dropped, "
            "%d frames duplicated.\n", s->frames_in, s->frames_out, s->drop, s->dup);
@@ -152,6 +162,7 @@ static int request_frame(AVFilterLink *outlink)
             if (av_fifo_size(s->fifo)) {
                 buf->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
                                         outlink->time_base) + s->frames_out;
+                av_cc_enqueue_avframe(s->cc_fifo, buf);
 
                 if ((ret = ff_filter_frame(outlink, buf)) < 0)
                     return ret;
@@ -176,6 +187,7 @@ static int request_frame(AVFilterLink *outlink)
                         av_log(ctx, AV_LOG_DEBUG, "Duplicating frame.\n");
                         dup->pts = av_rescale_q(s->first_pts, ctx->inputs[0]->time_base,
                                                 outlink->time_base) + s->frames_out;
+                        av_cc_enqueue_avframe(s->cc_fifo, dup);
 
                         if ((ret = ff_filter_frame(outlink, dup)) < 0)
                             return ret;
@@ -219,6 +231,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     AVFilterLink   *outlink = ctx->outputs[0];
     int64_t delta;
     int i, ret;
+
+    av_cc_dequeue_avframe(s->cc_fifo, buf);
 
     s->frames_in++;
     /* discard frames until we get the first timestamp */
@@ -296,6 +310,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
 
         buf_out->pts = av_rescale_q(s->first_pts, inlink->time_base,
                                     outlink->time_base) + s->frames_out;
+        av_cc_enqueue_avframe(s->cc_fifo, buf_out);
 
         if ((ret = ff_filter_frame(outlink, buf_out)) < 0) {
             av_frame_free(&buf);

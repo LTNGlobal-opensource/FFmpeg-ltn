@@ -325,8 +325,16 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
 
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
-        MpegTSWriteStream *ts_st = st->priv_data;
         AVDictionaryEntry *lang = av_dict_get(st->metadata, "language", NULL, 0);
+        uint16_t pid;
+
+        if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35) {
+            MpegTSSection *sect = st->priv_data;
+            pid = sect->pid;
+        } else {
+            MpegTSWriteStream *ts_st = st->priv_data;
+            pid = ts_st->pid;
+        }
 
         if (s->nb_programs) {
             int k, found = 0;
@@ -417,7 +425,7 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
         }
 
         *q++ = stream_type;
-        put16(&q, 0xe000 | ts_st->pid);
+        put16(&q, 0xe000 | pid);
         desc_length_ptr = q;
         q += 2; /* patched after */
 
@@ -677,6 +685,13 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
                 *q++ = 0x8a; /* Cue Identifier Descriptor */
                 *q++ = 0x01; /* length */
                 *q++ = 0x01; /* Cue Stream Type (see Sec 8.2) */
+            } else if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038) {
+                *q++ = 0x05; /* MPEG-2 registration descriptor */
+                *q++ = 4;
+                *q++ = 'V';
+                *q++ = 'A';
+                *q++ = 'N';
+                *q++ = 'C';
             }
             break;
         }
@@ -874,6 +889,39 @@ static int mpegts_init(AVFormatContext *s)
         AVProgram *program;
         st = s->streams[i];
 
+        if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35) {
+            struct MpegTSSection *sect;
+            sect = av_mallocz(sizeof(MpegTSSection));
+            if (!sect) {
+                ret = AVERROR(ENOMEM);
+                goto fail;
+            }
+
+            if (st->id < 16) {
+                sect->pid = ts->start_pid + i;
+            } else if (st->id < 0x1FFF) {
+                sect->pid = st->id;
+            } else {
+                av_log(s, AV_LOG_ERROR,
+                       "Invalid stream id %d, must be less than 8191\n", st->id);
+                ret = AVERROR(EINVAL);
+                goto fail;
+            }
+
+            sect->write_packet = section_write_packet;
+            sect->opaque       = s;
+            sect->cc           = 15;
+            sect->discontinuity= ts->flags & MPEGTS_FLAG_DISCONT;
+            st->priv_data = sect;
+#if CONFIG_SCTE35PTSADJUST_BSF
+            if (ff_stream_add_bitstream_filter(st, "scte35ptsadjust", NULL) < 0)
+                av_log(s, AV_LOG_ERROR, "Failed to add SCTE-35 pts_adjust bsf\n");
+#else
+            av_log(avctx, AV_LOG_ERROR, "SCTE-35 output over TS requires scte35ptsadjust BSF to be available\n");
+#endif
+            continue;
+        }
+
         ts_st = av_mallocz(sizeof(MpegTSWriteStream));
         if (!ts_st) {
             ret = AVERROR(ENOMEM);
@@ -986,9 +1034,6 @@ static int mpegts_init(AVFormatContext *s)
                                      (TS_PACKET_SIZE * 8 * 1000);
         ts->pat_packet_period      = (int64_t)ts->mux_rate * PAT_RETRANS_TIME /
                                      (TS_PACKET_SIZE * 8 * 1000);
-
-        if (ts->copyts < 1)
-            ts->first_pcr = av_rescale(s->max_delay, PCR_TIME_BASE, AV_TIME_BASE);
     } else {
         /* Arbitrary values, PAT/PMT will also be written on video key frames */
         ts->sdt_packet_period = 200;
@@ -1572,10 +1617,21 @@ static int mpegts_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
     }
 
     if (ts->copyts < 1) {
+        if (ts->mux_rate > 1 && dts != AV_NOPTS_VALUE && ts->first_pcr == 0) {
+            ts->first_pcr = av_rescale(s->max_delay, PCR_TIME_BASE, AV_TIME_BASE) + (dts * 300);
+            av_log(s, AV_LOG_DEBUG, "setting first PCR to %"PRId64"\n", ts->first_pcr);
+        }
+
         if (pts != AV_NOPTS_VALUE)
             pts += delay;
         if (dts != AV_NOPTS_VALUE)
             dts += delay;
+    }
+
+    if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35) {
+        MpegTSSection *s = st->priv_data;
+        mpegts_write_section(s, buf, size);
+        return 0;
     }
 
     if (ts_st->first_pts_check && pts == AV_NOPTS_VALUE) {
@@ -1762,7 +1818,7 @@ static int mpegts_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
         for(i=0; i<s->nb_streams; i++) {
             AVStream *st2 = s->streams[i];
             MpegTSWriteStream *ts_st2 = st2->priv_data;
-            if (   ts_st2->payload_size
+            if (st2->codecpar->codec_id != AV_CODEC_ID_SCTE_35 && ts_st2->payload_size
                && (ts_st2->payload_dts == AV_NOPTS_VALUE || dts - ts_st2->payload_dts > delay/2)) {
                 mpegts_write_pes(s, st2, ts_st2->payload, ts_st2->payload_size,
                                  ts_st2->payload_pts, ts_st2->payload_dts,
@@ -1817,7 +1873,7 @@ static void mpegts_write_flush(AVFormatContext *s)
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         MpegTSWriteStream *ts_st = st->priv_data;
-        if (ts_st->payload_size > 0) {
+        if (st->codecpar->codec_id != AV_CODEC_ID_SCTE_35 && ts_st->payload_size > 0) {
             mpegts_write_pes(s, st, ts_st->payload, ts_st->payload_size,
                              ts_st->payload_pts, ts_st->payload_dts,
                              ts_st->payload_flags & AV_PKT_FLAG_KEY, -1);
@@ -1854,7 +1910,7 @@ static void mpegts_deinit(AVFormatContext *s)
     for (i = 0; i < s->nb_streams; i++) {
         AVStream *st = s->streams[i];
         MpegTSWriteStream *ts_st = st->priv_data;
-        if (ts_st) {
+        if (ts_st && st->codecpar->codec_id != AV_CODEC_ID_SCTE_35) {
             av_freep(&ts_st->payload);
             if (ts_st->amux) {
                 avformat_free_context(ts_st->amux);

@@ -215,6 +215,9 @@ void ffio_fill(AVIOContext *s, int b, int count)
 
 void avio_write(AVIOContext *s, const unsigned char *buf, int size)
 {
+    if (!s)
+        return;
+
     if (s->direct && !s->update_checksum) {
         avio_flush(s);
         writeout(s, buf, size);

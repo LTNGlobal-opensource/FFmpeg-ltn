@@ -50,6 +50,7 @@ extern AVDictionary *sws_dict;
 extern AVDictionary *swr_opts;
 extern AVDictionary *format_opts, *codec_opts, *resample_opts;
 extern int hide_banner;
+extern char *log_filename;
 
 /**
  * Register a program-specific cleanup routine.
@@ -240,6 +241,7 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
     { "max_alloc",   HAS_ARG,              { .func_arg = opt_max_alloc },    "set maximum size of a single allocated block", "bytes" }, \
     { "cpuflags",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpuflags },     "force specific cpu flags", "flags" },     \
     { "hide_banner", OPT_BOOL | OPT_EXPERT, {&hide_banner},     "do not show program banner", "hide_banner" },          \
+    { "logfile",     HAS_ARG | OPT_STRING | OPT_EXPERT, {&log_filename},                "write output to logfile", "file" },      \
     CMDUTILS_COMMON_OPTIONS_AVDEVICE                                                                                    \
 
 /**

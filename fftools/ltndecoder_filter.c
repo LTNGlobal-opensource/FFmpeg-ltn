@@ -452,6 +452,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     int pad_idx = out->pad_idx;
     int ret;
     char name[255];
+    int interlaced = ofilter->in_interlaced_frame;
+    int top_field_first = ofilter->in_top_field_first;
 
     snprintf(name, sizeof(name), "out_%d_%d", ost->file_index, ost->index);
     ret = avfilter_graph_create_filter(&ofilter->filter,
@@ -461,7 +463,12 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     if (ret < 0)
         return ret;
 
-    if (ofilter->width || ofilter->height) {
+    /* Note, skip the scaler if the source is 704x480, since we will just
+       pad it further down the pipeline */
+    if ((ofilter->width || ofilter->height) &&
+        !(of->ctx && of->ctx->oformat && strcmp(of->ctx->oformat->name, "decklink") == 0 &&
+          ofilter->width == 720 && ofilter->height == 480 &&
+          ofilter->in_width == 704 && ofilter->in_height == 480)) {
         char args[255];
         AVFilterContext *filter;
         AVDictionaryEntry *e = NULL;
@@ -473,8 +480,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
                                 AV_DICT_IGNORE_SUFFIX))) {
             av_strlcatf(args, sizeof(args), ":%s=%s", e->key, e->value);
         }
-        av_strlcatf(args, sizeof(args), ":interlaced=%d:top_field_first=%d",
-                    ofilter->interlaced_frame, ofilter->top_field_first);
+        av_strlcatf(args, sizeof(args), ":interl=%d", interlaced);
 
         snprintf(name, sizeof(name), "scaler_out_%d_%d",
                  ost->file_index, ost->index);
@@ -494,7 +500,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
                  ost->file_index, ost->index);
         ret = avfilter_graph_create_filter(&filter,
                                            avfilter_get_by_name("format"),
-                                           "format", pix_fmts, NULL, fg->graph);
+                                           name, pix_fmts, NULL, fg->graph);
         av_freep(&pix_fmts);
         if (ret < 0)
             return ret;
@@ -505,11 +511,12 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
         pad_idx     = 0;
     }
 
-    if (ost->frame_rate.num && 0) {
+    if (ost->frame_rate.num) {
         AVFilterContext *fps;
         char args[255];
 
-        snprintf(args, sizeof(args), "fps=%d/%d", ost->frame_rate.num,
+        snprintf(args, sizeof(args), "fps=%d/%d",
+                 (do_interlace && !interlaced) ? ost->frame_rate.num * 2 : ost->frame_rate.num,
                  ost->frame_rate.den);
         snprintf(name, sizeof(name), "fps_out_%d_%d",
                  ost->file_index, ost->index);
@@ -523,6 +530,76 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
             return ret;
         last_filter = fps;
         pad_idx = 0;
+    }
+
+    if (do_interlace && !interlaced) {
+        AVFilterContext *tinterlace;
+
+        snprintf(name, sizeof(name), "interlace_out_%d_%d",
+                 ost->file_index, ost->st->index);
+        if ((ret = avfilter_graph_create_filter(&tinterlace,
+                                                avfilter_get_by_name("tinterlace"),
+                                                name, "mode=interleave_top", NULL,
+                                                fg->graph)) < 0)
+            return ret;
+
+        if ((ret = avfilter_link(last_filter, 0, tinterlace, 0)) < 0)
+            return ret;
+
+        interlaced = 1;
+        top_field_first = 1;
+        last_filter = tinterlace;
+    }
+
+    if (of->ctx && of->ctx->oformat && strcmp(of->ctx->oformat->name, "decklink") == 0) {
+        /* Special case for SD output to Decklink cards (which expect ITU-656 video) */
+        int width = ofilter->width ? ofilter->width : ofilter->in_width;
+        int height = ofilter->height ? ofilter->height : ofilter->in_height;
+
+        if (height == 480) {
+            AVFilterContext *pad_filter;
+            char args[255];
+            int x = 0;
+
+            if (width == 704) {
+                /* Original encoder encoded in D1, so we pad 8 pixels on
+                   each side per the standard convention... */
+                x = 8;
+            }
+
+            /* Vertical padding is 2 on the top, 4 on the bottom, to preserve
+               field dominance */
+            snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2:color=black", 720, 486, x);
+            snprintf(name, sizeof(name), "pad_out_%d_%d",
+                     ost->file_index, ost->st->index);
+
+            if ((ret = avfilter_graph_create_filter(&pad_filter, avfilter_get_by_name("pad"),
+                                                    name, args, NULL, fg->graph)) < 0)
+                return ret;
+            if ((ret = avfilter_link(last_filter, 0, pad_filter, 0)) < 0)
+                return ret;
+
+            last_filter = pad_filter;
+            width = 720;
+            height = 486;
+        }
+
+        /* Special case if the source 480i video is TFF, since 480i video
+           over SDI is always supposed to be BFF */
+        if (height == 486 && top_field_first == 1) {
+            AVFilterContext *phase_filter;
+            snprintf(name, sizeof(name), "phase_out_%d_%d",
+                     ost->file_index, ost->st->index);
+
+            if ((ret = avfilter_graph_create_filter(&phase_filter, avfilter_get_by_name("phase"),
+                                                    name, "mode=t", NULL, fg->graph)) < 0)
+                return ret;
+            if ((ret = avfilter_link(last_filter, 0, phase_filter, 0)) < 0)
+                return ret;
+
+//                top_field_first = 0;
+            last_filter = phase_filter;
+        }
     }
 
     snprintf(name, sizeof(name), "trim_out_%d_%d",
@@ -754,6 +831,8 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
     int width = ifilter->width;
     int height = ifilter->height;
+    int interlaced_frame = ifilter->interlaced_frame;
+    int top_field_first = ifilter->top_field_first;
 
     if (!par)
         return AVERROR(ENOMEM);
@@ -838,65 +917,42 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         height *= 2;
     }
 
-    if (do_deinterlace) {
-        AVFilterContext *yadif;
+    if (interlaced_frame && do_deinterlace) {
+        AVFilterContext *deint_filter;
+        int deinterlace_mode;
 
         snprintf(name, sizeof(name), "deinterlace_in_%d_%d",
                  ist->file_index, ist->st->index);
-        if ((ret = avfilter_graph_create_filter(&yadif,
-                                                avfilter_get_by_name("yadif"),
-                                                name, "", NULL,
-                                                fg->graph)) < 0)
-            return ret;
 
-        if ((ret = avfilter_link(last_filter, 0, yadif, 0)) < 0)
-            return ret;
+        /* Do higher quality deinterlace for SD, since we're going to downscale
+           anyway... */
+        if (height > 576)
+            deinterlace_mode = deinterlace_hd_mode;
+        else
+            deinterlace_mode = deinterlace_sd_mode;
 
-        last_filter = yadif;
-    }
-
-    /* Special case for SD output to Decklink cards (which expect ITU-656 video) */
-    if (height == 480) {
-        AVFilterContext *pad_filter;
-        char args[255];
-        int x = 0;
-
-        if (width == 704) {
-            /* Original encoder encoded in D1, so we pad 8 pixels on
-               each side per the standard convention... */
-            x = 8;
+        if (deinterlace_mode == 0 || deinterlace_mode == 1) {
+            char args[255];
+            snprintf(args, sizeof(args), "mode=%d", deinterlace_mode);
+            if ((ret = avfilter_graph_create_filter(&deint_filter,
+                                                    avfilter_get_by_name("yadif"),
+                                                    name, args, NULL,
+                                                    fg->graph)) < 0)
+                return ret;
+        } else {
+            /* Fast mode where we just throw away half the field data */
+            if ((ret = avfilter_graph_create_filter(&deint_filter,
+                                                    avfilter_get_by_name("fieldextract"),
+                                                    name, NULL, NULL,
+                                                    fg->graph)) < 0)
+                return ret;
         }
 
-        /* Vertical padding is 2 on the top, 4 on the bottom, to preserve
-           field dominance */
-        snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2", 720, 486, x);
-        snprintf(name, sizeof(name), "pad_in_%d_%d",
-                 ist->file_index, ist->st->index);
-
-        if ((ret = avfilter_graph_create_filter(&pad_filter, avfilter_get_by_name("pad"),
-                                                name, args, NULL, fg->graph)) < 0)
-            return ret;
-        if ((ret = avfilter_link(last_filter, 0, pad_filter, 0)) < 0)
+        if ((ret = avfilter_link(last_filter, 0, deint_filter, 0)) < 0)
             return ret;
 
-        last_filter = pad_filter;
-
-        /* Special case if the source 480i video is TFF, since 480i video
-           over SDI is always supposed to be BFF */
-        if (ifilter->top_field_first == 1) {
-            snprintf(name, sizeof(name), "phase_%d_%d",
-                     ist->file_index, ist->st->index);
-
-            if ((ret = avfilter_graph_create_filter(&pad_filter, avfilter_get_by_name("phase"),
-                                                    name, "mode=t", NULL, fg->graph)) < 0)
-                return ret;
-            if ((ret = avfilter_link(last_filter, 0, pad_filter, 0)) < 0)
-                return ret;
-
-            last_filter = pad_filter;
-        }
-        width = 720;
-        height = 486;
+        interlaced_frame = 0;
+        last_filter = deint_filter;
     }
 
     struct sdi_video_modes {
@@ -953,6 +1009,14 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
 
     if ((ret = avfilter_link(last_filter, 0, in->filter_ctx, in->pad_idx)) < 0)
         return ret;
+
+    /* Preserve where we ended up so we can make that info available to the OutputFilter chain */
+    ifilter->out_width = width;
+    ifilter->out_height = height;
+    ifilter->out_sample_aspect_ratio = sar;
+    ifilter->out_interlaced_frame = interlaced_frame;
+    ifilter->out_top_field_first = top_field_first;
+
     return 0;
 fail:
     av_freep(&par);
@@ -1102,6 +1166,8 @@ int configure_filtergraph(FilterGraph *fg)
     int ret, i, simple = filtergraph_is_simple(fg);
     const char *graph_desc = simple ? fg->outputs[0]->ost->avfilter :
                                       fg->graph_desc;
+    int width = 0, height = 0, interlaced = 0;
+    AVRational framerate;
 
     cleanup_filtergraph(fg);
     if (!(fg->graph = avfilter_graph_alloc()))
@@ -1188,6 +1254,36 @@ int configure_filtergraph(FilterGraph *fg)
         goto fail;
     }
 
+    /* Hack to avoid deinterlacing/re-interlacing if the input and output are both
+       interlaced and we're not scaling or changing framerate */
+    for (cur = inputs, i = 0; cur; cur = cur->next, i++) {
+        if (avfilter_pad_get_type(cur->filter_ctx->input_pads, cur->pad_idx) == AVMEDIA_TYPE_VIDEO) {
+            InputFilter *filter = fg->inputs[i];
+            InputStream *ist = filter->ist;
+            width = filter->width;
+            height = filter->height;
+            interlaced = filter->interlaced_frame;
+            framerate = av_guess_frame_rate(input_files[ist->file_index]->ctx, ist->st, NULL);
+            av_log(NULL, AV_LOG_DEBUG, "%s Input video width %d height %d interlaced=%d fr=%d/%d\n",
+                   __func__, width, height, interlaced, framerate.num, framerate.den);
+        }
+    }
+    for (cur = outputs, i = 0; cur; cur = cur->next, i++) {
+        if (avfilter_pad_get_type(cur->filter_ctx->output_pads, cur->pad_idx) == AVMEDIA_TYPE_VIDEO) {
+            av_log(NULL, AV_LOG_DEBUG, "%s Output video width %d height %d interlaced=%d! fr=%d/%d\n",
+                   __func__, fg->outputs[i]->width, fg->outputs[i]->height, fg->outputs[i]->interlaced_frame,
+                   fg->outputs[i]->frame_rate.num, fg->outputs[i]->frame_rate.den);
+            if (fg->outputs[i]->width == width &&
+                fg->outputs[i]->height == height &&
+		fg->outputs[i]->frame_rate.num == framerate.num &&
+		fg->outputs[i]->frame_rate.den == framerate.den &&
+                interlaced && do_interlace) {
+                av_log(NULL, AV_LOG_DEBUG, "%s should disable deinterlacing!\n", __func__);
+                do_deinterlace = 0;
+            }
+        }
+    }
+
     for (cur = inputs, i = 0; cur; cur = cur->next, i++)
         if ((ret = configure_input_filter(fg, fg->inputs[i], cur)) < 0) {
             avfilter_inout_free(&inputs);
@@ -1196,12 +1292,43 @@ int configure_filtergraph(FilterGraph *fg)
         }
     avfilter_inout_free(&inputs);
 
-    for (cur = outputs, i = 0; cur; cur = cur->next, i++)
+    for (cur = outputs, i = 0; cur; cur = cur->next, i++) {
+        /* FIXME: we only expose the output of the first input */
+        fg->outputs[i]->in_width = fg->inputs[0]->out_width;
+        fg->outputs[i]->in_height = fg->inputs[0]->out_height;
+        fg->outputs[i]->in_sample_aspect_ratio = fg->inputs[0]->out_sample_aspect_ratio;
+        fg->outputs[i]->in_interlaced_frame = fg->inputs[0]->out_interlaced_frame;
+        fg->outputs[i]->in_top_field_first = fg->inputs[0]->out_top_field_first;
         configure_output_filter(fg, fg->outputs[i], cur);
+    }
     avfilter_inout_free(&outputs);
 
     if ((ret = avfilter_graph_config(fg->graph, NULL)) < 0)
         goto fail;
+
+    char *dot_dir = getenv("FFMPEG_DEBUG_DUMP_DOT_DIR");
+    if (dot_dir) {
+        char *dump = avfilter_graph_dump(fg->graph, "1");
+        FILE *outfile = NULL;
+        char filename[255];
+
+        snprintf(filename, sizeof(filename), "%s/graph_%d.dot", dot_dir,
+                 fg->index);
+        outfile = fopen(filename, "w");
+        if (outfile == NULL) {
+            av_log(NULL, AV_LOG_WARNING,
+                   "Failed to open file for graph dumping %s\n", filename);
+        } else {
+            fprintf(outfile, "digraph g {\n");
+            fprintf(outfile, "\tnode [style=\"filled\",shape=\"box\"]\n");
+            fprintf(outfile, "\trankdir=LR\n");
+            fputs(dump, outfile);
+            fprintf(outfile, "}\n");
+            fclose(outfile);
+        }
+
+        av_free(dump);
+    }
 
     /* limit the lists of allowed formats to the ones selected, to
      * make sure they stay the same if the filtergraph is reconfigured later */
@@ -1213,6 +1340,7 @@ int configure_filtergraph(FilterGraph *fg)
 
         ofilter->width  = av_buffersink_get_w(sink);
         ofilter->height = av_buffersink_get_h(sink);
+        ofilter->frame_rate = av_buffersink_get_frame_rate(sink);
         ofilter->interlaced_frame = av_buffersink_get_interlaced_frame(sink);
         ofilter->top_field_first = av_buffersink_get_top_field_first(sink);
 

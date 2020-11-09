@@ -156,6 +156,9 @@ static int config_input(AVFilterLink *inlink)
         }
     }
 
+    /* Make sure height divisible by 8 to avoid problems with swscale */
+    s->h = (s->h >> 3) << 3;
+
     /* evaluate x and y */
     av_expr_parse_and_eval(&res, (expr = s->x_expr),
                            var_names, var_values,

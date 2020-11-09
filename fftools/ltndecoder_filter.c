@@ -1166,6 +1166,8 @@ int configure_filtergraph(FilterGraph *fg)
     int ret, i, simple = filtergraph_is_simple(fg);
     const char *graph_desc = simple ? fg->outputs[0]->ost->avfilter :
                                       fg->graph_desc;
+    int width = 0, height = 0, interlaced = 0;
+    AVRational framerate;
 
     cleanup_filtergraph(fg);
     if (!(fg->graph = avfilter_graph_alloc()))
@@ -1250,6 +1252,36 @@ int configure_filtergraph(FilterGraph *fg)
                graph_desc, num_inputs, num_outputs);
         ret = AVERROR(EINVAL);
         goto fail;
+    }
+
+    /* Hack to avoid deinterlacing/re-interlacing if the input and output are both
+       interlaced and we're not scaling or changing framerate */
+    for (cur = inputs, i = 0; cur; cur = cur->next, i++) {
+        if (avfilter_pad_get_type(cur->filter_ctx->input_pads, cur->pad_idx) == AVMEDIA_TYPE_VIDEO) {
+            InputFilter *filter = fg->inputs[i];
+            InputStream *ist = filter->ist;
+            width = filter->width;
+            height = filter->height;
+            interlaced = filter->interlaced_frame;
+            framerate = av_guess_frame_rate(input_files[ist->file_index]->ctx, ist->st, NULL);
+            av_log(NULL, AV_LOG_DEBUG, "%s Input video width %d height %d interlaced=%d fr=%d/%d\n",
+                   __func__, width, height, interlaced, framerate.num, framerate.den);
+        }
+    }
+    for (cur = outputs, i = 0; cur; cur = cur->next, i++) {
+        if (avfilter_pad_get_type(cur->filter_ctx->output_pads, cur->pad_idx) == AVMEDIA_TYPE_VIDEO) {
+            av_log(NULL, AV_LOG_DEBUG, "%s Output video width %d height %d interlaced=%d! fr=%d/%d\n",
+                   __func__, fg->outputs[i]->width, fg->outputs[i]->height, fg->outputs[i]->interlaced_frame,
+                   fg->outputs[i]->frame_rate.num, fg->outputs[i]->frame_rate.den);
+            if (fg->outputs[i]->width == width &&
+                fg->outputs[i]->height == height &&
+		fg->outputs[i]->frame_rate.num == framerate.num &&
+		fg->outputs[i]->frame_rate.den == framerate.den &&
+                interlaced && do_interlace) {
+                av_log(NULL, AV_LOG_DEBUG, "%s should disable deinterlacing!\n", __func__);
+                do_deinterlace = 0;
+            }
+        }
     }
 
     for (cur = inputs, i = 0; cur; cur = cur->next, i++)

@@ -31,8 +31,6 @@
 #include "avcodec.h"
 #include "bsf.h"
 
-#include "libklscte35/scte35.h"
-
 static int scte35ptsadjust_init(AVBSFContext *ctx)
 {
     return 0;

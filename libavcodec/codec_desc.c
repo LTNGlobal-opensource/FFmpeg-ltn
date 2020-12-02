@@ -3375,6 +3375,13 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .mime_types= MT("application/octet-stream"),
     },
     {
+        .id        = AV_CODEC_ID_SMPTE_2038,
+        .type      = AVMEDIA_TYPE_DATA,
+        .name      = "smpte_2038",
+        .long_name = NULL_IF_CONFIG_SMALL("SMPTE ST 2038 VANC in MPEG-2 TS"),
+    },
+
+    {
         .id        = AV_CODEC_ID_WRAPPED_AVFRAME,
         .type      = AVMEDIA_TYPE_VIDEO,
         .name      = "wrapped_avframe",

@@ -352,6 +352,9 @@ static int get_dvb_stream_type(AVFormatContext *s, AVStream *st)
     case AV_CODEC_ID_SCTE_35:
         stream_type = STREAM_TYPE_SCTE_35;
         break;
+    case AV_CODEC_ID_SMPTE_2038:
+        stream_type = STREAM_TYPE_PRIVATE_DATA;
+        break;
     case AV_CODEC_ID_DVB_SUBTITLE:
     case AV_CODEC_ID_DVB_TELETEXT:
         stream_type = STREAM_TYPE_PRIVATE_DATA;
@@ -413,6 +416,9 @@ static int get_m2ts_stream_type(AVFormatContext *s, AVStream *st)
         break;
     case AV_CODEC_ID_HDMV_TEXT_SUBTITLE:
         stream_type = 0x92;
+        break;
+    case AV_CODEC_ID_SMPTE_2038:
+        stream_type = STREAM_TYPE_PRIVATE_DATA;
         break;
     default:
         av_log_once(s, AV_LOG_WARNING, AV_LOG_DEBUG, &ts_st->data_st_warning,
@@ -742,6 +748,8 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
                 *q++ = 0x8a; /* Cue Identifier Descriptor */
                 *q++ = 0x01; /* length */
                 *q++ = 0x01; /* Cue Stream Type (see Sec 8.2) */
+            } else if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038) {
+                put_registration_descriptor(&q, MKTAG('V', 'A', 'N', 'C'));
             }
             break;
         }
@@ -1464,7 +1472,8 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
             } else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
                 *q++ = stream_id != -1 ? stream_id : 0xfc;
 
-                if (stream_id == 0xbd) /* asynchronous KLV */
+                if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_KLV &&
+                    stream_id == 0xbd) /* asynchronous KLV */
                     pts = dts = AV_NOPTS_VALUE;
             } else {
                 *q++ = 0xbd;

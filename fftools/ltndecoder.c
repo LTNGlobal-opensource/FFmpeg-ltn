@@ -151,6 +151,15 @@ int         nb_output_files   = 0;
 FilterGraph **filtergraphs;
 int        nb_filtergraphs;
 
+/* Logger thread */
+static pthread_t log_thread;
+static pthread_cond_t log_cond = PTHREAD_COND_INITIALIZER;
+static AVMutex log_mutex = AV_MUTEX_INITIALIZER;
+static AVMutex log_fifo_mutex = AV_MUTEX_INITIALIZER;
+static AVFifoBuffer *log_fifo;
+static FILE *logfile = NULL;
+static int log_thread_exit = 0;
+
 #if HAVE_TERMIOS_H
 
 /* init terminal so that we can grab keys */
@@ -637,6 +646,15 @@ static void ffmpeg_cleanup(int ret)
     } else if (ret && atomic_load(&transcode_init_done)) {
         av_log(NULL, AV_LOG_INFO, "Conversion failed!\n");
     }
+
+    /* Terminate the logger thread */
+    if (log_fifo) {
+        ff_mutex_lock(&log_fifo_mutex);
+        log_thread_exit = 1;
+        pthread_cond_signal(&log_cond);
+        ff_mutex_unlock(&log_fifo_mutex);
+    }
+
     term_exit();
     ffmpeg_exited = 1;
 }
@@ -4869,17 +4887,8 @@ static void log_callback_null(void *ptr, int level, const char *fmt, va_list vl)
 {
 }
 
-static AVMutex log_mutex = AV_MUTEX_INITIALIZER;
-static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
+static void write_logfile(char *buf, int len)
 {
-    char line[1024];
-    char line2[1024];
-    time_t now;
-    struct tm *timeinfo;
-    unsigned tint = 0;
-    static int print_prefix = 1;
-    static FILE *logfile = NULL;
-
     if (received_sighup && logfile && log_filename) {
         /* Close and reopen logfile */
         received_sighup = 0;
@@ -4895,6 +4904,48 @@ static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
         /* Fall back to default behavior */
         logfile = stderr;
     }
+    fwrite(buf, 1, len, logfile);
+}
+
+static void *log_thread_func( void *whatever)
+{
+    char buf[1024];
+    int remaining = 0;
+    int len;
+
+    for(;;) {
+        if (remaining)
+            pthread_mutex_lock(&log_fifo_mutex);
+        else if (pthread_cond_wait(&log_cond, &log_fifo_mutex) < 0)
+            break;
+
+        if (log_thread_exit)
+            break;
+
+        if (av_fifo_size(log_fifo) < sizeof(buf))
+            len = av_fifo_size(log_fifo);
+        else
+            len = sizeof(buf);
+
+        av_fifo_generic_read(log_fifo, buf, len, NULL);
+        remaining = av_fifo_size(log_fifo);
+        pthread_mutex_unlock(&log_fifo_mutex);
+
+        write_logfile(buf, len);
+    }
+    pthread_mutex_unlock(&log_fifo_mutex);
+    return NULL;
+}
+
+static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
+{
+    char line[1024];
+    char line2[1024];
+    time_t now;
+    struct tm *timeinfo;
+    unsigned tint = 0;
+    static int print_prefix = 1;
+    struct timeval tv;
 
     if (level >= 0) {
         tint = level & 0xff00;
@@ -4915,9 +4966,14 @@ static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
     av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);
 
     av_strlcat(line2, line, sizeof(line2));
-    fprintf(logfile, "%s", line2);
+
+    /* Insert the log message onto the fifo and wake the logger thread */
+    ff_mutex_lock(&log_fifo_mutex);
+    av_fifo_generic_write(log_fifo, line2, strlen(line2), NULL);
+    pthread_cond_signal(&log_cond);
+    ff_mutex_unlock(&log_fifo_mutex);
+
     ff_mutex_unlock(&log_mutex);
-    fflush(logfile);
 }
 
 int main(int argc, char **argv)
@@ -4940,6 +4996,13 @@ int main(int argc, char **argv)
         argc--;
         argv++;
     } else {
+        log_fifo = av_fifo_alloc(1024*1024);
+        ret = pthread_create(&log_thread, NULL, log_thread_func, NULL);
+        if (ret != 0) {
+            fprintf(stderr, "Failed to create logger thread\n");
+            exit(1);
+        }
+
         av_log_set_callback(log_callback_ltn);
     }
 

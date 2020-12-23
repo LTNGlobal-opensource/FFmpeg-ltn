@@ -51,6 +51,7 @@ extern AVDictionary *swr_opts;
 extern AVDictionary *format_opts, *codec_opts, *resample_opts;
 extern int hide_banner;
 extern char *log_filename;
+extern int log_ms;
 
 /**
  * Register a program-specific cleanup routine.
@@ -236,6 +237,7 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
     { "sample_fmts", OPT_EXIT,             { .func_arg = show_sample_fmts }, "show available audio sample formats" },   \
     { "colors",      OPT_EXIT,             { .func_arg = show_colors },      "show available color names" },            \
     { "loglevel",    HAS_ARG,              { .func_arg = opt_loglevel },     "set logging level", "loglevel" },         \
+    { "log_ms",      OPT_BOOL | OPT_EXPERT, { &log_ms },        "show millisecond timestamps", "log_ms" }, \
     { "v",           HAS_ARG,              { .func_arg = opt_loglevel },     "set logging level", "loglevel" },         \
     { "report",      0,                    { (void*)opt_report },            "generate a report" },                     \
     { "max_alloc",   HAS_ARG,              { .func_arg = opt_max_alloc },    "set maximum size of a single allocated block", "bytes" }, \

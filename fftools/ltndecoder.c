@@ -4978,9 +4978,17 @@ static void log_callback_ltn(void *ptr, int level, const char *fmt, va_list vl)
     ff_mutex_lock(&log_mutex);
     time(&now);
     timeinfo = localtime(&now);
-    if (print_prefix == 1)
-        strftime(line2, sizeof(line2), "%F %T ", timeinfo);
-    else
+
+    if (print_prefix == 1) {
+        if (log_ms == 1) {
+            char dt[64];
+            gettimeofday(&tv,NULL);
+            strftime(dt, sizeof(dt), "%F %T", timeinfo);
+            snprintf(line2, sizeof(line2), "%s (%d.%06d) ", dt, tv.tv_sec, tv.tv_usec);
+        } else {
+            strftime(line2, sizeof(line2), "%F %T ", timeinfo);
+        }
+    } else
         line2[0] = '\0';
 
     av_log_format_line(ptr, level, fmt, vl, line, sizeof(line), &print_prefix);

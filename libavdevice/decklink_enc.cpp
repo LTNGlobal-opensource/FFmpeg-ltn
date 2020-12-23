@@ -207,7 +207,7 @@ public:
            the hardware with enough time for actual output. */
         int64_t window = streamtime + (bmdAudioSampleRate48kHz * 50 / 1000);
 
-        if (preroll) {
+        if (preroll && ctx->audio_pkt_numsamples) {
             /* Throw away everything but the most recent 500ms.  This is to prevent
                failures that occur if you attempt to schedule more than 1 second of audio. */
             int total_pkts = 0;

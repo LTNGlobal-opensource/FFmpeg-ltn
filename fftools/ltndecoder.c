@@ -653,6 +653,7 @@ static void ffmpeg_cleanup(int ret)
         log_thread_exit = 1;
         pthread_cond_signal(&log_cond);
         ff_mutex_unlock(&log_fifo_mutex);
+        pthread_join(log_thread, NULL);
     }
 
     term_exit();
@@ -4905,23 +4906,19 @@ static void write_logfile(char *buf, int len)
         logfile = stderr;
     }
     fwrite(buf, 1, len, logfile);
+    fflush(logfile);
 }
 
-static void *log_thread_func( void *whatever)
+/* Must be holding mutex before calling.  Will be holding
+   mutex on return */
+static void service_log_queue()
 {
     char buf[1024];
     int remaining = 0;
     int len;
 
-    for(;;) {
-        if (remaining)
-            pthread_mutex_lock(&log_fifo_mutex);
-        else if (pthread_cond_wait(&log_cond, &log_fifo_mutex) < 0)
-            break;
-
-        if (log_thread_exit)
-            break;
-
+    remaining = av_fifo_size(log_fifo);
+    while (remaining > 0) {
         if (av_fifo_size(log_fifo) < sizeof(buf))
             len = av_fifo_size(log_fifo);
         else
@@ -4932,8 +4929,31 @@ static void *log_thread_func( void *whatever)
         pthread_mutex_unlock(&log_fifo_mutex);
 
         write_logfile(buf, len);
+        pthread_mutex_lock(&log_fifo_mutex);
+    }
+}
+
+static void *log_thread_func( void *whatever)
+{
+    int x = 0;
+
+    pthread_mutex_lock(&log_fifo_mutex);
+    for(;;) {
+        if (log_thread_exit)
+            break;
+
+        if (pthread_cond_wait(&log_cond, &log_fifo_mutex) < 0)
+            break;
+
+        service_log_queue();
     }
     pthread_mutex_unlock(&log_fifo_mutex);
+
+    /* Write out anything remaining */
+    pthread_mutex_lock(&log_fifo_mutex);
+    service_log_queue();
+    pthread_mutex_unlock(&log_fifo_mutex);
+
     return NULL;
 }
 

@@ -118,10 +118,22 @@ public:
     virtual HRESULT STDMETHODCALLTYPE GetAncillaryData(IDeckLinkVideoFrameAncillary **ancillary)
     {
         *ancillary = _ancillary;
-        return _ancillary ? S_OK : S_FALSE;
+        if (_ancillary) {
+            _ancillary->AddRef();
+            return S_OK;
+        } else {
+            return S_FALSE;
+        }
     }
-    virtual HRESULT STDMETHODCALLTYPE SetAncillaryData(IDeckLinkVideoFrameAncillary
-                                                       *ancillary) { _ancillary = ancillary; return S_OK; }
+    virtual HRESULT STDMETHODCALLTYPE SetAncillaryData(IDeckLinkVideoFrameAncillary *ancillary)
+    {
+        if (_ancillary)
+            _ancillary->Release();
+        _ancillary = ancillary;
+        _ancillary->AddRef();
+        return S_OK;
+    }
+
     virtual HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, LPVOID *ppv) { return E_NOINTERFACE; }
     virtual ULONG   STDMETHODCALLTYPE AddRef(void)                            { return ++_refs; }
     virtual ULONG   STDMETHODCALLTYPE Release(void)
@@ -130,6 +142,8 @@ public:
         if (!ret) {
             av_frame_free(&_avframe);
             av_packet_free(&_avpacket);
+            if (_ancillary)
+                _ancillary->Release();
             delete this;
         }
         return ret;
@@ -913,6 +927,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
     }
 
     result = frame->SetAncillaryData(vanc);
+    vanc->Release();
     if (result != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Failed to set vanc: %d", result);
         return AVERROR(EIO);

@@ -127,6 +127,8 @@ struct decklink_ctx {
     int frames_preroll;
     int frames_buffer;
     int frames_discard;
+    BMDTimeValue frames_last_reset; /* Last time we slipped audio/video */
+    time_t last_fifo_report;
 
     pthread_mutex_t mutex;
     pthread_cond_t cond;

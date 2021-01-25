@@ -65,6 +65,7 @@ struct decklink_cctx {
     int scte104_line;
     char *udp_monitor;
     int use_3glevel_a;
+    int debug_level;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

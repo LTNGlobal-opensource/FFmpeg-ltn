@@ -364,6 +364,8 @@ public:
             if (ret != 0) {
                 av_log(_avctx, AV_LOG_WARNING, "Failed getting streamtime %d\n", ret);
             }
+
+            ltnlog_stat("FIFO AUDIO BYTES", buffered);
             if (ctx->playback_started && buffered < (48000 / 50)){
                 av_log(_avctx, AV_LOG_WARNING, "There's insufficient buffered audio (%d) (vid=%d)."
                        " Audio will misbehave! vid_streamtime=%ld flr=%ld\n", buffered, vid_buffered,
@@ -813,6 +815,7 @@ static void construct_afd(AVFormatContext *avctx, struct decklink_cctx *cctx,
             av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
             return;
         }
+        ltnlog_stat("AFD", data[0]);
     }
 }
 
@@ -915,6 +918,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_cctx 
                 av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
                 break;
             }
+	    ltnlog_stat("SCTE104", 1);
         } else {
             av_log(avctx, AV_LOG_ERROR, "Unknown packet type received: %d\n",
                    vanc_st->codecpar->codec_id);
@@ -1467,6 +1471,8 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         if (ret < 0)
             av_log(avctx, AV_LOG_ERROR, "Failed to setup LTN logger");
     }
+
+    ltnlog_stat("VIDEOMODE", ctx->bmd_mode);
 
     return 0;
 

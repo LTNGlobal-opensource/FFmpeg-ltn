@@ -171,6 +171,7 @@ static void init_options(OptionsContext *o)
     o->recording_time = INT64_MAX;
     o->limit_filesize = UINT64_MAX;
     o->chapters_input_file = INT_MAX;
+    o->src_program_num = INT_MAX;
     o->accurate_seek  = 1;
 }
 
@@ -2237,7 +2238,19 @@ static int open_output_file(OptionsContext *o, const char *filename)
 
         if (nb_input_files == 1 && input_files[0]->ctx->nb_programs > 0) {
             /* Input file is arranged into programs, so respect that */
-            AVProgram *prg = input_files[0]->ctx->programs[0];
+            AVProgram *prg = NULL;
+            if (o->src_program_num != -1) {
+                for (int i = 0; i < input_files[0]->ctx->nb_programs; i++) {
+                    if (input_files[0]->ctx->programs[i]->program_num == o->src_program_num)
+                        prg = input_files[0]->ctx->programs[i];
+                }
+                if(!prg) {
+                    av_log(NULL, AV_LOG_FATAL, "Program %d was not found in source\n", o->src_program_num);
+                    exit_program(1);
+                }
+            } else {
+                prg = input_files[0]->ctx->programs[0];
+            }
             if (!o->video_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
                                                     AVMEDIA_TYPE_VIDEO) != AV_CODEC_ID_NONE) {
                 for (i = 0; i < prg->nb_stream_indexes; i++) {
@@ -3520,6 +3533,9 @@ const OptionDef options[] = {
         "outfile[,metadata]:infile[,metadata]" },
     { "map_chapters",   HAS_ARG | OPT_INT | OPT_EXPERT | OPT_OFFSET |
                         OPT_OUTPUT,                                  { .off = OFFSET(chapters_input_file) },
+        "set chapters mapping", "input_file_index" },
+    { "program_num",   HAS_ARG | OPT_INT | OPT_EXPERT | OPT_OFFSET |
+                        OPT_OUTPUT,                                  { .off = OFFSET(src_program_num) },
         "set chapters mapping", "input_file_index" },
     { "t",              HAS_ARG | OPT_TIME | OPT_OFFSET |
                         OPT_INPUT | OPT_OUTPUT,                      { .off = OFFSET(recording_time) },

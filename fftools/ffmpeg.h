@@ -144,6 +144,7 @@ typedef struct OptionsContext {
     int metadata_chapters_manual;
     const char **attachments;
     int       nb_attachments;
+    int src_program_num;
 
     int chapters_input_file;
 

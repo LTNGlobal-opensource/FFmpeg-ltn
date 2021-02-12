@@ -42,6 +42,7 @@
 #include "url.h"
 #include "ltnlog.h"
 #include "libavutil/vtune.h"
+#include "udpstats.h"
 
 #ifdef __APPLE__
 #include "TargetConditionals.h"
@@ -111,6 +112,8 @@ typedef struct UDPContext {
     char *sources;
     char *block;
     int warn_src_change;
+    struct tool_context_s stats_ctx;
+    time_t now;
 } UDPContext;
 
 #define OFFSET(x) offsetof(UDPContext, x)
@@ -561,6 +564,8 @@ static void *circular_buffer_task_rx( void *_URLContext)
                 }
             }
         }
+
+        udp_stats(&s->stats_ctx, s->tmp + 4, len);
 
         if(av_fifo_space(s->fifo) < len + 4) {
             /* No Space left */
@@ -1060,6 +1065,20 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
     int ret;
 #if HAVE_PTHREAD_CANCEL
     int avail, nonblock = h->flags & AVIO_FLAG_NONBLOCK;
+
+    if (s->now != s->stats_ctx.bytesWrittenTime) {
+        s->now = s->stats_ctx.bytesWrittenTime;
+
+        ltnlog_stat("UDP BPS", s->stats_ctx.bytesWritten * 8);
+        for (int i = 0; i < MAX_PID; i++) {
+            struct pid_statistics_s *pid = &s->stats_ctx.stream.pids[i];
+            if (!pid->enabled)
+                continue;
+
+            ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld\n",
+                       i, pid->packetCount, pid->ccErrors, pid->teiErrors);
+        }
+    }
 
     av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);
 

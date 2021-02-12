@@ -241,6 +241,20 @@ public:
         decklink_frame *frame = static_cast<decklink_frame *>(_frame);
         struct decklink_ctx *ctx = frame->_ctx;
 
+        if (frame->_avpacket) {
+            uint8_t *side_data;
+            int side_data_size;
+
+            av_packet_update_pipelinestats(frame->_avpacket, AVFORMAT_OUTPUT_TIME,
+                                           av_gettime(), -1, -1);
+            side_data = av_packet_get_side_data(frame->_avpacket, AV_PKT_DATA_PIPELINE_STATS,
+                                                &side_data_size);
+            if (side_data) {
+                struct AVPipelineStats *stats = (struct AVPipelineStats *) side_data;
+                ltnlog_stat("VIDEOLATENCY_MS", (stats->avformat_output_time - stats->avformat_input_time) / 1000);
+            }
+        }
+
         pthread_mutex_lock(&ctx->mutex);
         ctx->frames_buffer_available_spots++;
         pthread_cond_broadcast(&ctx->cond);

@@ -56,6 +56,7 @@ HEADERS = adler32.h                                                     \
           murmur3.h                                                     \
           opt.h                                                         \
           parseutils.h                                                  \
+          pipeline_stats.h                                              \
           pixdesc.h                                                     \
           pixelutils.h                                                  \
           pixfmt.h                                                      \
@@ -135,6 +136,7 @@ OBJS = adler32.o                                                        \
        murmur3.o                                                        \
        opt.o                                                            \
        parseutils.o                                                     \
+       pipeline_stats.o                                                 \
        pixdesc.o                                                        \
        pixelutils.o                                                     \
        random_seed.o                                                    \

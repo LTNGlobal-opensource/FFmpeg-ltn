@@ -40,6 +40,7 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
+#include "libavformat/ltnlog.h"
 
 #define DEFAULT_PASS_LOGFILENAME_PREFIX "ffmpeg2pass"
 
@@ -3279,6 +3280,17 @@ static int opt_filter_complex_script(void *optctx, const char *opt, const char *
     return 0;
 }
 
+static int opt_ltn_udp_monitor(void *optctx, const char *opt, const char *arg)
+{
+    int ret;
+
+    /* Set up notifications back to LTN controller */
+    ret = ltnlog_setup(arg);
+    if (ret < 0)
+        av_log(NULL, AV_LOG_ERROR, "Failed to setup LTN logger");
+    return 0;
+}
+
 void show_help_default(const char *opt, const char *arg)
 {
     /* per-file options have at least one of those set */
@@ -3855,6 +3867,9 @@ const OptionDef options[] = {
         "force data codec ('copy' to copy stream)", "codec" },
     { "dn", OPT_BOOL | OPT_VIDEO | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT, { .off = OFFSET(data_disable) },
         "disable data" },
+
+    { "udp_monitor",          HAS_ARG | OPT_EXPERT,                      { .func_arg = opt_ltn_udp_monitor },
+        "monitoring port for LTN stats", "" },
 
 #if CONFIG_VAAPI
     { "vaapi_device", HAS_ARG | OPT_EXPERT, { .func_arg = opt_vaapi_device },

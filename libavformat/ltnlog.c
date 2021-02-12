@@ -111,6 +111,8 @@ void ltnlog_msg(const char *msgtype, const char *fmt, ...)
     va_start(va, fmt);
     vsnprintf(buf, sizeof(buf), fmt, va);
     va_end(va);
+
+    final[0] = 0x00;
     av_strlcatf(final, sizeof(final), "%s: %s", msgtype, buf);
 
     send(ltn_log_fd, final, strlen(final), 0);

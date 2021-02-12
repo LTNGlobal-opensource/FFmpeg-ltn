@@ -2251,15 +2251,16 @@ static int open_output_file(OptionsContext *o, const char *filename)
             if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
                                                     AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
                 for (i = 0; i < prg->nb_stream_indexes; i++) {
-                    if (input_streams[prg->stream_index[i]]->st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-                        if (input_streams[prg->stream_index[i]]->st->codecpar->channels == 0 ||
-                            input_streams[prg->stream_index[i]]->st->codecpar->sample_rate == 0) {
+                    AVStream *st = input_streams[prg->stream_index[i]]->st;
+                    if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                        if (st->codecpar->channels == 0 ||
+                            st->codecpar->sample_rate == 0) {
                             av_log(NULL, AV_LOG_WARNING, "Insufficent data to add audio stream %d. chan=%d sr=%d\n",
-                                   i, input_streams[prg->stream_index[i]]->st->codecpar->channels,
-                                   input_streams[prg->stream_index[i]]->st->codecpar->sample_rate);
+                                   i, st->codecpar->channels,
+                                   st->codecpar->sample_rate);
                             continue;
                         }
-                        new_audio_stream(o, oc, input_streams[prg->stream_index[i]]->st->index);
+                        new_audio_stream(o, oc, st->index);
 
                         if (getenv("LTN_ENABLE_AUDIO_ALL") == NULL) {
                             /* We've successfully found one stream and we're not told

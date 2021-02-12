@@ -1480,6 +1480,8 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     av_vtune_log_event("write_header", t1, av_vtune_get_timestamp(), 1);
 
     ltnlog_stat("VIDEOMODE", ctx->bmd_mode);
+    ltnlog_stat("AUDIO STREAMCOUNT", ctx->audio);
+    ltnlog_stat("AUDIO CHANNELCOUNT", ctx->channels);
 
     return 0;
 

@@ -397,38 +397,28 @@ public:
 };
 
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080000
-static void reset_output(AVFormatContext *avctx, IDeckLink *p_card, IDeckLinkOutput *p_output)
+static void reset_output(AVFormatContext *avctx, struct decklink_ctx *ctx)
 {
     /* The decklink driver can sometimes get stuck in a state where
        EnableVideoOutput always fails.  To work around this issue,
        call it with the last configured output mode, which causes it
        to recover */
-    IDeckLinkStatus *p_status;
     int64_t vid_mode;
     int result;
 
-    result = p_card->QueryInterface(IID_IDeckLinkStatus, (void**)&p_status);
-    if (result != S_OK) {
-        av_log(avctx, AV_LOG_ERROR, "Could not get status interface");
-        return;
-    }
-
-    result = p_status->GetInt(bmdDeckLinkStatusCurrentVideoOutputMode, &vid_mode);
+    result = ctx->status->GetInt(bmdDeckLinkStatusCurrentVideoOutputMode, &vid_mode);
     if (result != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not get current video output mode");
-        p_status->Release();
         return;
     }
 
-    result = p_output->EnableVideoOutput(vid_mode, bmdVideoOutputFlagDefault);
+    result = ctx->dlo->EnableVideoOutput(vid_mode, bmdVideoOutputFlagDefault);
     if (result != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not get enable video output mode");
-        p_status->Release();
         return;
     }
 
-    p_output->DisableVideoOutput();
-    p_status->Release();
+    ctx->dlo->DisableVideoOutput();
 }
 #endif
 
@@ -528,7 +518,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     }
 
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a080000
-    reset_output(avctx, ctx->dl, ctx->dlo);
+    reset_output(avctx, ctx);
 #endif
 
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a040000
@@ -1175,6 +1165,17 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     }
 
     av_vtune_log_event("write_video", t1, av_vtune_get_timestamp(), 1);
+
+    /* Once per second, update the reported status of the Reference Input */
+    time_t cur_time;
+    time(&cur_time);
+    if (ctx->last_refstatus_report != cur_time) {
+        int64_t ref_mode = 0;
+
+        ctx->status->GetInt(bmdDeckLinkStatusReferenceSignalMode, &ref_mode);
+        ltnlog_stat("REFERENCESIGNALMODE", ref_mode);
+        ctx->last_refstatus_report = cur_time;
+    }
 
     return 0;
 }

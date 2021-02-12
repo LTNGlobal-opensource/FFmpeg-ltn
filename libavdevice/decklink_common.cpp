@@ -471,6 +471,8 @@ void ff_decklink_cleanup(AVFormatContext *avctx)
         ctx->cfg->Release();
     if (ctx->dl)
         ctx->dl->Release();
+    if (ctx->status)
+        ctx->status->Release();
 }
 
 int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
@@ -517,6 +519,12 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
 
     if (ctx->dl->QueryInterface(IID_IDeckLinkAttributes, (void **)&ctx->attr) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not get attributes interface for '%s'\n", name);
+        ff_decklink_cleanup(avctx);
+        return AVERROR_EXTERNAL;
+    }
+
+    if (ctx->dl->QueryInterface(IID_IDeckLinkStatus, (void **)&ctx->status) != S_OK) {
+        av_log(avctx, AV_LOG_ERROR, "Could not get status interface for '%s'\n", name);
         ff_decklink_cleanup(avctx);
         return AVERROR_EXTERNAL;
     }

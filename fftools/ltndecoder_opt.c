@@ -2237,15 +2237,13 @@ static int open_output_file(OptionsContext *o, const char *filename)
 
         if (nb_input_files == 1 && input_files[0]->ctx->nb_programs > 0) {
             /* Input file is arranged into programs, so respect that */
-            int video_idx = -1, audio_idx;
             AVProgram *prg = input_files[0]->ctx->programs[0];
             if (!o->video_disable && av_guess_codec(oc->oformat, NULL, filename, NULL,
                                                     AVMEDIA_TYPE_VIDEO) != AV_CODEC_ID_NONE) {
                 for (i = 0; i < prg->nb_stream_indexes; i++) {
                     AVStream *st = input_streams[prg->stream_index[i]]->st;
                     if (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-                        video_idx = st->index;
-                        new_video_stream(o, oc, video_idx);
+                        new_video_stream(o, oc, st->index);
                         break;
                     }
                 }
@@ -2261,7 +2259,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
                                    input_streams[prg->stream_index[i]]->st->codecpar->sample_rate);
                             continue;
                         }
-                        new_audio_stream(o, oc, i);
+                        new_audio_stream(o, oc, input_streams[prg->stream_index[i]]->st->index);
 
                         if (getenv("LTN_ENABLE_AUDIO_ALL") == NULL) {
                             /* We've successfully found one stream and we're not told

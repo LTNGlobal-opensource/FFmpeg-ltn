@@ -2239,7 +2239,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
         if (nb_input_files == 1 && input_files[0]->ctx->nb_programs > 0) {
             /* Input file is arranged into programs, so respect that */
             AVProgram *prg = NULL;
-            if (o->src_program_num != -1) {
+            if (o->src_program_num != INT_MAX) {
                 for (int i = 0; i < input_files[0]->ctx->nb_programs; i++) {
                     if (input_files[0]->ctx->programs[i]->program_num == o->src_program_num)
                         prg = input_files[0]->ctx->programs[i];

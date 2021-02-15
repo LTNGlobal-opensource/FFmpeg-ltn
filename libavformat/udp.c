@@ -737,6 +737,8 @@ static int udp_open(URLContext *h, const char *uri, int flags)
     int i, num_include_sources = 0, num_exclude_sources = 0;
     char *include_sources[32], *exclude_sources[32];
 
+    ltnlog_msg("UDP SOURCE", "%s", uri);
+
     h->is_streamed = 1;
 
     is_output = !(flags & AVIO_FLAG_READ);

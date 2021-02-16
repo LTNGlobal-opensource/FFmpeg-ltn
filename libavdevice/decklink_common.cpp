@@ -471,8 +471,10 @@ void ff_decklink_cleanup(AVFormatContext *avctx)
         ctx->cfg->Release();
     if (ctx->dl)
         ctx->dl->Release();
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100
     if (ctx->status)
         ctx->status->Release();
+#endif
 }
 
 int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
@@ -523,11 +525,13 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
         return AVERROR_EXTERNAL;
     }
 
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100
     if (ctx->dl->QueryInterface(IID_IDeckLinkStatus, (void **)&ctx->status) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not get status interface for '%s'\n", name);
         ff_decklink_cleanup(avctx);
         return AVERROR_EXTERNAL;
     }
+#endif
 
     if (ctx->attr->GetInt(BMDDeckLinkMaximumAudioChannels, &ctx->max_audio_channels) != S_OK) {
         av_log(avctx, AV_LOG_WARNING, "Could not determine number of audio channels\n");

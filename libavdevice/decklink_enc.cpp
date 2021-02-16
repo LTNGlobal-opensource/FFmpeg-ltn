@@ -1171,12 +1171,14 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     time(&cur_time);
     if (ctx->last_refstatus_report != cur_time) {
         int64_t ref_mode = 0;
-
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100
         ctx->status->GetInt(bmdDeckLinkStatusReferenceSignalMode, &ref_mode);
+#else
+        ref_mode = -1; /* Unsupported */
+#endif
         ltnlog_stat("REFERENCESIGNALMODE", ref_mode);
         ctx->last_refstatus_report = cur_time;
     }
-
     return 0;
 }
 

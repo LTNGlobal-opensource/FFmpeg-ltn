@@ -73,7 +73,9 @@ struct decklink_ctx {
     IDeckLinkInput *dli;
     IDeckLinkConfiguration *cfg;
     IDeckLinkAttributes *attr;
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100
     IDeckLinkStatus *status;
+#endif
     decklink_output_callback *output_callback;
     decklink_input_callback *input_callback;
 

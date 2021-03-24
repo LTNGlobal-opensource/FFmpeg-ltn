@@ -1102,6 +1102,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
         ret = avformat_find_stream_info(ic, opts);
 
         ltnlog_stat("FIND_STREAM_INFO_MS", (av_gettime() - find_stream_start_time) / 1000);
+        av_log(NULL, AV_LOG_INFO, "%s required %d ms\n", __func__, (av_gettime() - find_stream_start_time) / 1000);
 
         for (i = 0; i < orig_nb_streams; i++)
             av_dict_free(&opts[i]);

@@ -38,6 +38,7 @@
 #include "avio_internal.h"
 #include "mpeg.h"
 #include "isom.h"
+#include "libavformat/ltnlog.h"
 
 /* maximum size in which we look for synchronization if
  * synchronization is lost */
@@ -2684,6 +2685,9 @@ static int mpegts_read_header(AVFormatContext *s)
 
         handle_packets(ts, probesize / ts->raw_packet_size);
         /* if could not find service, enable auto_guess */
+
+        av_log(s, AV_LOG_INFO, "%s required %d bytes\n", __func__, avio_tell(pb));
+        ltnlog_stat("READ_HEADER_BYTES", avio_tell(s->pb));
 
 #ifdef LTN_CONTINUE_EVEN_IF_PMT_NOT_FOUND
         ts->auto_guess = 1;

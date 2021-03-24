@@ -1080,6 +1080,7 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
             ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld\n",
                        i, pid->packetCount, pid->ccErrors, pid->teiErrors);
         }
+        ltnlog_stat("UDP FIFO", av_fifo_size(s->fifo));
     }
 
     av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);

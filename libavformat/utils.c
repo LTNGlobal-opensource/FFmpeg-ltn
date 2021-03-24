@@ -44,6 +44,7 @@
 
 #include "audiointerleave.h"
 #include "avformat.h"
+#include "libavformat/ltnlog.h"
 #include "avio_internal.h"
 #include "id3v2.h"
 #include "internal.h"
@@ -549,6 +550,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     int i, ret = 0;
     AVDictionary *tmp = NULL;
     ID3v2ExtraMeta *id3v2_extra_meta = NULL;
+    int64_t read_header_start_time;
 
     if (!s && !(s = avformat_alloc_context()))
         return AVERROR(ENOMEM);
@@ -625,10 +627,13 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     if (s->pb)
         ff_id3v2_read_dict(s->pb, &s->internal->id3v2_meta, ID3v2_DEFAULT_MAGIC, &id3v2_extra_meta);
 
+    read_header_start_time = av_gettime();
 
     if (!(s->flags&AVFMT_FLAG_PRIV_OPT) && s->iformat->read_header)
         if ((ret = s->iformat->read_header(s)) < 0)
             goto fail;
+
+    ltnlog_stat("READ_HEADER_MS", (av_gettime() - read_header_start_time) / 1000);
 
     if (!s->metadata) {
         s->metadata = s->internal->id3v2_meta;
@@ -4185,10 +4190,11 @@ find_stream_info_err:
         av_bsf_free(&ic->streams[i]->internal->extract_extradata.bsf);
         av_packet_free(&ic->streams[i]->internal->extract_extradata.pkt);
     }
-    if (ic->pb)
+    if (ic->pb) {
         av_log(ic, AV_LOG_DEBUG, "After avformat_find_stream_info() pos: %"PRId64" bytes read:%"PRId64" seeks:%d frames:%d\n",
                avio_tell(ic->pb), ic->pb->bytes_read, ic->pb->seek_count, count);
-
+        ltnlog_stat("FIND_STREAM_INFO_BYTES", ic->pb->bytes_read);
+    }
     av_vtune_log_event("find_stream_info", t1, av_vtune_get_timestamp(), 1);
 
     return ret;

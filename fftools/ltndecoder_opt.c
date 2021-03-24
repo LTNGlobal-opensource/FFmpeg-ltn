@@ -40,6 +40,7 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
+#include "libavutil/time.h"
 #include "libavformat/ltnlog.h"
 
 #define DEFAULT_PASS_LOGFILENAME_PREFIX "ffmpeg2pass"
@@ -980,6 +981,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
     char *subtitle_codec_name = NULL;
     char *    data_codec_name = NULL;
     int scan_all_pmts_set = 0;
+    int64_t find_stream_start_time;
 
     if (o->stop_time != INT64_MAX && o->recording_time != INT64_MAX) {
         o->stop_time = INT64_MAX;
@@ -1093,9 +1095,13 @@ static int open_input_file(OptionsContext *o, const char *filename)
         AVDictionary **opts = setup_find_stream_info_opts(ic, o->g->codec_opts);
         int orig_nb_streams = ic->nb_streams;
 
+        find_stream_start_time = av_gettime();
+
         /* If not enough info to get the stream parameters, we decode the
            first frames to get it. (used in mpeg case for example) */
         ret = avformat_find_stream_info(ic, opts);
+
+        ltnlog_stat("FIND_STREAM_INFO_MS", (av_gettime() - find_stream_start_time) / 1000);
 
         for (i = 0; i < orig_nb_streams; i++)
             av_dict_free(&opts[i]);

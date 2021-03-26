@@ -3610,6 +3610,10 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
     int eof_reached = 0;
     uint64_t t1;
     int *missing_streams = av_opt_ptr(ic->iformat->priv_class, ic->priv_data, "missing_streams");
+    int64_t selected_program = -1;
+
+    av_opt_get_int(ic, "selected_program", AV_OPT_SEARCH_CHILDREN, &selected_program);
+    av_log(ic, AV_LOG_INFO, "%s selected_program: %"PRId64"\n", __func__, selected_program);
 
     t1 = av_vtune_get_timestamp();
 
@@ -3730,9 +3734,17 @@ FF_ENABLE_DEPRECATION_WARNINGS
         /* check if one codec still needs to be handled */
         for (i = 0; i < ic->nb_streams; i++) {
             int fps_analyze_framecount = 20;
+            AVProgram *prog;
             int count;
 
             st = ic->streams[i];
+
+            prog = av_find_program_from_stream(ic, NULL, i);
+            if (prog && prog->program_num != selected_program) {
+                av_log(ic, AV_LOG_DEBUG, "skipping stream %d which is part of program %d\n", i, prog->program_num);
+                continue;
+            }
+
             if (!has_codec_parameters(st, NULL))
                 break;
             /* If the timebase is coarse (like the usual millisecond precision

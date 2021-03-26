@@ -157,6 +157,8 @@ struct MpegTSContext {
     unsigned int nb_prg;
     struct Program *prg;
 
+    int selected_program;
+
     int8_t crc_validity[NB_PID_MAX];
     /** filters for various streams specified by PMT + for the PAT and PMT */
     MpegTSFilter *pids[NB_PID_MAX];
@@ -178,6 +180,8 @@ static const AVOption options[] = {
      {.i64 = 0}, 0, 1, 0 },
     {"skip_clear", "skip clearing programs", offsetof(MpegTSContext, skip_clear), AV_OPT_TYPE_BOOL,
      {.i64 = 0}, 0, 1, 0 },
+    {"selected_program", "prefilter by program", offsetof(MpegTSContext, selected_program), AV_OPT_TYPE_INT,
+     {.i64 = -1}, -1, 65535, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
 
@@ -1965,6 +1969,12 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
     p = section;
     if (parse_section_header(h, &p, p_end) < 0)
         return;
+
+    /* If we are only interested in a single program, ignore any other programs
+       announced on the same PMT PID */
+    if (ts->selected_program != -1 && ts->selected_program != h->id)
+        return;
+
     if (skip_identical(h, tssf))
         return;
 
@@ -2165,6 +2175,8 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
             if (program) {
                 program->program_num = sid;
                 program->pmt_pid = pmt_pid;
+                if (ts->selected_program != -1 && ts->selected_program != sid)
+                    program->discard = AVDISCARD_ALL;
             }
             if (fil)
                 if (   fil->type != MPEGTS_SECTION
@@ -2172,8 +2184,10 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                     || fil->u.section_filter.section_cb != pmt_cb)
                     mpegts_close_filter(ts, ts->pids[pmt_pid]);
 
-            if (!ts->pids[pmt_pid])
-                mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 1);
+            if (!ts->pids[pmt_pid]) {
+                if (ts->selected_program == -1 || ts->selected_program == sid)
+                    mpegts_open_section_filter(ts, pmt_pid, pmt_cb, ts, 1);
+	    }
             add_pat_entry(ts, sid);
             add_pid_to_pmt(ts, sid, 0); // add pat pid to program
             add_pid_to_pmt(ts, sid, pmt_pid);
@@ -2387,9 +2401,19 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet)
         // when all programs have received a PMT
         if (ts->stream->ctx_flags & AVFMTCTX_NOHEADER && ts->scan_all_pmts <= 0) {
             int i;
-            for (i = 0; i < ts->nb_prg; i++) {
-                if (!ts->prg[i].pmt_found)
-                    break;
+
+            if (ts->selected_program != -1) {
+                for (i = 0; i < ts->nb_prg; i++) {
+                    if (ts->prg[i].id == ts->selected_program && ts->prg[i].pmt_found) {
+                        i = ts->nb_prg;
+                        break;
+                    }
+                }
+            } else {
+                for (i = 0; i < ts->nb_prg; i++) {
+                    if (!ts->prg[i].pmt_found)
+                        break;
+                }
             }
             if (i == ts->nb_prg && ts->nb_prg > 0) {
                 int types = 0;
@@ -2688,6 +2712,23 @@ static int mpegts_read_header(AVFormatContext *s)
 
         av_log(s, AV_LOG_INFO, "%s required %d bytes\n", __func__, avio_tell(pb));
         ltnlog_stat("READ_HEADER_BYTES", avio_tell(s->pb));
+
+        if (ts->selected_program != -1) {
+            /* See if we found the program the user asked for... */
+            int i;
+            for (i = 0; i < ts->nb_prg; i++) {
+                if (ts->prg[i].id == ts->selected_program && ts->prg[i].pmt_found) {
+                    av_log(ts->stream, AV_LOG_INFO, "DJH PMT for %d was found\n",
+                           ts->prg[i].id);
+                    break;
+                }
+            }
+            if (i == ts->nb_prg) {
+                av_log(ts->stream, AV_LOG_ERROR, "DJH Program requested %d was not found in PAT\n",
+                       ts->selected_program);
+                return AVERROR(EINVAL);
+            }
+        }
 
 #ifdef LTN_CONTINUE_EVEN_IF_PMT_NOT_FOUND
         ts->auto_guess = 1;

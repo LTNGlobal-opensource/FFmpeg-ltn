@@ -114,9 +114,10 @@ static void writeFrame(BurnContext *ctx, AVFrame *frame, uint8_t *pic, uint32_t 
 		}
 	}
 
-	printf("Frame %dx%d fmt:%s buf:%p bytes:%d burned-in-frame#%08d totalframes#%08d\n",
-		frame->width, frame->height, av_get_pix_fmt_name(frame->format), pic, sizeBytes,
-		ctx->frameCounter, ctx->framesProcessed);
+	av_log(ctx, AV_LOG_DEBUG,
+	       "Frame %dx%d fmt:%s buf:%p bytes:%d burned-in-frame#%08d totalframes#%08d\n",
+	       frame->width, frame->height, av_get_pix_fmt_name(frame->format), pic, sizeBytes,
+	       ctx->frameCounter, ctx->framesProcessed);
 
         ctx->framesProcessed++;
         ctx->frameCounter++;
@@ -156,9 +157,10 @@ static void writeFrame422p10(BurnContext *ctx, AVFrame *frame, uint32_t sizeByte
 		}
 	}
 
-	printf("Frame %dx%d fmt:%s buf:%p bytes:%d burned-in-frame#%08d totalframes#%08d\n",
-		frame->width, frame->height, av_get_pix_fmt_name(frame->format), pic, sizeBytes,
-		ctx->frameCounter, ctx->framesProcessed);
+	av_log(ctx, AV_LOG_DEBUG,
+	       "Frame %dx%d fmt:%s buf:%p bytes:%d burned-in-frame#%08d totalframes#%08d\n",
+	       frame->width, frame->height, av_get_pix_fmt_name(frame->format), pic, sizeBytes,
+	       ctx->frameCounter, ctx->framesProcessed);
 
         ctx->framesProcessed++;
         ctx->frameCounter++;

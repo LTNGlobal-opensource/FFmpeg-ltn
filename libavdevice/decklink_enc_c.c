@@ -38,6 +38,7 @@ static const AVOption options[] = {
     { "scte104_line", "VANC line to insert SCTE-104 packets", OFFSET(scte104_line), AV_OPT_TYPE_INT, { .i64 = 13 }, -1, INT64_MAX, ENC },
     { "use_3glevel_a","use Level A if output 3G-SDI", OFFSET(use_3glevel_a), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, ENC },
     { "decklink_debug_level",  "Verbosity of logging output", OFFSET(debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
+    { "latency_debug_level",  "Verbosity of latency logging", OFFSET(latency_debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
     { NULL },
 };
 

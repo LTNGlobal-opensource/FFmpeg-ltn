@@ -65,6 +65,7 @@ struct decklink_cctx {
     int scte104_line;
     int use_3glevel_a;
     int debug_level;
+    int latency_debug_level;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

@@ -4194,7 +4194,7 @@ find_stream_info_err:
         av_log(ic, AV_LOG_DEBUG, "After avformat_find_stream_info() pos: %"PRId64" bytes read:%"PRId64" seeks:%d frames:%d\n",
                avio_tell(ic->pb), ic->pb->bytes_read, ic->pb->seek_count, count);
         ltnlog_stat("FIND_STREAM_INFO_BYTES", ic->pb->bytes_read);
-        av_log(ic, AV_LOG_INFO, "%s required %d bytes\n", __func__, ic->pb->bytes_read);
+        av_log(ic, AV_LOG_INFO, "%s required %"PRId64" bytes\n", __func__, ic->pb->bytes_read);
     }
     av_vtune_log_event("find_stream_info", t1, av_vtune_get_timestamp(), 1);
 

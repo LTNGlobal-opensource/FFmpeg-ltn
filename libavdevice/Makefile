@@ -22,8 +22,8 @@ OBJS-$(CONFIG_BKTR_INDEV)                += bktr.o
 OBJS-$(CONFIG_CACA_OUTDEV)               += caca.o
 OBJS-$(CONFIG_DECKLINK_OUTDEV)           += decklink_enc.o decklink_enc_c.o decklink_common.o thumbnail.o
 OBJS-$(CONFIG_DECKLINK_INDEV)            += decklink_dec.o decklink_dec_c.o decklink_common.o
-OBJS-$(CONFIG_LIBNDI_NEWTEK_OUTDEV)      += libndi_newtek_enc.o
-OBJS-$(CONFIG_LIBNDI_NEWTEK_INDEV)       += libndi_newtek_dec.o
+OBJS-$(CONFIG_LIBNDI_NEWTEK_OUTDEV)      += libndi_newtek_enc.o libndi_newtek_common.o
+OBJS-$(CONFIG_LIBNDI_NEWTEK_INDEV)       += libndi_newtek_dec.o libndi_newtek_common.o
 OBJS-$(CONFIG_DSHOW_INDEV)               += dshow_crossbar.o dshow.o dshow_enummediatypes.o \
                                             dshow_enumpins.o dshow_filter.o \
                                             dshow_pin.o dshow_common.o

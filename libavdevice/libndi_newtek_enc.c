@@ -35,6 +35,7 @@ struct NDIContext {
     int reference_level;
     int clock_video, clock_audio;
 
+    const NDIlib_v3* lib;
     NDIlib_video_frame_t *video;
     NDIlib_audio_frame_interleaved_16s_t *audio;
     NDIlib_send_instance_t ndi_send;
@@ -46,7 +47,7 @@ static int ndi_write_trailer(AVFormatContext *avctx)
     struct NDIContext *ctx = avctx->priv_data;
 
     if (ctx->ndi_send) {
-        NDIlib_send_destroy(ctx->ndi_send);
+        ctx->lib->NDIlib_send_destroy(ctx->ndi_send);
         av_frame_free(&ctx->last_avframe);
     }
 
@@ -95,7 +96,7 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
 
     /* asynchronous for one frame, but will block if a second frame
         is given before the first one has been sent */
-    NDIlib_send_send_video_async(ctx->ndi_send, ctx->video);
+    ctx->lib->NDIlib_send_send_video_async(ctx->ndi_send, ctx->video);
 
     av_frame_free(&ctx->last_avframe);
     ctx->last_avframe = avframe;
@@ -114,7 +115,7 @@ static int ndi_write_audio_packet(AVFormatContext *avctx, AVStream *st, AVPacket
     av_log(avctx, AV_LOG_DEBUG, "%s: pkt->pts=%"PRId64", timecode=%"PRId64", st->time_base=%d/%d\n",
         __func__, pkt->pts, ctx->audio->timecode, st->time_base.num, st->time_base.den);
 
-    NDIlib_util_send_send_audio_interleaved_16s(ctx->ndi_send, ctx->audio);
+    ctx->lib->NDIlib_util_send_send_audio_interleaved_16s(ctx->ndi_send, ctx->audio);
 
     return 0;
 }
@@ -238,7 +239,12 @@ static int ndi_write_header(AVFormatContext *avctx)
     const NDIlib_send_create_t ndi_send_desc = { .p_ndi_name = avctx->url,
         .p_groups = NULL, .clock_video = ctx->clock_video, .clock_audio = ctx->clock_audio };
 
-    if (!NDIlib_initialize()) {
+    ctx->lib = ndi_lib_load(avctx);
+    if (!ctx->lib) {
+        return AVERROR_EXTERNAL;
+    }
+
+    if (!ctx->lib->NDIlib_initialize()) {
         av_log(avctx, AV_LOG_ERROR, "NDIlib_initialize failed.\n");
         return AVERROR_EXTERNAL;
     }
@@ -260,7 +266,7 @@ static int ndi_write_header(AVFormatContext *avctx)
         }
     }
 
-    ctx->ndi_send = NDIlib_send_create(&ndi_send_desc);
+    ctx->ndi_send = ctx->lib->NDIlib_send_create(&ndi_send_desc);
     if (!ctx->ndi_send) {
         av_log(avctx, AV_LOG_ERROR, "Failed to create NDI output %s\n", avctx->url);
         ret = AVERROR_EXTERNAL;

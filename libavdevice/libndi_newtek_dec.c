@@ -36,6 +36,7 @@ struct NDIContext {
     int allow_video_fields;
 
     /* Runtime */
+    const NDIlib_v3* lib;
     NDIlib_recv_create_t *recv;
     NDIlib_find_instance_t ndi_find;
 
@@ -88,7 +89,7 @@ static int ndi_set_audio_packet(AVFormatContext *avctx, NDIlib_audio_frame_t *a,
 
     dst.reference_level = 0;
     dst.p_data = (short *)pkt->data;
-    NDIlib_util_audio_to_interleaved_16s(a, &dst);
+    ctx->lib->NDIlib_util_audio_to_interleaved_16s(a, &dst);
 
     return 0;
 }
@@ -103,7 +104,7 @@ static int ndi_find_sources(AVFormatContext *avctx, const char *name, NDIlib_sou
         .p_groups = NULL, .p_extra_ips = NULL };
 
     if (!ctx->ndi_find)
-        ctx->ndi_find = NDIlib_find_create2(&find_create_desc);
+        ctx->ndi_find = ctx->lib->NDIlib_find_create_v2(&find_create_desc);
     if (!ctx->ndi_find) {
         av_log(avctx, AV_LOG_ERROR, "NDIlib_find_create failed.\n");
         return AVERROR(EIO);
@@ -113,13 +114,13 @@ static int ndi_find_sources(AVFormatContext *avctx, const char *name, NDIlib_sou
     {
         int f, t = ctx->wait_sources / 1000;
         av_log(avctx, AV_LOG_DEBUG, "Waiting for sources %d miliseconds\n", t);
-        f = NDIlib_find_wait_for_sources(ctx->ndi_find, t);
+        f = ctx->lib->NDIlib_find_wait_for_sources(ctx->ndi_find, t);
         av_log(avctx, AV_LOG_DEBUG, "NDIlib_find_wait_for_sources returns %d\n", f);
         if (!f)
             break;
     };
 
-    ndi_srcs = NDIlib_find_get_current_sources(ctx->ndi_find, &n);
+    ndi_srcs = ctx->lib->NDIlib_find_get_current_sources(ctx->ndi_find, &n);
 
     if (ctx->find_sources)
         av_log(avctx, AV_LOG_INFO, "Found %d NDI sources:\n", n);
@@ -144,7 +145,12 @@ static int ndi_read_header(AVFormatContext *avctx)
     const NDIlib_tally_t tally_state = { .on_program = true, .on_preview = false };
     struct NDIContext *ctx = avctx->priv_data;
 
-    if (!NDIlib_initialize()) {
+    ctx->lib = ndi_lib_load(avctx);
+    if (!ctx->lib) {
+        return AVERROR_EXTERNAL;
+    }
+
+    if (!ctx->lib->NDIlib_initialize()) {
         av_log(avctx, AV_LOG_ERROR, "NDIlib_initialize failed.\n");
         return AVERROR_EXTERNAL;
     }
@@ -163,14 +169,14 @@ static int ndi_read_header(AVFormatContext *avctx)
     recv_create_desc.allow_video_fields = ctx->allow_video_fields;
 
     /* Create the receiver */
-    ctx->recv = NDIlib_recv_create(&recv_create_desc);
+    ctx->recv = ctx->lib->NDIlib_recv_create(&recv_create_desc);
     if (!ctx->recv) {
         av_log(avctx, AV_LOG_ERROR, "NDIlib_recv_create2 failed.\n");
         return AVERROR(EIO);
     }
 
     /* Set tally */
-    NDIlib_recv_set_tally(ctx->recv, &tally_state);
+    ctx->lib->NDIlib_recv_set_tally(ctx->recv, &tally_state);
 
     avctx->ctx_flags |= AVFMTCTX_NOHEADER;
 
@@ -268,7 +274,7 @@ static int ndi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
         NDIlib_frame_type_e t;
 
         av_log(avctx, AV_LOG_DEBUG, "NDIlib_recv_capture...\n");
-        t = NDIlib_recv_capture(ctx->recv, &v, &a, &m, 40);
+        t = ctx->lib->NDIlib_recv_capture(ctx->recv, &v, &a, &m, 40);
         av_log(avctx, AV_LOG_DEBUG, "NDIlib_recv_capture=%d\n", t);
 
         if (t == NDIlib_frame_type_video) {
@@ -276,7 +282,7 @@ static int ndi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
                 ret = ndi_create_video_stream(avctx, &v);
             if (!ret)
                 ret = ndi_set_video_packet(avctx, &v, pkt);
-            NDIlib_recv_free_video(ctx->recv, &v);
+            ctx->lib->NDIlib_recv_free_video(ctx->recv, &v);
             break;
         }
         else if (t == NDIlib_frame_type_audio) {
@@ -284,11 +290,11 @@ static int ndi_read_packet(AVFormatContext *avctx, AVPacket *pkt)
                 ret = ndi_create_audio_stream(avctx, &a);
             if (!ret)
                 ret = ndi_set_audio_packet(avctx, &a, pkt);
-            NDIlib_recv_free_audio(ctx->recv, &a);
+            ctx->lib->NDIlib_recv_free_audio(ctx->recv, &a);
             break;
         }
         else if (t == NDIlib_frame_type_metadata)
-            NDIlib_recv_free_metadata(ctx->recv, &m);
+            ctx->lib->NDIlib_recv_free_metadata(ctx->recv, &m);
         else if (t == NDIlib_frame_type_error){
             av_log(avctx, AV_LOG_ERROR, "NDIlib_recv_capture failed with error\n");
             ret = AVERROR(EIO);
@@ -303,10 +309,10 @@ static int ndi_read_close(AVFormatContext *avctx)
     struct NDIContext *ctx = (struct NDIContext *)avctx->priv_data;
 
     if (ctx->recv)
-        NDIlib_recv_destroy(ctx->recv);
+        ctx->lib->NDIlib_recv_destroy(ctx->recv);
 
     if (ctx->ndi_find)
-        NDIlib_find_destroy(ctx->ndi_find);
+        ctx->lib->NDIlib_find_destroy(ctx->ndi_find);
 
     return 0;
 }

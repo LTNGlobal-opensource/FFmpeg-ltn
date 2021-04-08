@@ -24,6 +24,8 @@
 
 #include <Processing.NDI.Lib.h>
 
+const NDIlib_v3* ndi_lib_load(AVFormatContext *avctx);
+
 #define NDI_TIME_BASE 10000000
 #define NDI_TIME_BASE_Q (AVRational){1, NDI_TIME_BASE}
 

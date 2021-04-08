@@ -21,6 +21,7 @@
 
 #include "libavformat/avformat.h"
 #include "libavformat/internal.h"
+#include "libavformat/ltnlog.h"
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
 
@@ -98,6 +99,8 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
 
     av_frame_free(&ctx->last_avframe);
     ctx->last_avframe = avframe;
+
+    ltnlog_stat("PICTURE", pkt->pts);
 
     return 0;
 }

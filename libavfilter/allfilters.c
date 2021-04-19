@@ -158,6 +158,7 @@ static void register_all(void)
     REGISTER_FILTER(BURNREADER,     burnreader,     vf);
     REGISTER_FILTER(BURNWRITER,     burnwriter,     vf);
     REGISTER_FILTER(BWDIF,          bwdif,          vf);
+    REGISTER_FILTER(CCREPACK,       ccrepack,       vf);
     REGISTER_FILTER(CHROMAKEY,      chromakey,      vf);
     REGISTER_FILTER(CIESCOPE,       ciescope,       vf);
     REGISTER_FILTER(CODECVIEW,      codecview,      vf);

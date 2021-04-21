@@ -254,7 +254,7 @@ public:
                 ltnlog_stat("VIDEOLATENCY_MS", (stats->avformat_output_time - stats->avformat_input_time) / 1000);
                 if (_cctx->latency_debug_level >= 1)
                     av_log(_avctx, AV_LOG_INFO,
-                           "in_pts=%"PRId64" a=%"PRId64" i=%"PRId64" r=%"PRId64" d=%"PRId64" e=%"PRId64" gs=%"PRId64" ge=%"PRId64" es=%"PRId64" ee=%"PRId64" wt=%"PRId64" o=%"PRId64"\n",
+                           "in_pts=%" PRId64 " a=%" PRId64 " i=%" PRId64 " r=%" PRId64 " d=%" PRId64 " e=%" PRId64 " gs=%" PRId64 " ge=%" PRId64 " es=%" PRId64 " ee=%" PRId64 " wt=%" PRId64 " o=%" PRId64 "\n",
                            stats->input_pts, stats->avprotocol_arrival_time,
                            stats->avformat_input_time, stats->avformat_read_time,
                            stats->avcodec_decode_start, stats->avcodec_decode_end,

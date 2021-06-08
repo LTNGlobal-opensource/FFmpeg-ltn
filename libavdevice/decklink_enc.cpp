@@ -1044,7 +1044,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         }
 
         ctx->frames_discard = st->time_base.den * cctx->discard / st->time_base.num;
-        ctx->first_pts = pkt->pts + ctx->frames_discard;
+        ctx->first_pts = 0;
         ctx->playback_started = 0;
         ctx->audio_offset = 0;
         ctx->video_offset = 0;
@@ -1052,6 +1052,11 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
             if (decklink_enable_audio(avctx)) {
                 av_log(avctx, AV_LOG_ERROR, "Error enabling audio\n");
             }
+
+        /* Bail out after discarding the frame */
+        av_frame_free(&avframe);
+        av_packet_free(&avpacket);
+        return 0;
     }
 
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {

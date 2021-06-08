@@ -31,6 +31,18 @@ void udp_stats(struct tool_context_s *ctx, unsigned char *buf, int byteCount)
         ctx->bytesWrittenCurrent = 0;
     }
 
+    if (buf[0] == 0x47) {
+        /* MPEG-TS in UDP */
+    } else if (buf[0] != 0x47 && buf[12] == 0x47) {
+        /* MPEG-TS in RTP.  Skip over RTP header */
+        buf += 12;
+        byteCount -= 12;
+    } else {
+        /* No idea what this is, so don't try to pluck out MPEG-TS
+           properties */
+        return;
+    }
+
     for (int i = 0; i < byteCount; i += 188) {
         uint16_t pidnr = getPID(buf + i);
         struct pid_statistics_s *pid = &ctx->stream.pids[pidnr];

@@ -225,6 +225,24 @@ static void decklink_insert_frame(AVFormatContext *_avctx, struct decklink_cctx 
     }
 }
 
+
+static void decklink_drop_frame(AVFormatContext *_avctx, struct decklink_cctx *_cctx,
+                                int num_frames)
+{
+    struct decklink_ctx *ctx = (struct decklink_ctx *)_cctx->ctx;
+    buffercount_type buffered;
+    buffercount_type vid_buffered;
+
+    ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
+    ctx->dlo->GetBufferedVideoFrameCount(&vid_buffered);
+    av_log(_avctx, AV_LOG_WARNING, "Dropping %d frames (%d) (vid=%d).\n",
+           num_frames, buffered, vid_buffered);
+
+    ctx->video_offset -= num_frames;
+    ctx->audio_offset -= ctx->audio_samples_per_frame * num_frames;
+}
+
+
 class decklink_output_callback : public IDeckLinkVideoOutputCallback, public IDeckLinkAudioOutputCallback
 {
 public:
@@ -1048,6 +1066,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         ctx->playback_started = 0;
         ctx->audio_offset = 0;
         ctx->video_offset = 0;
+        ctx->framebuffer_level = 0;
+        ctx->num_framebuffer_level = 0;
         if (ctx->audio)
             if (decklink_enable_audio(avctx)) {
                 av_log(avctx, AV_LOG_ERROR, "Error enabling audio\n");
@@ -1193,6 +1213,27 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         ltnlog_stat("REFERENCESIGNALMODE", ref_mode);
         ctx->last_refstatus_report = cur_time;
     }
+
+    /* Check if we've slipped latency too much */
+    if (ctx->last_framebuffer_level != cur_time) {
+        ctx->framebuffer_level += buffered;
+        ctx->num_framebuffer_level++;
+        if (ctx->num_framebuffer_level > 59) {
+            /* It's been a minute, compute the average */
+            int fb_level = ctx->framebuffer_level / ctx->num_framebuffer_level;
+            if (cctx->debug_level >= 1)
+                av_log(avctx, AV_LOG_INFO, "Latency slipper: %d/%d=%d\n", ctx->framebuffer_level,
+                       ctx->num_framebuffer_level, fb_level);
+            if (fb_level > ctx->frames_preroll) {
+                /* Drop a frame to bring us closer to expected latency level */
+                decklink_drop_frame(avctx, cctx, 1);
+            }
+            ctx->framebuffer_level = 0;
+            ctx->num_framebuffer_level = 0;
+        }
+        ctx->last_framebuffer_level = cur_time;
+    }
+
     return 0;
 }
 

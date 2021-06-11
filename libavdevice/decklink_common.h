@@ -134,6 +134,11 @@ struct decklink_ctx {
     BMDTimeValue frames_last_reset; /* Last time we slipped audio/video */
     time_t last_fifo_report;
 
+    /* Track hardware video fifo level */
+    int framebuffer_level;
+    int num_framebuffer_level;
+    time_t last_framebuffer_level;
+
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     int frames_buffer_available_spots;

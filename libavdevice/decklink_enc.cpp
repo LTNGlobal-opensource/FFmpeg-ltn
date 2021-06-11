@@ -1048,7 +1048,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
            ctx->playback_started, streamtime, delta, ctx->first_pts,
            ctx->frames_buffer);
 #endif
-    if (ctx->playback_started && (delta < 0 || delta > (ctx->frames_buffer + ctx->video_offset))) {
+    if (ctx->playback_started && (delta < 0 || delta > ctx->frames_buffer)) {
         /* We're behind realtime, or way too far ahead, so restart clocks */
         av_log(avctx, AV_LOG_ERROR, "Scheduled frames received too %s.  "
                "Restarting output.  Delta=%" PRId64 "\n", delta < 0 ? "late" : "far into future", delta);
@@ -1149,7 +1149,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     if (cctx->debug_level >= 3)
         av_log(avctx, AV_LOG_INFO, "Buffered video frames: %d (offset=%d) pts=%ld streamtime=%ld latency=%ld\n",
                (int) buffered, ctx->video_offset, pkt->pts, (streamtime / ctx->bmd_tb_num),
-               pkt->pts - (streamtime / ctx->bmd_tb_num));
+               (pkt->pts + ctx->video_offset) - (streamtime / ctx->bmd_tb_num));
 
     if (pkt->pts > (ctx->first_pts + 2) && buffered <= 2)
         av_log(avctx, AV_LOG_WARNING, "There are not enough buffered video frames."

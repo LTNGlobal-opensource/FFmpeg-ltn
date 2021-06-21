@@ -1160,10 +1160,34 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     if (pkt->pts > (ctx->first_pts + num_frames) && buffered <= num_frames) {
         av_log(avctx, AV_LOG_WARNING, "There are not enough buffered video frames to support audio."
                " Video/audio may misbehave!\n");
-        /* Reset back to the preroll level */
-        if ((streamtime / ctx->bmd_tb_num) > ctx->frames_last_reset + 10) {
-            decklink_insert_frame(avctx, cctx, frame, pkt->pts, ctx->frames_preroll - buffered);
+    }
+
+    /* Adjust number of buffers queued to closely track preroll depth (to achieve
+       desired target latency).  Because we only move up to one frame per minute, this is
+       intended to compesnate for SDI clocks which are slightly too slow or too fast
+       (i.e. milliseconds per hour of drift).  */
+    time_t cur_time;
+    time(&cur_time);
+    if (ctx->last_framebuffer_level != cur_time) {
+        ctx->framebuffer_level += buffered;
+        ctx->num_framebuffer_level++;
+        if (ctx->num_framebuffer_level > 59) {
+            /* It's been a minute, compute the average */
+            int fb_level = ctx->framebuffer_level / ctx->num_framebuffer_level;
+            if (cctx->debug_level >= 1)
+                av_log(avctx, AV_LOG_INFO, "Latency slipper: %d/%d=%d\n", ctx->framebuffer_level,
+                       ctx->num_framebuffer_level, fb_level);
+            if (fb_level > ctx->frames_preroll) {
+                /* Drop a frame to bring us closer to expected latency level */
+                decklink_drop_frame(avctx, cctx, 1);
+            } else if (fb_level < ctx->frames_preroll - 1) {
+                decklink_insert_frame(avctx, cctx, frame, pkt->pts, 1);
+            }
+
+            ctx->framebuffer_level = 0;
+            ctx->num_framebuffer_level = 0;
         }
+        ctx->last_framebuffer_level = cur_time;
     }
 
     /* Ownership of the frame has been handed off to decklink at this point... */
@@ -1201,8 +1225,6 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
     av_vtune_log_event("write_video", t1, av_vtune_get_timestamp(), 1);
 
     /* Once per second, update the reported status of the Reference Input */
-    time_t cur_time;
-    time(&cur_time);
     if (ctx->last_refstatus_report != cur_time) {
         int64_t ref_mode = 0;
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100
@@ -1212,26 +1234,6 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 #endif
         ltnlog_stat("REFERENCESIGNALMODE", ref_mode);
         ctx->last_refstatus_report = cur_time;
-    }
-
-    /* Check if we've slipped latency too much */
-    if (ctx->last_framebuffer_level != cur_time) {
-        ctx->framebuffer_level += buffered;
-        ctx->num_framebuffer_level++;
-        if (ctx->num_framebuffer_level > 59) {
-            /* It's been a minute, compute the average */
-            int fb_level = ctx->framebuffer_level / ctx->num_framebuffer_level;
-            if (cctx->debug_level >= 1)
-                av_log(avctx, AV_LOG_INFO, "Latency slipper: %d/%d=%d\n", ctx->framebuffer_level,
-                       ctx->num_framebuffer_level, fb_level);
-            if (fb_level > ctx->frames_preroll) {
-                /* Drop a frame to bring us closer to expected latency level */
-                decklink_drop_frame(avctx, cctx, 1);
-            }
-            ctx->framebuffer_level = 0;
-            ctx->num_framebuffer_level = 0;
-        }
-        ctx->last_framebuffer_level = cur_time;
     }
 
     return 0;

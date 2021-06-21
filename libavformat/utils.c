@@ -950,14 +950,6 @@ int ff_read_packet(AVFormatContext *s, AVPacket *pkt)
 
         st = s->streams[pkt->stream_index];
 
-        /* Keep track of the maximum delta in PTS, which is useful for determining
-           how much preroll we need on output */
-        if (pkt->pts != AV_NOPTS_VALUE && s->pb && !(s->pb->seekable & AVIO_SEEKABLE_NORMAL)) {
-            if (st->last_pts != 0 && (pkt->pts - st->last_pts) > st->pts_delta)
-                st->pts_delta = pkt->pts - st->last_pts;
-            st->last_pts = pkt->pts;
-        }
-
         if (update_wrap_reference(s, st, pkt->stream_index, pkt) && st->pts_wrap_behavior == AV_PTS_WRAP_SUB_OFFSET) {
             // correct first time stamps to negative values
             if (!is_relative(st->first_dts))
@@ -1499,6 +1491,7 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt, int stream_index)
     uint8_t *data = pkt ? pkt->data : NULL;
     int size      = pkt ? pkt->size : 0;
     int ret = 0, got_output = 0;
+    int64_t first_pts;
 
     if (!pkt) {
         av_init_packet(&flush_pkt);
@@ -1509,6 +1502,7 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt, int stream_index)
         compute_pkt_fields(s, st, st->parser, pkt, AV_NOPTS_VALUE, AV_NOPTS_VALUE);
     }
 
+    first_pts = pkt->pts;
     while (size > 0 || (pkt == &flush_pkt && got_output)) {
         int len;
         int64_t next_pts = pkt->pts;
@@ -1567,6 +1561,14 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt, int stream_index)
             out_pkt.flags |= AV_PKT_FLAG_KEY;
 
         compute_pkt_fields(s, st, st->parser, &out_pkt, next_dts, next_pts);
+
+        if (out_pkt.pts != AV_NOPTS_VALUE) {
+            if (out_pkt.pts > first_pts) {
+                int64_t pts_delta = out_pkt.pts - first_pts + out_pkt.duration;
+                if (pts_delta > st->pts_delta)
+                    st->pts_delta = pts_delta;
+            }
+        }
 
         ret = add_to_pktbuf(&s->internal->parse_queue, &out_pkt,
                             &s->internal->parse_queue_end, 1);

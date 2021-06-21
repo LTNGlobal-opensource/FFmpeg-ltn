@@ -178,12 +178,10 @@ static void decklink_insert_frame(AVFormatContext *_avctx, struct decklink_cctx 
     }
 
     av_log(_avctx, AV_LOG_WARNING, "Inserting %d frames (%d) (vid=%d)."
-           " vid_streamtime=%ld flr=%ld.  Advancing %d audio samples\n",
+           " vid_streamtime=%ld.  Advancing %d audio samples\n",
            num_frames, buffered, vid_buffered,
-           vid_streamtime / ctx->bmd_tb_num, ctx->frames_last_reset,
+           vid_streamtime / ctx->bmd_tb_num,
            ctx->audio_samples_per_frame * num_frames);
-
-    ctx->frames_last_reset = vid_streamtime / ctx->bmd_tb_num;
 
     ctx->dlo->GetScheduledStreamTime(48000, &streamtime, NULL);
     for (int i = 0; i < num_frames; i++) {
@@ -409,8 +407,8 @@ public:
             ltnlog_stat("FIFO AUDIO BYTES", buffered);
             if (ctx->playback_started && buffered < (48000 / 50)){
                 av_log(_avctx, AV_LOG_WARNING, "There's insufficient buffered audio (%d) (vid=%d)."
-                       " Audio will misbehave! vid_streamtime=%ld flr=%ld\n", buffered, vid_buffered,
-                       vid_streamtime / ctx->bmd_tb_num, ctx->frames_last_reset);
+                       " Audio will misbehave! vid_streamtime=%ld\n", buffered, vid_buffered,
+                       vid_streamtime / ctx->bmd_tb_num);
             }
         }
 

@@ -1177,11 +1177,11 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         ctx->num_framebuffer_level++;
         if (ctx->num_framebuffer_level > 59) {
             /* It's been a minute, compute the average */
-            int fb_level = ctx->framebuffer_level / ctx->num_framebuffer_level;
+            float fb_level = (float) ctx->framebuffer_level / (float) ctx->num_framebuffer_level;
             if (cctx->debug_level >= 1)
-                av_log(avctx, AV_LOG_INFO, "Latency slipper: %d/%d=%d\n", ctx->framebuffer_level,
+                av_log(avctx, AV_LOG_INFO, "Latency slipper: %d/%d=%f\n", ctx->framebuffer_level,
                        ctx->num_framebuffer_level, fb_level);
-            if (fb_level > ctx->frames_preroll) {
+            if (fb_level > ctx->frames_preroll + 1) {
                 /* Drop a frame to bring us closer to expected latency level */
                 decklink_drop_frame(avctx, cctx, 1);
             } else if (fb_level < ctx->frames_preroll - 1) {

@@ -672,6 +672,10 @@ void av_packet_update_pipelinestats(struct AVPacket *pkt, enum pipeline_stat sta
     uint8_t *side_data;
     int side_data_size;
 
+    /* Don't annotate flush packets */
+    if (pkt->size == 0)
+        return;
+
     side_data = av_packet_get_side_data(pkt, AV_PKT_DATA_PIPELINE_STATS, &side_data_size);
     if (!side_data) {
         side_data = av_packet_new_side_data(pkt, AV_PKT_DATA_PIPELINE_STATS,

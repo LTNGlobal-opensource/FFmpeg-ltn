@@ -424,6 +424,7 @@ void term_init(void)
 
     /* Close/reopen logfile  */
     sa.sa_handler = sighup_handler;
+    sa.sa_flags = 0;
     sigemptyset(&(sa.sa_mask));
     sigaddset(&(sa.sa_mask), SIGHUP);
     sigaction(SIGHUP, &sa, NULL);

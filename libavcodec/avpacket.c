@@ -388,6 +388,7 @@ const char *av_packet_side_data_name(enum AVPacketSideDataType type)
     case AV_PKT_DATA_CONTENT_LIGHT_LEVEL:        return "Content light level metadata";
     case AV_PKT_DATA_SPHERICAL:                  return "Spherical Mapping";
     case AV_PKT_DATA_A53_CC:                     return "A53 Closed Captions";
+    case AV_PKT_DATA_PIPELINE_STATS:             return "Pipeline statistics";
     }
     return NULL;
 }

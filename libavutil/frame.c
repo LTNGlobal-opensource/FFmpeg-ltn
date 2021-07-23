@@ -789,6 +789,7 @@ const char *av_frame_side_data_name(enum AVFrameSideDataType type)
     case AV_FRAME_DATA_CONTENT_LIGHT_LEVEL:         return "Content light level metadata";
     case AV_FRAME_DATA_GOP_TIMECODE:                return "GOP timecode";
     case AV_FRAME_DATA_ICC_PROFILE:                 return "ICC profile";
+    case AV_FRAME_DATA_PIPELINE_STATS:              return "Pipeline statistics";
     }
     return NULL;
 }

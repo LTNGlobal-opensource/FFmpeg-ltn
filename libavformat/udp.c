@@ -113,6 +113,7 @@ typedef struct UDPContext {
     char *block;
     int warn_src_change;
     struct tool_context_s stats_ctx;
+    int fifo_depth;
     time_t now;
 } UDPContext;
 
@@ -1080,7 +1081,8 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
             ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld\n",
                        i, pid->packetCount, pid->ccErrors, pid->teiErrors);
         }
-        ltnlog_stat("UDP FIFO", av_fifo_size(s->fifo));
+        ltnlog_stat("UDP FIFO", s->fifo_depth);
+        s->fifo_depth = 0;
     }
 
     av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);
@@ -1091,6 +1093,9 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
             avail = av_fifo_size(s->fifo);
             if (avail) { // >=size) {
                 uint8_t tmp[4];
+
+                if (avail > s->fifo_depth)
+                    s->fifo_depth = avail;
 
                 av_fifo_generic_read(s->fifo, tmp, 4, NULL);
                 avail= AV_RL32(tmp);

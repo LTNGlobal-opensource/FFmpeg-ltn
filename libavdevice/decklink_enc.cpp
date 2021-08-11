@@ -41,6 +41,7 @@ extern "C" {
 #include "libavutil/avstring.h"
 #include "libavutil/vtune.h"
 #include "libavutil/time.h"
+#include "libavutil/sei-timestamp.h"
 #include "avdevice.h"
 }
 
@@ -277,6 +278,35 @@ public:
                            stats->avfilter_graph_start, stats->avfilter_graph_end,
                            stats->avcodec_encode_start, stats->avcodec_encode_end,
                            stats->avformat_write_time, stats->avformat_output_time);
+            }
+
+            side_data = av_packet_get_side_data(frame->_avpacket, AV_PKT_DATA_SEI_UNREGISTERED,
+                                                &side_data_size);
+            if (side_data) {
+                int offset = ltn_uuid_find(side_data, side_data_size);
+                if (offset >= 0) {
+                    struct timeval now, diff;
+                    struct timeval encode_input, encode_output;
+                    int64_t val;
+
+                    memset(&encode_input, 0, sizeof(struct timeval));
+                    memset(&encode_output, 0, sizeof(struct timeval));
+                    sei_timestamp_value_timeval_query(side_data + offset, side_data_size - offset, 2, &encode_input);
+                    sei_timestamp_value_timeval_query(side_data + offset, side_data_size - offset, 8, &encode_output);
+                    gettimeofday(&now, NULL);
+
+                    if (encode_output.tv_sec != 0) {
+                        sei_timeval_subtract(&diff, &encode_output, &encode_input);
+                        val = (diff.tv_sec * 1000) + (diff.tv_usec / 1000);
+                    } else {
+                        val = -1;
+                    }
+                    ltnlog_stat("ENCODETOTAL_MS", val);
+
+                    sei_timeval_subtract(&diff, &now, &encode_input);
+                    val = (diff.tv_sec * 1000) + (diff.tv_usec / 1000);
+                    ltnlog_stat("GLASSTOGLASS_MS", val);
+                }
             }
         }
 

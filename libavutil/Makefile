@@ -66,6 +66,7 @@ HEADERS = adler32.h                                                     \
           replaygain.h                                                  \
           ripemd.h                                                      \
           samplefmt.h                                                   \
+          sei-timestamp.h                                               \
           sha.h                                                         \
           sha512.h                                                      \
           spherical.h                                                   \
@@ -145,6 +146,7 @@ OBJS = adler32.o                                                        \
        rc4.o                                                            \
        ripemd.o                                                         \
        samplefmt.o                                                      \
+       sei-timestamp.o                                                  \
        sha.o                                                            \
        sha512.o                                                         \
        slicethread.o                                                    \

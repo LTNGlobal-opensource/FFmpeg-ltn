@@ -78,6 +78,7 @@
 typedef struct UDPContext {
     const AVClass *class;
     int udp_fd;
+    int64_t udp_inode;
     int ttl;
     int udplite_coverage;
     int buffer_size;
@@ -520,7 +521,6 @@ static void *circular_buffer_task_rx( void *_URLContext)
         int len;
 
         av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);
-
         srclen = sizeof(srcaddr);
 
         pthread_mutex_unlock(&s->mutex);
@@ -734,6 +734,7 @@ static int udp_open(URLContext *h, const char *uri, int flags)
     const char *p;
     char buf[256];
     struct sockaddr_storage my_addr;
+    struct stat fd_info;
     socklen_t len;
     int i, num_include_sources = 0, num_exclude_sources = 0;
     char *include_sources[32], *exclude_sources[32];
@@ -871,6 +872,9 @@ static int udp_open(URLContext *h, const char *uri, int flags)
         goto fail;
 
     s->local_addr_storage=my_addr; //store for future multicast join
+
+    if (fstat(udp_fd, &fd_info) == 0)
+        s->udp_inode = fd_info.st_ino;
 
     /* Follow the requested reuse option, unless it's multicast in which
      * case enable reuse unless explicitly disabled.
@@ -1068,6 +1072,8 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
     int ret;
 #if HAVE_PTHREAD_CANCEL
     int avail, nonblock = h->flags & AVIO_FLAG_NONBLOCK;
+    FILE *fd;
+    char line[256];
 
     if (s->now != s->stats_ctx.bytesWrittenTime) {
         s->now = s->stats_ctx.bytesWrittenTime;
@@ -1083,6 +1089,35 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
         }
         ltnlog_stat("UDP FIFO", s->fifo_depth);
         s->fifo_depth = 0;
+
+        /* Check the kernel RX queue depth */
+        fd = fopen("/proc/net/udp", "r");
+        if (fd) {
+            char *ret;
+            while (1) {
+                char more[512];
+                char local_addr[64], rem_addr[64];
+                int num, local_port, rem_port, d, state, timer_run, uid, timeout;
+                unsigned long rxq, txq, time_len, retr, inode;
+
+                ret = fgets(line, sizeof(line), fd);
+                if (!ret)
+                    break;
+
+                more[0] = '\0';
+                num = sscanf(line,
+                             "%d: %64[0-9A-Fa-f]:%X %64[0-9A-Fa-f]:%X %X %lX:%lX %X:%lX %lX %d %d %ld %512s\n",
+                             &d, local_addr, &local_port,
+                             rem_addr, &rem_port, &state,
+                             &txq, &rxq, &timer_run, &time_len, &retr, &uid, &timeout, &inode, more);
+
+                if (num > 14 && s->udp_inode > 0 && s->udp_inode == inode) {
+                    ltnlog_stat("UDP RX QUEUE", rxq);
+                    break;
+                }
+            }
+            fclose(fd);
+        }
     }
 
     av_vtune_log_stat(UDP_RX_FIFOSIZE, av_fifo_size(s->fifo), 0);

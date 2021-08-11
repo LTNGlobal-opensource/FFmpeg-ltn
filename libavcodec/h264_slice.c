@@ -436,6 +436,26 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
     else
         h->sei.a53_caption.buf_ref = NULL;
 
+    for (i = 0; i < h->sei.unregistered.nb_buf_ref; i++)
+        av_buffer_unref(&h->sei.unregistered.buf_ref[i]);
+    h->sei.unregistered.nb_buf_ref = 0;
+
+    if (h1->sei.unregistered.nb_buf_ref) {
+        ret = av_reallocp_array(&h->sei.unregistered.buf_ref,
+                                h1->sei.unregistered.nb_buf_ref,
+                                sizeof(*h->sei.unregistered.buf_ref));
+        if (ret < 0)
+            return ret;
+
+        for (i = 0; i < h1->sei.unregistered.nb_buf_ref; i++) {
+            h->sei.unregistered.buf_ref[i] = av_buffer_ref(h1->sei.unregistered.buf_ref[i]);
+            if (!h->sei.unregistered.buf_ref[i])
+                return AVERROR(ENOMEM);
+            h->sei.unregistered.nb_buf_ref++;
+        }
+    }
+    h->sei.unregistered.x264_build = h1->sei.unregistered.x264_build;
+
     if (!h->cur_pic_ptr)
         return 0;
 
@@ -1303,6 +1323,20 @@ static int h264_export_frame_props(H264Context *h)
         av_buffer_unref(&a53->buf_ref);
         h->avctx->properties |= FF_CODEC_PROPERTY_CLOSED_CAPTIONS;
     }
+
+    for (int i = 0; i < h->sei.unregistered.nb_buf_ref; i++) {
+        H264SEIUnregistered *unreg = &h->sei.unregistered;
+
+        if (unreg->buf_ref[i]) {
+            AVFrameSideData *sd = av_frame_new_side_data_from_buf(cur->f,
+                    AV_FRAME_DATA_SEI_UNREGISTERED,
+                    unreg->buf_ref[i]);
+            if (!sd)
+                av_buffer_unref(&unreg->buf_ref[i]);
+            unreg->buf_ref[i] = NULL;
+        }
+    }
+    h->sei.unregistered.nb_buf_ref = 0;
 
     if (h->sei.alternative_transfer.present &&
         av_color_transfer_name(h->sei.alternative_transfer.preferred_transfer_characteristics) &&

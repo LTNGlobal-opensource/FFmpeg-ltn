@@ -109,6 +109,11 @@ typedef struct HEVCSEIA53Caption {
     uint8_t *a53_caption;
 } HEVCSEIA53Caption;
 
+typedef struct HEVCSEIUnregistered {
+    AVBufferRef **buf_ref;
+    int nb_buf_ref;
+} HEVCSEIUnregistered;
+
 typedef struct HEVCSEIMasteringDisplay {
     int present;
     uint16_t display_primaries[3][2];
@@ -135,6 +140,7 @@ typedef struct HEVCSEI {
     HEVCSEIPictureTiming picture_timing;
     HEVCSEIAFD afd;
     HEVCSEIA53Caption a53_caption;
+    HEVCSEIUnregistered unregistered;
     HEVCSEIMasteringDisplay mastering_display;
     HEVCSEIContentLight content_light;
     int active_seq_parameter_set_id;

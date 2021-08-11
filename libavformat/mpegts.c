@@ -245,6 +245,7 @@ typedef struct PESContext {
     int64_t pts, dts;
     int64_t ts_packet_pos; /**< position of first TS packet of this PES packet */
     uint8_t header[MAX_PES_HEADER_SIZE];
+    int64_t pkt_start_time;
     AVBufferRef *buffer;
     SLConfigDescr sl;
 } PESContext;
@@ -910,7 +911,7 @@ static int new_pes_packet(PESContext *pes, AVPacket *pkt)
     char *sd;
 
     av_init_packet(pkt);
-    av_packet_update_pipelinestats(pkt, AVFORMAT_INPUT_TIME, av_gettime(),
+    av_packet_update_pipelinestats(pkt, AVFORMAT_INPUT_TIME, pes->pkt_start_time,
                                    -1, -1);
     pkt->buf  = pes->buffer;
     pkt->data = pes->buffer->data;
@@ -1048,6 +1049,9 @@ static int mpegts_push_data(MpegTSFilter *filter,
         }
         pes->state         = MPEGTS_HEADER;
         pes->ts_packet_pos = pos;
+
+        /* Record when we started receiving PES */
+        pes->pkt_start_time = av_gettime();
     }
     p = buf;
     while (buf_size > 0) {

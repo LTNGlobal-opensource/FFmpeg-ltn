@@ -283,6 +283,39 @@ public:
             side_data = av_packet_get_side_data(frame->_avpacket, AV_PKT_DATA_SEI_UNREGISTERED,
                                                 &side_data_size);
             if (side_data) {
+                /* MISB UUIDs */
+                uint8_t misb_ptp_hevc[] = { 0xa8, 0x68, 0x7d, 0xd4, 0xd7, 0x59, 0x37, 0x58, 0xa5, 0xce, 0xf0, 0x33, 0x8b, 0x65, 0x45, 0xf1 };
+                uint8_t misb_ptp_h264[] = { 0x4d, 0x49, 0x53, 0x50, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73, 0x65, 0x63, 0x74, 0x69, 0x6d, 0x65 };
+                /* See MISB ST 0604.5 Table 1 */
+                if (side_data_size == 28 &&
+                    (memcmp(side_data, misb_ptp_h264, 16) == 0 ||
+                     memcmp(side_data, misb_ptp_hevc, 16) == 0)) {
+                    struct timeval now, diff, encode_input;
+                    int64_t val;
+                    uint8_t status;
+                    uint64_t ptp = 0;
+
+                    /* Status field.  See MISB ST 0603.4 Table 1 */
+                    status = side_data[16];
+                    if ((status & 0x80) == 0 && (status & 0x40) == 0) {
+                        /* Locked and Normal */
+                        ptp = ((uint64_t)side_data[17] << 56) |
+                              ((uint64_t)side_data[18] << 48) |
+                              ((uint64_t)side_data[20] << 40) |
+                              ((uint64_t)side_data[21] << 32) |
+                              ((uint64_t)side_data[23] << 24) |
+                              ((uint64_t)side_data[24] << 16) |
+                              ((uint64_t)side_data[26] << 8) |
+                              ((uint64_t)side_data[27]);
+                        encode_input.tv_sec = ptp / 1000000;
+                        encode_input.tv_usec = ptp % 1000000;
+                        gettimeofday(&now, NULL);
+                        sei_timeval_subtract(&diff, &now, &encode_input);
+                        val = (diff.tv_sec * 1000) + (diff.tv_usec / 1000);
+                        ltnlog_stat("GLASSTOGLASS_MS", val);
+                    }
+                }
+
                 int offset = ltn_uuid_find(side_data, side_data_size);
                 if (offset >= 0) {
                     struct timeval now, diff;

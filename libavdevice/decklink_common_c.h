@@ -64,6 +64,7 @@ struct decklink_cctx {
     int cea708_line;
     int scte104_line;
     int use_3glevel_a;
+    int decklink_live;
     int debug_level;
     int latency_debug_level;
 };

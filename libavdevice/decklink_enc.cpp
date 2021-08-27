@@ -1235,7 +1235,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
        (i.e. milliseconds per hour of drift).  */
     time_t cur_time;
     time(&cur_time);
-    if (ctx->last_framebuffer_level != cur_time) {
+    if (cctx->decklink_live && ctx->last_framebuffer_level != cur_time) {
         ctx->framebuffer_level += buffered;
         ctx->num_framebuffer_level++;
         if (ctx->num_framebuffer_level > 59) {

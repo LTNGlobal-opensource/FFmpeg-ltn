@@ -1075,6 +1075,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
         scan_all_pmts_set = 1;
     }
     /* open the input file with generic avformat function */
+    ltnlog_stat("STATEMACHINE", LTED_WAITING_FOR_INITIAL_DATA);
     err = avformat_open_input(&ic, filename, file_iformat, &o->g->format_opts);
     if (err < 0) {
         print_error(filename, err);
@@ -1095,6 +1096,7 @@ static int open_input_file(OptionsContext *o, const char *filename)
         AVDictionary **opts = setup_find_stream_info_opts(ic, o->g->codec_opts);
         int orig_nb_streams = ic->nb_streams;
 
+        ltnlog_stat("STATEMACHINE", LTED_PROBING);
         find_stream_start_time = av_gettime();
 
         /* If not enough info to get the stream parameters, we decode the
@@ -1116,6 +1118,8 @@ static int open_input_file(OptionsContext *o, const char *filename)
             }
         }
     }
+
+    ltnlog_stat("STATEMACHINE", LTED_SETUP_INPUT);
 
     if (o->start_time_eof != AV_NOPTS_VALUE) {
         if (ic->duration>0) {
@@ -3470,6 +3474,7 @@ int ffmpeg_parse_options(int argc, char **argv)
     }
 
     /* open output files */
+    ltnlog_stat("STATEMACHINE", LTED_SETUP_OUTPUT);
     ret = open_files(&octx.groups[GROUP_OUTFILE], "output", open_output_file);
     if (ret < 0) {
         av_log(NULL, AV_LOG_FATAL, "Error opening output files: ");

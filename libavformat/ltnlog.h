@@ -27,6 +27,13 @@
 #ifndef AVUTIL_LTNLOG_H
 #define AVUTIL_LTNLOG_H
 
+/* Various states of LTED can be in */
+#define LTED_WAITING_FOR_INITIAL_DATA 0
+#define LTED_PROBING                  1
+#define LTED_SETUP_INPUT              2
+#define LTED_SETUP_OUTPUT             3
+#define LTED_RUNNING                  4
+
 int ltnlog_setup(const char *url);
 void ltnlog_stat(const char *str, uint64_t val);
 void ltnlog_msg(const char *msgtype, const char *fmt, ...);

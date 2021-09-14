@@ -5078,6 +5078,8 @@ int main(int argc, char **argv)
             want_sdp = 0;
     }
 
+    ltnlog_stat("STATEMACHINE", LTED_RUNNING);
+
     current_time = ti = getutime();
     if (transcode() < 0)
         exit_program(1);

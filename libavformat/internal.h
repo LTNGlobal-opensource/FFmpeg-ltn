@@ -144,6 +144,10 @@ struct AVFormatInternal {
      * Prefer the codec framerate for avg_frame_rate computation.
      */
     int prefer_codec_framerate;
+
+
+    time_t last_mux_status;
+    int64_t mux_interleave_delta;
 };
 
 struct AVStreamInternal {

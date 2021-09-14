@@ -43,6 +43,7 @@
 #if CONFIG_NETWORK
 #include "network.h"
 #endif
+#include "libavformat/ltnlog.h"
 
 /**
  * @file
@@ -1012,6 +1013,7 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
     int stream_count = 0;
     int noninterleaved_count = 0;
     int i, ret;
+    time_t now;
     int eof = flush;
 
     if (pkt) {
@@ -1057,6 +1059,16 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *out,
                                     s->streams[i]->time_base,
                                     AV_TIME_BASE_Q);
             delta_dts = FFMAX(delta_dts, last_dts - top_dts);
+        }
+
+        if (s->internal->mux_interleave_delta < delta_dts)
+            s->internal->mux_interleave_delta = delta_dts;
+        time(&now);
+        if (now != s->internal->last_mux_status) {
+            ltnlog_stat("MUX_QUEUE_MS",
+                        s->internal->mux_interleave_delta / 1000);
+            s->internal->last_mux_status = now;
+            s->internal->mux_interleave_delta = 0;
         }
 
         if (delta_dts > s->max_interleave_delta) {

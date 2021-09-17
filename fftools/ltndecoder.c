@@ -4723,6 +4723,8 @@ static int transcode(void)
     if (ret < 0)
         goto fail;
 
+    ltnlog_stat("STATEMACHINE", LTED_RUNNING);
+
     if (stdin_interaction) {
         av_log(NULL, AV_LOG_INFO, "Press [q] to stop, [?] for help\n");
     }
@@ -5077,8 +5079,6 @@ int main(int argc, char **argv)
         if (strcmp(output_files[i]->ctx->oformat->name, "rtp"))
             want_sdp = 0;
     }
-
-    ltnlog_stat("STATEMACHINE", LTED_RUNNING);
 
     current_time = ti = getutime();
     if (transcode() < 0)

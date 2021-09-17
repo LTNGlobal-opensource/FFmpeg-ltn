@@ -40,6 +40,7 @@ static const AVOption options[] = {
     { "decklink_live","Drop/Insert frames as needed to stay at preroll level", OFFSET(decklink_live), AV_OPT_TYPE_BOOL, {.i64 = 0}, -1, 1, ENC },
     { "decklink_debug_level",  "Verbosity of logging output", OFFSET(debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
     { "latency_debug_level",  "Verbosity of latency logging", OFFSET(latency_debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
+    { "decklink_audio_delay",  "Comma separate list of delay per stream in ms", OFFSET(audio_delay_param),  AV_OPT_TYPE_STRING, { .str = NULL}, 0, 0, ENC },
     { NULL },
 };
 

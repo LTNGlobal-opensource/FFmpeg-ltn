@@ -66,6 +66,7 @@ struct decklink_cctx {
     int use_3glevel_a;
     int debug_level;
     int latency_debug_level;
+    char *audio_delay_param;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

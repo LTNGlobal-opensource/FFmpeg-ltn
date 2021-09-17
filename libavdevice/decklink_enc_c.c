@@ -39,6 +39,7 @@ static const AVOption options[] = {
     { "use_3glevel_a","use Level A if output 3G-SDI", OFFSET(use_3glevel_a), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, ENC },
     { "decklink_debug_level",  "Verbosity of logging output", OFFSET(debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
     { "latency_debug_level",  "Verbosity of latency logging", OFFSET(latency_debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
+    { "decklink_audio_delay",  "Comma separate list of delay per stream in ms", OFFSET(audio_delay_param),  AV_OPT_TYPE_STRING, { .str = NULL}, 0, 0, ENC },
     { NULL },
 };
 

@@ -1096,9 +1096,9 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
             char *ret;
             while (1) {
                 char more[512];
-                char local_addr[64], rem_addr[64];
-                int num, local_port, rem_port, d, state, timer_run, uid, timeout;
-                unsigned long rxq, txq, time_len, retr, inode;
+                char local_addr[64], rem_addr[64], pointer[64];
+                int num, local_port, rem_port, d, state, timer_run, uid, timeout, ref;
+                unsigned long rxq, txq, time_len, retr, inode, drops;
 
                 ret = fgets(line, sizeof(line), fd);
                 if (!ret)
@@ -1106,13 +1106,14 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
 
                 more[0] = '\0';
                 num = sscanf(line,
-                             "%d: %64[0-9A-Fa-f]:%X %64[0-9A-Fa-f]:%X %X %lX:%lX %X:%lX %lX %d %d %ld %512s\n",
+                             "%d: %64[0-9A-Fa-f]:%X %64[0-9A-Fa-f]:%X %X %lX:%lX %X:%lX %lX %d %d %ld %d %64[0-9A-Fa-f] %ld %512s\n",
                              &d, local_addr, &local_port,
                              rem_addr, &rem_port, &state,
-                             &txq, &rxq, &timer_run, &time_len, &retr, &uid, &timeout, &inode, more);
+                             &txq, &rxq, &timer_run, &time_len, &retr, &uid, &timeout, &inode, &ref, pointer, &drops, more);
 
                 if (num > 14 && s->udp_inode > 0 && s->udp_inode == inode) {
                     ltnlog_stat("UDP RX QUEUE", rxq);
+                    ltnlog_stat("UDP RX DROPS", drops);
                     break;
                 }
             }

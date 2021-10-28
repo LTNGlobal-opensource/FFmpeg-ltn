@@ -35,7 +35,8 @@ typedef struct AVPipelineStats {
     int64_t avcodec_encode_start; /* avcodec_send_frame(avframe) */
     int64_t avcodec_encode_end; /* avcodec_receive_packet(avpacket) */
     int64_t avformat_write_time; /* Entering mux - av_write(pkt) */
-    int64_t avformat_output_time; /* Leaving mux - socket/file write() */
+    int64_t avformat_mod_write_time; /* Write to actual avformat module */
+    int64_t avformat_output_time; /* Leaving actual avformat module - socket/file write() */
 } AVPipelineStats;
 
 enum pipeline_stat {
@@ -49,6 +50,7 @@ enum pipeline_stat {
     AVCODEC_ENCODE_START,
     AVCODEC_ENCODE_END,
     AVFORMAT_WRITE_TIME,
+    AVFORMAT_MOD_WRITE_TIME,
     AVFORMAT_OUTPUT_TIME
 };
 

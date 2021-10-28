@@ -89,6 +89,9 @@ void avutil_update_pipelinestats(struct AVPipelineStats *stats, enum pipeline_st
     case AVFORMAT_WRITE_TIME:
         stats->avformat_write_time = ts;
         break;
+    case AVFORMAT_MOD_WRITE_TIME:
+        stats->avformat_mod_write_time = ts;
+        break;
     case AVFORMAT_OUTPUT_TIME:
         stats->avformat_output_time = ts;
         break;

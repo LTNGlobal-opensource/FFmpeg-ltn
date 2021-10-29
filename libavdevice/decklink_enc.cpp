@@ -1121,6 +1121,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 #endif
     if (ctx->playback_started && (delta < 0 || delta > ctx->frames_buffer)) {
         /* We're behind realtime, or way too far ahead, so restart clocks */
+        ltnlog_stat("OUTPUT RESTART", ++ctx->output_restart);
         av_log(avctx, AV_LOG_ERROR, "Scheduled frames received too %s.  "
                "Restarting output.  Delta=%" PRId64 "\n", delta < 0 ? "late" : "far into future", delta);
         if (ctx->dlo->StopScheduledPlayback(0, NULL, 0) != S_OK) {
@@ -1250,8 +1251,10 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
                        ctx->num_framebuffer_level, fb_level);
             if (fb_level > ctx->frames_preroll + 1) {
                 /* Drop a frame to bring us closer to expected latency level */
+                ltnlog_stat("OUTPUT SLIP", ++ctx->output_slipped);
                 decklink_drop_frame(avctx, cctx, 1);
             } else if (fb_level < ctx->frames_preroll - 1) {
+                ltnlog_stat("OUTPUT SLIP", ++ctx->output_slipped);
                 decklink_insert_frame(avctx, cctx, frame, pkt->pts, 1);
             }
 

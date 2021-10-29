@@ -335,7 +335,7 @@ void term_exit(void)
 }
 
 static volatile int received_sigterm = 0;
-static volatile int received_sighup = 0;
+static volatile int received_sigusr1 = 0;
 static volatile int received_nb_signals = 0;
 static atomic_int transcode_init_done = ATOMIC_VAR_INIT(0);
 static volatile int ffmpeg_exited = 0;
@@ -357,9 +357,9 @@ sigterm_handler(int sig)
 }
 
 static void
-sighup_handler(int sig)
+sigusr1_handler(int sig)
 {
-    received_sighup = sig;
+    received_sigusr1 = sig;
 }
 
 #if HAVE_SETCONSOLECTRLHANDLER
@@ -423,11 +423,11 @@ void term_init(void)
     signal(SIGTERM, sigterm_handler); /* Termination (ANSI).  */
 
     /* Close/reopen logfile  */
-    sa.sa_handler = sighup_handler;
+    sa.sa_handler = sigusr1_handler;
     sa.sa_flags = 0;
     sigemptyset(&(sa.sa_mask));
-    sigaddset(&(sa.sa_mask), SIGHUP);
-    sigaction(SIGHUP, &sa, NULL);
+    sigaddset(&(sa.sa_mask), SIGUSR1);
+    sigaction(SIGUSR1, &sa, NULL);
 
 #ifdef SIGXCPU
     signal(SIGXCPU, sigterm_handler);
@@ -4899,9 +4899,9 @@ static void log_callback_null(void *ptr, int level, const char *fmt, va_list vl)
 
 static void write_logfile(char *buf, int len)
 {
-    if (received_sighup && logfile && log_filename) {
+    if (received_sigusr1 && logfile && log_filename) {
         /* Close and reopen logfile */
-        received_sighup = 0;
+        received_sigusr1 = 0;
         fclose(logfile);
         logfile = NULL;
     }

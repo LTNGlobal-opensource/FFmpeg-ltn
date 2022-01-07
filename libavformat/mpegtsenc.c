@@ -557,6 +557,8 @@ static int mpegts_write_pmt(AVFormatContext *s, MpegTSService *service)
         case AVMEDIA_TYPE_AUDIO:
             if (codec_id == AV_CODEC_ID_AC3)
                 put_registration_descriptor(&q, MKTAG('A', 'C', '-', '3'));
+            if (codec_id == AV_CODEC_ID_AC4)
+                put_registration_descriptor(&q, MKTAG('A', 'C', '-', '4'));
             if (codec_id == AV_CODEC_ID_EAC3)
                 put_registration_descriptor(&q, MKTAG('E', 'A', 'C', '3'));
             if (ts->flags & MPEGTS_FLAG_SYSTEM_B) {
@@ -1247,6 +1249,27 @@ static int mpegts_init(AVFormatContext *s)
             if (ret < 0)
                 return ret;
         }
+        if (st->codecpar->codec_id == AV_CODEC_ID_AC4) {
+            AVStream *ast;
+            ts_st->amux = avformat_alloc_context();
+            if (!ts_st->amux) {
+                return AVERROR(ENOMEM);
+            }
+            ts_st->amux->oformat = av_guess_format("ac4", NULL, NULL);
+            if (!ts_st->amux->oformat) {
+                return AVERROR(EINVAL);
+            }
+            if (!(ast = avformat_new_stream(ts_st->amux, NULL))) {
+                return AVERROR(ENOMEM);
+            }
+            ret = avcodec_parameters_copy(ast->codecpar, st->codecpar);
+            if (ret != 0)
+                return ret;
+            ast->time_base = st->time_base;
+            ret = avformat_write_header(ts_st->amux, NULL);
+            if (ret < 0)
+                return ret;
+        }
         if (st->codecpar->codec_id == AV_CODEC_ID_OPUS) {
             ts_st->opus_pending_trim_start = st->codecpar->initial_padding * 48000 / st->codecpar->sample_rate;
         }
@@ -1914,6 +1937,38 @@ static int mpegts_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
             if (!ts_st->amux) {
                 av_log(s, AV_LOG_ERROR, "AAC bitstream not in ADTS format "
                                         "and extradata missing\n");
+            } else {
+                av_packet_unref(pkt2);
+                pkt2->data = pkt->data;
+                pkt2->size = pkt->size;
+                av_assert0(pkt->dts != AV_NOPTS_VALUE);
+                pkt2->dts = av_rescale_q(pkt->dts, st->time_base, ts_st->amux->streams[0]->time_base);
+
+                ret = avio_open_dyn_buf(&ts_st->amux->pb);
+                if (ret < 0)
+                    return ret;
+
+                ret = av_write_frame(ts_st->amux, pkt2);
+                if (ret < 0) {
+                    ffio_free_dyn_buf(&ts_st->amux->pb);
+                    return ret;
+                }
+                size            = avio_close_dyn_buf(ts_st->amux->pb, &data);
+                ts_st->amux->pb = NULL;
+                buf             = data;
+            }
+        }
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_AC4) {
+        if (pkt->size < 2) {
+            av_log(s, AV_LOG_ERROR, "AC4 packet too short\n");
+            return AVERROR_INVALIDDATA;
+        }
+        if ((AV_RB16(pkt->data) & 0xfffe) != 0xAC40) {
+            int ret;
+            AVPacket *pkt2 = ts->pkt;
+
+            if (!ts_st->amux) {
+                av_log(s, AV_LOG_ERROR, "AC4 bitstream not in frame format ");
             } else {
                 av_packet_unref(pkt2);
                 pkt2->data = pkt->data;

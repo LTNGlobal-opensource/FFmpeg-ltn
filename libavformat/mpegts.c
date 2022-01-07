@@ -852,6 +852,7 @@ static const StreamType HLS_SAMPLE_ENC_types[] = {
 static const StreamType REGD_types[] = {
     { MKTAG('d', 'r', 'a', 'c'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_DIRAC },
     { MKTAG('A', 'C', '-', '3'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_AC3   },
+    { MKTAG('A', 'C', '-', '4'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_AC4   },
     { MKTAG('B', 'S', 'S', 'D'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_S302M },
     { MKTAG('D', 'T', 'S', '1'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_DTS   },
     { MKTAG('D', 'T', 'S', '2'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_DTS   },
@@ -2098,6 +2099,14 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
                 if (language[0])
                     av_dict_set(&st->metadata, "language", language, 0);
             }
+        }
+        if (ext_desc_tag == 0x15) { /* AC-4 descriptor */
+            st->codecpar->codec_type = AVMEDIA_TYPE_AUDIO;
+            st->codecpar->codec_id = AV_CODEC_ID_AC4;
+            //st->internal->request_probe = 0;
+	    sti->request_probe = AVPROBE_SCORE_STREAM_RETRY / 5;
+
+            sti->need_context_update = 1;
         }
         break;
     case 0x6a: /* ac-3_descriptor */

@@ -1272,6 +1272,9 @@ static int parse_manifest(AVFormatContext *s, const char *url, AVIOContext *in)
             c->is_live = 1;
         xmlFree(val);
 
+	c->time_shift_buffer_depth = 12;
+	av_log(s, AV_LOG_INFO, "Forcing c->time_shift_buffer_depth = %lld\n", c->time_shift_buffer_depth);
+
         attr = node->properties;
         while (attr) {
             val = xmlGetProp(node, attr->name);

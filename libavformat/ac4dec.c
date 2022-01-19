@@ -106,11 +106,7 @@ static int ac4_read_packet(AVFormatContext *s, AVPacket *pkt)
     if (sync == 0xAC41) {
         calc_crc = ffio_get_checksum(s->pb);
         provided_crc = avio_rl16(pb);
-//        fprintf(stderr, "calc=%04x\n", calc_crc);
-//        fprintf(stderr, "providedc=%04x\n", provided_crc);
-        if (calc_crc == provided_crc) {
-            fprintf(stderr, "checksums match!\n");
-        } else {
+        if (calc_crc != provided_crc) {
             fprintf(stderr, "checksums NOT match %04x %04x!\n", calc_crc, provided_crc);
         }
     }

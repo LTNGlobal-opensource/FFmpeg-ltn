@@ -33,6 +33,8 @@
 #include "libavutil/qsort.h"
 #include "libavutil/opt.h"
 
+#include "libswresample/swresample.h"
+
 #include "ac4dec_data.h"
 #include "avcodec.h"
 #include "get_bits.h"
@@ -402,6 +404,7 @@ typedef struct AC4DecodeContext {
     AVCodecContext *avctx;                  ///< parent context
     AVFloatDSPContext *fdsp;
     GetBitContext   gbc;                    ///< bitstream reader
+    SwrContext      *swr;
 
     int             target_presentation;
 
@@ -744,6 +747,10 @@ static av_cold int ac4_decode_init(AVCodecContext *avctx)
 
     s->fdsp = avpriv_float_dsp_alloc(avctx->flags & AV_CODEC_FLAG_BITEXACT);
     if (!s->fdsp)
+        return AVERROR(ENOMEM);
+
+    s->swr = swr_alloc();
+    if (!s->swr)
         return AVERROR(ENOMEM);
 
     return 0;
@@ -5725,6 +5732,7 @@ static int ac4_decode_frame(AVCodecContext *avctx, void *data,
 {
     AC4DecodeContext *s = avctx->priv_data;
     AVFrame *frame = data;
+    AVFrame *frame_prescale = NULL;
     GetBitContext *gb = &s->gbc;
     int ret, start_offset = 0;
     SubstreamInfo *ssinfo;
@@ -5764,10 +5772,20 @@ static int ac4_decode_frame(AVCodecContext *avctx, void *data,
     avctx->sample_rate = s->fs_index ? 48000 : 44100;
     avctx->channels = channel_mode_nb_channels[ssinfo->channel_mode];
     avctx->channel_layout = channel_mode_layouts[ssinfo->channel_mode];
-    frame->nb_samples = av_rescale(s->frame_len_base,
-                                   s->resampling_ratio.num,
-                                   s->resampling_ratio.den);
-    frame->nb_samples = s->frame_len_base;
+
+    if (s->resampling_ratio.num != 1 ||
+        s->resampling_ratio.den != 1) {
+        frame_prescale = av_frame_alloc();
+        frame_prescale->nb_samples = s->frame_len_base;
+        if ((ret = ff_get_buffer(avctx, frame_prescale, 0)) < 0)
+            return ret;
+        frame->nb_samples = av_rescale(s->frame_len_base,
+                                       s->resampling_ratio.num,
+                                       s->resampling_ratio.den);
+    } else {
+        frame->nb_samples = s->frame_len_base;
+    }
+
     if ((ret = ff_get_buffer(avctx, frame, 0)) < 0)
         return ret;
 
@@ -5827,8 +5845,40 @@ static int ac4_decode_frame(AVCodecContext *avctx, void *data,
         break;
     }
 
-    for (int ch = 0; ch < avctx->channels; ch++)
-        decode_channel(s, ch, (float *)frame->extended_data[ch]);
+    if (frame_prescale && !swr_is_initialized(s->swr)) {
+        av_opt_set_int(s->swr, "in_sample_rate",
+                       av_rescale(avctx->sample_rate, s->resampling_ratio.den,
+                                  s->resampling_ratio.num), 0);
+        av_opt_set_int(s->swr, "in_sample_fmt",      avctx->sample_fmt,     0);
+        av_opt_set_int(s->swr, "out_sample_fmt",     avctx->sample_fmt,     0);
+        av_opt_set_int(s->swr, "in_channel_layout",  avctx->channel_layout, 0);
+        av_opt_set_int(s->swr, "out_channel_layout", avctx->channel_layout, 0);
+        av_opt_set_int(s->swr, "out_sample_rate",    avctx->sample_rate,    0);
+        av_opt_set_int(s->swr, "filter_size",        16,                    0);
+        ret = swr_init(s->swr);
+        if (ret < 0) {
+            av_log(avctx, AV_LOG_ERROR, "Error initializing the resampler.\n");
+            return ret;
+        }
+    }
+
+    if (frame_prescale) {
+        for (int ch = 0; ch < avctx->channels; ch++)
+            decode_channel(s, ch, (float *)frame_prescale->extended_data[ch]);
+
+        ret = swr_convert(s->swr,
+                          frame->extended_data, frame->nb_samples,
+                          (void *)frame_prescale->extended_data, frame_prescale->nb_samples);
+        av_frame_free(&frame_prescale);
+        if (ret <= 0) {
+            av_log(avctx, AV_LOG_ERROR, "Error doing swr_convert...\n");
+            return ret;
+        }
+        frame->nb_samples = ret;
+    } else {
+        for (int ch = 0; ch < avctx->channels; ch++)
+            decode_channel(s, ch, (float *)frame->extended_data[ch]);
+    }
 
     frame->key_frame = s->iframe_global;
 
@@ -5850,6 +5900,7 @@ static av_cold int ac4_decode_end(AVCodecContext *avctx)
     AC4DecodeContext *s = avctx->priv_data;
 
     av_freep(&s->fdsp);
+    swr_free(&s->swr);
 
     for (int j = 0; j < 8; j++)
         for (int i = 0; i < 5; i++)

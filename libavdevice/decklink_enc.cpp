@@ -43,6 +43,7 @@ extern "C" {
 #include "libavutil/time.h"
 #include "libavutil/sei-timestamp.h"
 #include "avdevice.h"
+#include "thumbnail.h"
 }
 
 #include "decklink_common.h"
@@ -659,6 +660,14 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     /* The device expects the framerate to be fixed. */
     avpriv_set_pts_info(st, 64, st->time_base.num, st->time_base.den);
 
+    if (cctx->thumbnail_filename) {
+        thumbnail_init(&ctx->thumbnail_ctx, cctx->thumbnail_filename,
+                       ctx->bmd_width, ctx->bmd_height, 320, 180,
+                       cctx->thumbnail_quality);
+        ctx->thumbnail_frames = ceil(st->time_base.den * cctx->thumbnail_interval
+                                     / st->time_base.num);
+    }
+
     ctx->video = 1;
 
     return 0;
@@ -773,6 +782,9 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 
     av_log(avctx, AV_LOG_INFO, "Final stats: late=%d dropped=%d vo=%d ao=%d\n",
            ctx->late, ctx->dropped, ctx->video_offset, ctx->audio_offset);
+
+    if (cctx->thumbnail_filename)
+        thumbnail_shutdown(&ctx->thumbnail_ctx);
 
     ff_decklink_cleanup(avctx);
 
@@ -1203,6 +1215,9 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     if (ctx->first_pts == 0)
         ctx->first_pts = pkt->pts;
+
+    if (cctx->thumbnail_filename && (ctx->frameCount % ctx->thumbnail_frames == 0))
+        thumbnail_generate(&ctx->thumbnail_ctx, pkt);
 
     /* Schedule frame for playback. */
     ctx->frameCount++;

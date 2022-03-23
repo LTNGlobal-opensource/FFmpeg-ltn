@@ -68,6 +68,9 @@ struct decklink_cctx {
     int debug_level;
     int latency_debug_level;
     char *audio_delay_param;
+    char *thumbnail_filename;
+    double thumbnail_interval;
+    int thumbnail_quality;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

@@ -41,6 +41,9 @@ static const AVOption options[] = {
     { "decklink_debug_level",  "Verbosity of logging output", OFFSET(debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
     { "latency_debug_level",  "Verbosity of latency logging", OFFSET(latency_debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
     { "decklink_audio_delay",  "Comma separate list of delay per stream in ms", OFFSET(audio_delay_param),  AV_OPT_TYPE_STRING, { .str = NULL}, 0, 0, ENC },
+    { "decklink_thumbnail",  "Filename to write thumbnail images to", OFFSET(thumbnail_filename),  AV_OPT_TYPE_STRING, { .str = NULL}, 0, 0, ENC },
+    { "thumbnail_interval"     , "Frequency to generate thumbnails in seconds", OFFSET(thumbnail_interval), AV_OPT_TYPE_DOUBLE, { .dbl = 0.5 }, 0, 60, ENC },
+    { "thumbnail_quality", "Thumbnail image quality [0-32]", OFFSET(thumbnail_quality), AV_OPT_TYPE_INT, { .i64 = 2 }, -1, INT64_MAX, ENC },
     { NULL },
 };
 

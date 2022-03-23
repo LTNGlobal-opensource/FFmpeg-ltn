@@ -30,6 +30,7 @@
 #if CONFIG_LIBKLVANC
 #include "libklvanc/vanc.h"
 #endif
+#include "thumbnail.h"
 
 #ifdef _WIN32
 #define DECKLINK_BOOL BOOL
@@ -135,6 +136,7 @@ struct decklink_ctx {
     int frames_buffer;
     int frames_discard;
     time_t last_fifo_report;
+    int thumbnail_frames;
 
     /* Track hardware video fifo level */
     int framebuffer_level;
@@ -158,6 +160,8 @@ struct decklink_ctx {
 #if CONFIG_LIBKLVANC
     struct klvanc_context_s *vanc_ctx;
 #endif
+
+    struct thumbnail_ctx thumbnail_ctx;
 
     int channels;
     int audio_depth;

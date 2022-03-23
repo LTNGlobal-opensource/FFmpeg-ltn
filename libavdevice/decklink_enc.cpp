@@ -197,6 +197,7 @@ static void decklink_insert_frame(AVFormatContext *_avctx, struct decklink_cctx 
         pthread_mutex_unlock(&ctx->mutex);
 
         ctx->video_offset++;
+        ctx->frameCount++;
         result = ctx->dlo->ScheduleVideoFrame((class IDeckLinkVideoFrame *) frame,
                                               (pts + ctx->video_offset) * ctx->bmd_tb_num,
                                               ctx->bmd_tb_num, ctx->bmd_tb_den);
@@ -1204,6 +1205,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         ctx->first_pts = pkt->pts;
 
     /* Schedule frame for playback. */
+    ctx->frameCount++;
     hr = ctx->dlo->ScheduleVideoFrame((class IDeckLinkVideoFrame *) frame,
                                       (pkt->pts + ctx->video_offset) * ctx->bmd_tb_num,
                                       ctx->bmd_tb_num, ctx->bmd_tb_den);

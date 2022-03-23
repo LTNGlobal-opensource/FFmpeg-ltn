@@ -1444,6 +1444,29 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
                 interleave_offset += audio_st->codecpar->channels;
     }
 
+    /* Compute the dBFS for the audio channels in this stream */
+    for (int i = 0; i < st->codecpar->channels; i++) {
+        int16_t largest_sample = 0;
+        float dbfs, val;
+        /* Find largest sample */
+        int sample_offset = 0;
+        for (int j = 0; j < sample_count; j++) {
+            int offset = sample_offset + (i * 2);
+            int16_t samp = outbuf[offset] | (outbuf[offset + 1] << 8);
+            if (largest_sample < samp) {
+                largest_sample = samp;
+            }
+            sample_offset += sample_size;
+        }
+        if (largest_sample == 0) {
+            dbfs = -60;
+        } else {
+            val = largest_sample;
+            dbfs = 20 * log10(val / 32767.0);
+        }
+        ltnlog_msg("AUDIO DBFS", "%d,%f\n", interleave_offset + i, dbfs);
+    }
+
     pthread_mutex_lock(&ctx->audio_mutex);
     if (ctx->output_audio_list == NULL) {
         /* Establish initial cadence */

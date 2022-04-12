@@ -44,6 +44,8 @@ struct cc_lookup {
 
 const static struct cc_lookup cc_lookup_vals[] = {
     { 15, 1, 40, 4 },
+    { 24, 1, 25, 3 },
+    { 24000, 1001, 25, 3 },
     { 30, 1, 20, 2 },
     { 30000, 1001, 20, 2},
     { 60, 1, 10, 1 },

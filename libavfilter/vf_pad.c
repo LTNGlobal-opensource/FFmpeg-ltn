@@ -363,6 +363,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         }
     }
 
+    if ((s->y == 0) && (s->x == 0) &&
+        (s->w == in->width) && (s->h == in->height)) {
+        /* No padding will occur, so just pass frame straight through and avoid
+           the performance cost of a copy */
+        return ff_filter_frame(inlink->dst->outputs[0], in);
+    }
+
     needs_copy = frame_needs_copy(s, in);
 
     if (needs_copy) {

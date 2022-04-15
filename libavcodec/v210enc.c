@@ -142,16 +142,44 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     if (orig_pts)
         *orig_pts = pic->pkt_pts;
 
-    if (pic->format == AV_PIX_FMT_YUV422P10) {
+    if (pic->format == AV_PIX_FMT_YUV422P10 ||
+        pic->format == AV_PIX_FMT_YUV420P10) {
         const uint16_t *y = (const uint16_t *)pic->data[0];
         const uint16_t *u = (const uint16_t *)pic->data[1];
         const uint16_t *v = (const uint16_t *)pic->data[2];
+        const uint16_t *u_even = u;
+        const uint16_t *v_even = v;
 
         const int sample_size = 6 * s->sample_factor_10;
         const int sample_w    = avctx->width / sample_size;
 
         for (h = 0; h < avctx->height; h++) {
             uint32_t val;
+
+            if (pic->format == AV_PIX_FMT_YUV420P10) {
+                if (pic->interlaced_frame == 1) {
+                    /* Interlaced chroma */
+                    if (h % 4 == 0) {
+                        u_even = u;
+                        v_even = v;
+                    } else if (h % 4 == 2) {
+                        /* Go back and use first line */
+                        u = u_even;
+                        v = v_even;
+                    }
+                } else {
+                    /* Non-interlaced chroma */
+                    if (h % 2 == 1) {
+                        /* Reuse previous chroma line */
+                        u = u_even;
+                        v = v_even;
+                    } else {
+                        u_even = u;
+                        v_even = v;
+                    }
+                }
+            }
+
             w = sample_w * sample_size;
             s->pack_line_10(y, u, v, dst, w);
 
@@ -330,5 +358,5 @@ AVCodec ff_v210_encoder = {
     .priv_data_size = sizeof(V210EncContext),
     .init           = encode_init,
     .encode2        = encode_frame,
-    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE },
+    .pix_fmts       = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P10, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE },
 };

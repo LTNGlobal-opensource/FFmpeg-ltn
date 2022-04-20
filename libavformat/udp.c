@@ -42,6 +42,8 @@
 #include "os_support.h"
 #include "url.h"
 #include "ip.h"
+#include "ltnlog.h"
+#include "udpstats.h"
 
 #ifdef __APPLE__
 #include "TargetConditionals.h"
@@ -117,6 +119,8 @@ typedef struct UDPContext {
     char *sources;
     char *block;
     IPSourceFilters filters;
+    struct tool_context_s stats_ctx;
+    time_t now;
 } UDPContext;
 
 #define OFFSET(x) offsetof(UDPContext, x)
@@ -497,6 +501,8 @@ static void *circular_buffer_task_rx( void *_URLContext)
             continue;
         AV_WL32(s->tmp, len);
 
+        udp_stats(&s->stats_ctx, s->tmp + 4, len);
+
         if(av_fifo_space(s->fifo) < len + 4) {
             /* No Space left */
             if (s->overrun_nonfatal) {
@@ -634,6 +640,8 @@ static int udp_open(URLContext *h, const char *uri, int flags)
     struct sockaddr_storage my_addr;
     socklen_t len;
     int ret;
+
+    ltnlog_msg("UDP SOURCE", "%s", uri);
 
     h->is_streamed = 1;
 
@@ -962,6 +970,21 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
     socklen_t addr_len = sizeof(addr);
 #if HAVE_PTHREAD_CANCEL
     int avail, nonblock = h->flags & AVIO_FLAG_NONBLOCK;
+
+    if (s->now != s->stats_ctx.bytesWrittenTime) {
+	s->now = s->stats_ctx.bytesWrittenTime;
+
+        ltnlog_stat("UDP BPS", s->stats_ctx.bytesWritten * 8);
+        for (int i = 0; i < MAX_PID; i++) {
+            struct pid_statistics_s *pid = &s->stats_ctx.stream.pids[i];
+            if (!pid->enabled)
+                continue;
+
+            ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld\n",
+                       i, pid->packetCount, pid->ccErrors, pid->teiErrors);
+        }
+        ltnlog_stat("UDP FIFO", av_fifo_size(s->fifo));
+    }
 
     if (s->fifo) {
         pthread_mutex_lock(&s->mutex);

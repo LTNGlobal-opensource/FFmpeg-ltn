@@ -33,6 +33,8 @@
 #include "network.h"
 #include "os_support.h"
 #include "url.h"
+#include "ltnlog.h"
+#include "udpstats.h"
 
 /* This is for MPEG-TS and it's a default SRTO_PAYLOADSIZE for SRTT_LIVE (8 TS packets) */
 #ifndef SRT_LIVE_DEFAULT_PAYLOAD_SIZE
@@ -90,6 +92,8 @@ typedef struct SRTContext {
     int messageapi;
     SRT_TRANSTYPE transtype;
     int linger;
+    struct tool_context_s stats_ctx;
+    time_t now;
 } SRTContext;
 
 #define D AV_OPT_FLAG_DECODING_PARAM
@@ -517,6 +521,8 @@ static int libsrt_open(URLContext *h, const char *uri, int flags)
         return AVERROR_UNKNOWN;
     }
 
+    ltnlog_msg("SRT SOURCE", "%s", uri);
+
     /* SRT options (srt/srt.h) */
     p = strchr(uri, '?');
     if (p) {
@@ -657,6 +663,32 @@ static int libsrt_read(URLContext *h, uint8_t *buf, int size)
 {
     SRTContext *s = h->priv_data;
     int ret;
+    SRT_TRACEBSTATS srt_stats;
+
+    if (s->now != s->stats_ctx.bytesWrittenTime) {
+        s->now = s->stats_ctx.bytesWrittenTime;
+
+        ltnlog_stat("UDP BPS", s->stats_ctx.bytesWritten * 8);
+	for (int i = 0; i < MAX_PID; i++) {
+            struct pid_statistics_s *pid = &s->stats_ctx.stream.pids[i];
+            if (!pid->enabled)
+                continue;
+
+            ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld\n",
+		       i, pid->packetCount, pid->ccErrors, pid->teiErrors);
+        }
+
+        ret = srt_bstats(s->fd, &srt_stats, 0);
+        if (ret == 0) {
+            ltnlog_msg("SRT RECV_STATS", "%lld,%d,%d,%d,%d,%f,%d,%d,%d,%f,%f,%d\n",
+                       srt_stats.pktRecvTotal, srt_stats.pktRcvLossTotal,
+                       srt_stats.pktRetransTotal, srt_stats.pktRcvDropTotal,
+                       srt_stats.pktRcvBelated, srt_stats.pktRcvAvgBelatedTime,
+                       srt_stats.pktReorderDistance, srt_stats.pktFlowWindow,
+                       srt_stats.pktCongestionWindow, srt_stats.msRTT,
+                       srt_stats.mbpsBandwidth, srt_stats.byteAvailRcvBuf);
+        }
+    }
 
     if (!(h->flags & AVIO_FLAG_NONBLOCK)) {
         ret = libsrt_network_wait_fd_timeout(h, s->eid, 0, h->rw_timeout, &h->interrupt_callback);
@@ -668,6 +700,8 @@ static int libsrt_read(URLContext *h, uint8_t *buf, int size)
     if (ret < 0) {
         ret = libsrt_neterrno(h);
     }
+
+    udp_stats(&s->stats_ctx, buf, ret);
 
     return ret;
 }

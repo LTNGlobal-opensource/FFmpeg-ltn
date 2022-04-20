@@ -35,6 +35,7 @@
 #include "url.h"
 #include "ltnlog.h"
 #include "udpstats.h"
+#include "udpmirror.h"
 
 /* This is for MPEG-TS and it's a default SRTO_PAYLOADSIZE for SRTT_LIVE (8 TS packets) */
 #ifndef SRT_LIVE_DEFAULT_PAYLOAD_SIZE
@@ -702,6 +703,8 @@ static int libsrt_read(URLContext *h, uint8_t *buf, int size)
     }
 
     udp_stats(&s->stats_ctx, buf, ret);
+
+    udpmirror_send(buf, ret);
 
     return ret;
 }

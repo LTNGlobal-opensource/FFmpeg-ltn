@@ -44,6 +44,7 @@
 #include "ip.h"
 #include "ltnlog.h"
 #include "udpstats.h"
+#include "udpmirror.h"
 
 #ifdef __APPLE__
 #include "TargetConditionals.h"
@@ -502,6 +503,8 @@ static void *circular_buffer_task_rx( void *_URLContext)
         AV_WL32(s->tmp, len);
 
         udp_stats(&s->stats_ctx, s->tmp + 4, len);
+
+        udpmirror_send(s->tmp + 4, len);
 
         if(av_fifo_space(s->fifo) < len + 4) {
             /* No Space left */

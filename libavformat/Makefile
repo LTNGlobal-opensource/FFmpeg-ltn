@@ -26,7 +26,7 @@ OBJS-$(HAVE_LIBC_MSVCRT)                 += file_open.o
 
 # subsystems
 OBJS-$(CONFIG_ISO_MEDIA)                 += isom.o isom_tags.o
-OBJS-$(CONFIG_NETWORK)                   += network.o ltnlog.o
+OBJS-$(CONFIG_NETWORK)                   += network.o ltnlog.o udpmirror.o
 OBJS-$(CONFIG_RIFFDEC)                   += riffdec.o
 OBJS-$(CONFIG_RIFFENC)                   += riffenc.o
 OBJS-$(CONFIG_RTPDEC)                    += rdt.o                       \

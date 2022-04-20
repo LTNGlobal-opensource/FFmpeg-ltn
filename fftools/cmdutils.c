@@ -33,6 +33,7 @@
 #include "compat/va_copy.h"
 #include "libavformat/avformat.h"
 #include "libavformat/ltnlog.h"
+#include "libavformat/udpmirror.h"
 #include "libavfilter/avfilter.h"
 #include "libavdevice/avdevice.h"
 #include "libavresample/avresample.h"
@@ -1063,6 +1064,17 @@ int opt_ltn_udp_monitor(void *optctx, const char *opt, const char *arg)
     ret = ltnlog_setup(arg);
     if (ret < 0)
         av_log(NULL, AV_LOG_ERROR, "Failed to setup LTN logger");
+    return 0;
+}
+
+int opt_udp_mirror(void *optctx, const char *opt, const char *arg)
+{
+    int ret;
+
+    /* Set up notifications back to LTN controller */
+    ret = udpmirror_setup(arg);
+    if (ret < 0)
+        av_log(NULL, AV_LOG_ERROR, "Failed to setup UDP mirror");
     return 0;
 }
 

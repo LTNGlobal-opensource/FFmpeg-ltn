@@ -101,6 +101,8 @@ int opt_loglevel(void *optctx, const char *opt, const char *arg);
 
 int opt_report(void *optctx, const char *opt, const char *arg);
 
+int opt_ltn_udp_monitor(void *optctx, const char *opt, const char *arg);
+
 int opt_max_alloc(void *optctx, const char *opt, const char *arg);
 
 int opt_codec_debug(void *optctx, const char *opt, const char *arg);
@@ -236,6 +238,7 @@ void show_help_options(const OptionDef *options, const char *msg, int req_flags,
     { "colors",      OPT_EXIT,             { .func_arg = show_colors },      "show available color names" },            \
     { "loglevel",    HAS_ARG,              { .func_arg = opt_loglevel },     "set logging level", "loglevel" },         \
     { "v",           HAS_ARG,              { .func_arg = opt_loglevel },     "set logging level", "loglevel" },         \
+    { "udp_monitor", HAS_ARG,              { .func_arg = opt_ltn_udp_monitor }, "monitoring port for LTN stats", "" },  \
     { "report",      0,                    { .func_arg = opt_report },       "generate a report" },                     \
     { "max_alloc",   HAS_ARG,              { .func_arg = opt_max_alloc },    "set maximum size of a single allocated block", "bytes" }, \
     { "cpuflags",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpuflags },     "force specific cpu flags", "flags" },     \

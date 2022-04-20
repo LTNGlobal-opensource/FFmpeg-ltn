@@ -32,6 +32,7 @@
 #include "config.h"
 #include "compat/va_copy.h"
 #include "libavformat/avformat.h"
+#include "libavformat/ltnlog.h"
 #include "libavfilter/avfilter.h"
 #include "libavdevice/avdevice.h"
 #include "libavresample/avresample.h"
@@ -1052,6 +1053,17 @@ static int init_report(const char *env)
 int opt_report(void *optctx, const char *opt, const char *arg)
 {
     return init_report(NULL);
+}
+
+int opt_ltn_udp_monitor(void *optctx, const char *opt, const char *arg)
+{
+    int ret;
+
+    /* Set up notifications back to LTN controller */
+    ret = ltnlog_setup(arg);
+    if (ret < 0)
+        av_log(NULL, AV_LOG_ERROR, "Failed to setup LTN logger");
+    return 0;
 }
 
 int opt_max_alloc(void *optctx, const char *opt, const char *arg)

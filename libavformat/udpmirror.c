@@ -26,7 +26,6 @@
 #define _GNU_SOURCE
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/syscall.h>
 
 #include "libavformat/avformat.h"
 #include "libavformat/network.h"

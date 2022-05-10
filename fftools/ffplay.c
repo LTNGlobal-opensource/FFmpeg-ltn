@@ -57,6 +57,7 @@
 
 #include <SDL.h>
 #include <SDL_thread.h>
+#include "libavformat/ltnlog.h"
 
 #include "cmdutils.h"
 
@@ -3452,6 +3453,13 @@ static void event_loop(VideoState *cur_stream)
                 }
             break;
         case SDL_WINDOWEVENT:
+            /* Report back new window position and size */
+            if (1) {
+                int x = 0, y = 0, w = 0, h = 0;
+                SDL_GetWindowPosition(window, &x, &y);
+                SDL_GetWindowSize(window, &w, &h);
+                ltnlog_msg("FFPLAY WINDOWPOS", "%d,%d,%d,%d", x, y, w, h);
+            }
             switch (event.window.event) {
                 case SDL_WINDOWEVENT_SIZE_CHANGED:
                     screen_width  = cur_stream->width  = event.window.data1;

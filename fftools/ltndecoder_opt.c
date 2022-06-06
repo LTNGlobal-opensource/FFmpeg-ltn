@@ -2286,7 +2286,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
                         }
                         new_audio_stream(o, oc, st->index);
 
-                        if (getenv("LTN_ENABLE_AUDIO_ALL") == NULL) {
+                        if (!o->enable_all_audio) {
                             /* We've successfully found one stream and we're not told
                                to include all streams, so go no further */
                             break;
@@ -2302,10 +2302,10 @@ static int open_output_file(OptionsContext *o, const char *filename)
                     AVStream *st = input_streams[prg->stream_index[i]]->st;
                     if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
                         if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
-                            && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
+                            && o->enable_smpte2038) {
                             new_data_stream(o, oc, st->index);
                         } else if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
-                                   && getenv("LTN_ENABLE_SCTE35") != NULL) {
+                                   && o->enable_scte35) {
                             new_data_stream(o, oc, st->index);
                         }
                     }
@@ -2337,7 +2337,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
             /* audio: most channels */
             if (!o->audio_disable && av_guess_codec(oc->oformat, NULL, filename, NULL, AVMEDIA_TYPE_AUDIO) != AV_CODEC_ID_NONE) {
                 int best_score = 0, idx = -1;
-                if (getenv("LTN_ENABLE_AUDIO_ALL") != NULL) {
+                if (o->enable_all_audio) {
                     /* Enable all streams */
                     for (i = 0; i < nb_input_streams; i++) {
                         AVStream *st = input_streams[i]->st;
@@ -2405,10 +2405,10 @@ static int open_output_file(OptionsContext *o, const char *filename)
                     AVStream *st = input_streams[i]->st;
                     if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA) {
                         if (st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038
-                            && getenv("LTN_ENABLE_SMPTE2038") != NULL) {
+                            && o->enable_smpte2038) {
                             new_data_stream(o, oc, st->index);
                         } else if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35
-                                   && getenv("LTN_ENABLE_SCTE35") != NULL) {
+                                   && o->enable_scte35) {
                             new_data_stream(o, oc, st->index);
                         }
                     }
@@ -3851,6 +3851,14 @@ const OptionDef options[] = {
     { "tvstd", HAS_ARG | OPT_EXPERT | OPT_VIDEO, { .func_arg = opt_video_standard },
         "deprecated, use -standard", "standard" },
     { "isync", OPT_BOOL | OPT_EXPERT, { &input_sync }, "this option is deprecated and does nothing", "" },
+
+    /* Stream selection options */
+    { "enable_scte35", OPT_BOOL | OPT_OFFSET | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(enable_scte35) },
+        "Send SCTE-35 to output", "" },
+    { "enable_smpte2038", OPT_BOOL | OPT_OFFSET | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(enable_smpte2038) },
+        "Send SMPTE-2038 VANC to output", "" },
+    { "enable_all_audio", OPT_BOOL | OPT_OFFSET | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(enable_all_audio) },
+        "Send all audio streams to output", "" },
 
     /* muxer options */
     { "muxdelay",   OPT_FLOAT | HAS_ARG | OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(mux_max_delay) },

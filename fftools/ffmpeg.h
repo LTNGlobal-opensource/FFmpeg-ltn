@@ -161,6 +161,10 @@ typedef struct OptionsContext {
     int subtitle_disable;
     int data_disable;
 
+    int enable_scte35;
+    int enable_smpte2038;
+    int enable_all_audio;
+
     /* indexed by output file stream index */
     int   *streamid_map;
     int nb_streamid_map;

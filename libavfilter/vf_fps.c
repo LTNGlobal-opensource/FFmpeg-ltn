@@ -271,6 +271,19 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *buf)
     delta = av_rescale_q_rnd(buf->pts - s->first_pts, inlink->time_base,
                              outlink->time_base, s->rounding) - s->frames_out ;
 
+    if ((delta > 60 || delta < -60) && (getenv("LTN_SKIP_RESTART_ON_PTSJUMP") == NULL)) {
+        /* Some massive jump in stream timing.  Rather than duplicating the same
+           frame potentially thousands of times, just bail out and let the
+           decoder get restarted */
+        av_log(ctx, AV_LOG_ERROR, "Massive jump in PTS (cur=%"PRId64" last=%"PRId64" delta=%"PRId64").  Exiting...\n",
+               av_rescale_q_rnd(buf->pts, inlink->time_base,
+                                outlink->time_base, s->rounding),
+               av_rescale_q_rnd(s->first_pts, inlink->time_base,
+                                outlink->time_base, s->rounding) + s->frames_out,
+               delta);
+        exit(1);
+    }
+
     if (delta < 1) {
         /* drop everything buffered except the last */
         int drop = av_fifo_size(s->fifo)/sizeof(AVFrame*);

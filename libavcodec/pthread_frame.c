@@ -34,6 +34,7 @@
 #include "thread.h"
 #include "version.h"
 
+#include "libavformat/ltnlog.h"
 #include "libavutil/avassert.h"
 #include "libavutil/buffer.h"
 #include "libavutil/common.h"
@@ -763,6 +764,8 @@ int ff_frame_thread_init(AVCodecContext *avctx)
 
     fctx->async_lock = 1;
     fctx->delaying = 1;
+
+    ltnlog_stat("DECODE_THREAD_COUNT", thread_count);
 
     for (i = 0; i < thread_count; i++) {
         AVCodecContext *copy = av_malloc(sizeof(AVCodecContext));

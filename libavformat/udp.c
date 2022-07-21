@@ -584,6 +584,8 @@ static void *circular_buffer_task_rx( void *_URLContext)
                         "To avoid, increase fifo_size URL option. "
                         "To survive in such case, use overrun_nonfatal option\n");
                 s->circular_buffer_error = AVERROR(EIO);
+                ltnlog_msg("UDPWARN", "UDP input buffer overrun forcing restart."
+                           "  Decoder not keeping up with realtime?");
                 goto end;
             }
         }

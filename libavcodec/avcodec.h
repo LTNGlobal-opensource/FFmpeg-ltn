@@ -2797,6 +2797,7 @@ typedef struct AVCodecContext {
      * - decoding: Set by user.
      */
     int thread_count;
+    int threads_autotune;
 
     /**
      * Which multithreading methods to use.

@@ -112,7 +112,7 @@ static const AVClass ac4_muxer_class = {
     .version        = LIBAVUTIL_VERSION_INT,
 };
 
-const AVOutputFormat ff_ac4_muxer = {
+AVOutputFormat ff_ac4_muxer = {
     .name              = "ac4",
     .long_name         = NULL_IF_CONFIG_SMALL("raw AC-4"),
     .mime_type         = "audio/ac4",

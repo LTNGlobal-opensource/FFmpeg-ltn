@@ -23,6 +23,7 @@
 #include "libavformat/internal.h"
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/mem.h"
 
 #ifdef _WIN32
 #include <windows.h>

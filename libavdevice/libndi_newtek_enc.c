@@ -25,6 +25,8 @@
 #include "libavformat/ltnlog.h"
 #include "libavutil/opt.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/sei-timestamp.h"
+#include "libavutil/time.h"
 
 #include "libndi_newtek_common.h"
 
@@ -61,6 +63,7 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
 {
     struct NDIContext *ctx = avctx->priv_data;
     AVFrame *avframe, *tmp = (AVFrame *)pkt->data;
+    AVFrameSideData *side_data;
 
     if (tmp->format != AV_PIX_FMT_UYVY422 && tmp->format != AV_PIX_FMT_BGRA &&
         tmp->format != AV_PIX_FMT_BGR0 && tmp->format != AV_PIX_FMT_RGBA &&
@@ -94,6 +97,74 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
     av_log(avctx, AV_LOG_DEBUG, "%s: pkt->pts=%"PRId64", timecode=%"PRId64", st->time_base=%d/%d\n",
         __func__, pkt->pts, ctx->video->timecode, st->time_base.num, st->time_base.den);
 
+    avframe_update_pipelinestats(avframe, AVFORMAT_OUTPUT_TIME, av_gettime(), -1, -1);
+    side_data = av_frame_get_side_data(avframe, AV_FRAME_DATA_PIPELINE_STATS);
+    if (side_data && side_data->size) {
+        struct AVPipelineStats *stats = (struct AVPipelineStats *) side_data->data;
+        ltnlog_stat("VIDEOLATENCY_MS", (stats->avformat_output_time - stats->avformat_input_time) / 1000);
+    }
+
+    side_data = av_frame_get_side_data(avframe, AV_FRAME_DATA_SEI_UNREGISTERED);
+    if (side_data && side_data->size) {
+        /* MISB UUIDs */
+        uint8_t misb_ptp_hevc[] = { 0xa8, 0x68, 0x7d, 0xd4, 0xd7, 0x59, 0x37, 0x58, 0xa5, 0xce, 0xf0, 0x33, 0x8b, 0x65, 0x45, 0xf1 };
+        uint8_t misb_ptp_h264[] = { 0x4d, 0x49, 0x53, 0x50, 0x6d, 0x69, 0x63, 0x72, 0x6f, 0x73, 0x65, 0x63, 0x74, 0x69, 0x6d, 0x65 };
+        /* See MISB ST 0604.5 Table 1 */
+        if (side_data->size == 28 &&
+            (memcmp(side_data->data, misb_ptp_h264, 16) == 0 ||
+             memcmp(side_data->data, misb_ptp_hevc, 16) == 0)) {
+            struct timeval now, diff, encode_input;
+            int64_t val;
+            uint8_t status;
+            uint64_t ptp = 0;
+
+            /* Status field.  See MISB ST 0603.4 Table 1 */
+            status = side_data->data[16];
+            if ((status & 0x80) == 0 && (status & 0x40) == 0) {
+                /* Locked and Normal */
+                ptp = ((uint64_t)side_data->data[17] << 56) |
+                      ((uint64_t)side_data->data[18] << 48) |
+                      ((uint64_t)side_data->data[20] << 40) |
+                      ((uint64_t)side_data->data[21] << 32) |
+                      ((uint64_t)side_data->data[23] << 24) |
+                      ((uint64_t)side_data->data[24] << 16) |
+                      ((uint64_t)side_data->data[26] << 8) |
+                      ((uint64_t)side_data->data[27]);
+                encode_input.tv_sec = ptp / 1000000;
+                encode_input.tv_usec = ptp % 1000000;
+                gettimeofday(&now, NULL);
+                sei_timeval_subtract(&diff, &now, &encode_input);
+                val = (diff.tv_sec * 1000) + (diff.tv_usec / 1000);
+                ltnlog_stat("GLASSTOGLASS_MS", val);
+            }
+        }
+
+        int offset = ltn_uuid_find(side_data->data, side_data->size);
+        if (offset >= 0) {
+            struct timeval now, diff;
+            struct timeval encode_input, encode_output;
+            int64_t val;
+
+            memset(&encode_input, 0, sizeof(struct timeval));
+            memset(&encode_output, 0, sizeof(struct timeval));
+            sei_timestamp_value_timeval_query(side_data->data + offset, side_data->size - offset, 2, &encode_input);
+            sei_timestamp_value_timeval_query(side_data->data + offset, side_data->size - offset, 8, &encode_output);
+            gettimeofday(&now, NULL);
+
+            if (encode_output.tv_sec != 0) {
+                sei_timeval_subtract(&diff, &encode_output, &encode_input);
+                val = (diff.tv_sec * 1000) + (diff.tv_usec / 1000);
+            } else {
+                val = -1;
+            }
+            ltnlog_stat("ENCODETOTAL_MS", val);
+
+            sei_timeval_subtract(&diff, &now, &encode_input);
+            val = (diff.tv_sec * 1000) + (diff.tv_usec / 1000);
+            ltnlog_stat("GLASSTOGLASS_MS", val);
+        }
+    }
+
     /* asynchronous for one frame, but will block if a second frame
         is given before the first one has been sent */
     ctx->lib->NDIlib_send_send_video_async(ctx->ndi_send, ctx->video);
@@ -116,6 +187,33 @@ static int ndi_write_audio_packet(AVFormatContext *avctx, AVStream *st, AVPacket
 
     av_log(avctx, AV_LOG_DEBUG, "%s: pkt->pts=%"PRId64", timecode=%"PRId64", st->time_base=%d/%d\n",
         __func__, pkt->pts, ctx->audio->timecode, st->time_base.num, st->time_base.den);
+
+    /* Compute the dBFS for the audio channels in this stream */
+    int sample_size = st->codecpar->channels * 2;
+    int interleave_offset = 0;
+    for (int i = 0; i < st->codecpar->channels; i++) {
+        int16_t largest_sample = 0;
+        float dbfs, val;
+        /* Find largest sample */
+        int sample_offset = 0;
+        for (int j = 0; j < ctx->audio->no_samples; j++) {
+            int offset = sample_offset + (i * 2);
+            int16_t samp = pkt->data[offset] | (pkt->data[offset + 1] << 8);
+            if (largest_sample < samp) {
+                largest_sample = samp;
+            }
+            sample_offset += sample_size;
+        }
+        if (largest_sample == 0) {
+            dbfs = -60;
+        } else {
+            val = largest_sample;
+            dbfs = 20 * log10(val / 32767.0);
+        }
+        ltnlog_msg("AUDIO DBFS", "%d,%f\n", interleave_offset + i, dbfs);
+    }
+
+    ltnlog_stat("PLAY AUDIO BYTES", ctx->audio->no_samples);
 
     ctx->lib->NDIlib_util_send_send_audio_interleaved_16s(ctx->ndi_send, ctx->audio);
 
@@ -151,6 +249,10 @@ static int ndi_setup_audio(AVFormatContext *avctx, AVStream *st)
     ctx->audio->sample_rate = c->sample_rate;
     ctx->audio->no_channels = c->channels;
     ctx->audio->reference_level = ctx->reference_level;
+
+    /* FIXME: increase when supporting more than on stream */
+    ltnlog_stat("AUDIO STREAMCOUNT", 1);
+    ltnlog_stat("AUDIO CHANNELCOUNT", ctx->audio->no_channels);
 
     avpriv_set_pts_info(st, 64, 1, NDI_TIME_BASE);
 
@@ -229,6 +331,8 @@ static int ndi_setup_video(AVFormatContext *avctx, AVStream *st)
         ctx->video->picture_aspect_ratio = (double)st->codecpar->width/st->codecpar->height;
 
     avpriv_set_pts_info(st, 64, 1, NDI_TIME_BASE);
+
+    ltnlog_stat("REFERENCESIGNALMODE", -1);
 
     return 0;
 }

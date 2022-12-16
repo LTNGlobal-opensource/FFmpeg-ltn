@@ -28,6 +28,7 @@
 #include "libavutil/mem.h"
 #include "libavutil/sei-timestamp.h"
 #include "libavutil/time.h"
+#include "libavutil/base64.h"
 
 #include "libndi_newtek_common.h"
 
@@ -39,10 +40,11 @@ struct NDIContext {
     int clock_video, clock_audio;
 
     const NDIlib_v3* lib;
-    NDIlib_video_frame_t *video;
+    NDIlib_video_frame_v2_t *video;
     NDIlib_audio_frame_interleaved_16s_t *audio;
     NDIlib_send_instance_t ndi_send;
     AVFrame *last_avframe;
+    char *last_metadata;
 };
 
 static int ndi_write_trailer(AVFormatContext *avctx)
@@ -52,6 +54,7 @@ static int ndi_write_trailer(AVFormatContext *avctx)
     if (ctx->ndi_send) {
         ctx->lib->NDIlib_send_destroy(ctx->ndi_send);
         av_frame_free(&ctx->last_avframe);
+        av_freep(&ctx->last_metadata);
     }
 
     av_freep(&ctx->video);
@@ -65,6 +68,8 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
     struct NDIContext *ctx = avctx->priv_data;
     AVFrame *avframe, *tmp = (AVFrame *)pkt->data;
     AVFrameSideData *side_data;
+    char *metadata_base64 = NULL;
+    char *metadata_xml = NULL;
 
     if (tmp->format != AV_PIX_FMT_UYVY422 && tmp->format != AV_PIX_FMT_BGRA &&
         tmp->format != AV_PIX_FMT_BGR0 && tmp->format != AV_PIX_FMT_RGBA &&
@@ -164,14 +169,32 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
             val = (diff.tv_sec * 1000) + (diff.tv_usec / 1000);
             ltnlog_stat("GLASSTOGLASS_MS", val);
         }
+
+        /* Send the SEI unregistered data regardless of UUID as metadata */
+        metadata_base64 = av_malloc(AV_BASE64_SIZE(side_data->size));
+        if (metadata_base64) {
+            if (av_base64_encode(metadata_base64, AV_BASE64_SIZE(side_data->size), side_data->data,
+                                 side_data->size)) {
+                int metadata_len = AV_BASE64_SIZE(side_data->size) + 256;
+                metadata_xml = av_malloc(metadata_len);
+                if (metadata_xml) {
+                    snprintf(metadata_xml, metadata_len, "<ltn type=\"sei\" val=\"%s\">", metadata_base64);
+                    ctx->video->p_metadata = metadata_xml;
+                }
+                av_freep(&metadata_base64);
+            }
+        }
     }
 
     /* asynchronous for one frame, but will block if a second frame
         is given before the first one has been sent */
-    ctx->lib->NDIlib_send_send_video_async(ctx->ndi_send, ctx->video);
+    ctx->lib->NDIlib_send_send_video_async_v2(ctx->ndi_send, ctx->video);
 
     av_frame_free(&ctx->last_avframe);
     ctx->last_avframe = avframe;
+
+    av_freep(&ctx->last_metadata);
+    ctx->last_metadata = metadata_xml;
 
     ltnlog_stat("PICTURE", pkt->pts);
 
@@ -290,7 +313,7 @@ static int ndi_setup_video(AVFormatContext *avctx, AVStream *st)
         return AVERROR(EINVAL);
     }
 
-    ctx->video = av_mallocz(sizeof(NDIlib_video_frame_t));
+    ctx->video = av_mallocz(sizeof(NDIlib_video_frame_v2_t));
     if (!ctx->video)
         return AVERROR(ENOMEM);
 

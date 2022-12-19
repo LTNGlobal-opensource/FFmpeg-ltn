@@ -178,7 +178,7 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
                 int metadata_len = AV_BASE64_SIZE(side_data->size) + 256;
                 metadata_xml = av_malloc(metadata_len);
                 if (metadata_xml) {
-                    snprintf(metadata_xml, metadata_len, "<ltn type=\"sei\" val=\"%s\">", metadata_base64);
+                    snprintf(metadata_xml, metadata_len, "<ltn type=\"sei_unregistered\" val=\"%s\">", metadata_base64);
                     ctx->video->p_metadata = metadata_xml;
                 }
                 av_freep(&metadata_base64);

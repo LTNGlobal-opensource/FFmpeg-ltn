@@ -65,7 +65,11 @@ static int bitpacked_decode_yuv422p10(AVCodecContext *avctx, AVFrame *frame,
 {
     uint64_t frame_size = (uint64_t)avctx->width * (uint64_t)avctx->height * 20;
     uint64_t packet_size = (uint64_t)avpkt->size * 8;
+#ifdef ORIGINAL_CODE
     GetBitContext bc;
+#else
+    uint8_t *src;
+#endif
     uint16_t *y, *u, *v;
     int ret, i, j;
 
@@ -79,6 +83,7 @@ static int bitpacked_decode_yuv422p10(AVCodecContext *avctx, AVFrame *frame,
     if (avctx->width % 2)
         return AVERROR_PATCHWELCOME;
 
+#ifdef ORIGINAL_CODE
     ret = init_get_bits(&bc, avpkt->data, avctx->width * avctx->height * 20);
     if (ret)
         return ret;
@@ -95,6 +100,22 @@ static int bitpacked_decode_yuv422p10(AVCodecContext *avctx, AVFrame *frame,
             *y++ = get_bits(&bc, 10);
         }
     }
+#else
+    src = avpkt->data;
+    for (i = 0; i < avctx->height; i++) {
+       y = (uint16_t*)(frame->data[0] + i * frame->linesize[0]);
+       u = (uint16_t*)(frame->data[1] + i * frame->linesize[1]);
+       v = (uint16_t*)(frame->data[2] + i * frame->linesize[2]);
+
+       for (j = 0; j < avctx->width; j += 2) {
+          *u++ = (src[0] << 2) | (src[1] >> 6);
+          *y++ = ((src[1] << 4) | (src[2] >> 4)) & 0x3ff;
+          *v++ = ((src[2] << 6) | (src[3] >> 2)) & 0x3ff;
+          *y++ = ((src[3] << 8) | (src[4]))      & 0x3ff;
+          src += 5;
+       }
+    }
+#endif
 
     return 0;
 }

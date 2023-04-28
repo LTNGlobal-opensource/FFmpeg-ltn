@@ -235,4 +235,11 @@ int ff_decklink_list_formats(AVFormatContext *avctx, decklink_direction_t direct
 void ff_decklink_cleanup(AVFormatContext *avctx);
 int ff_decklink_init_device(AVFormatContext *avctx, const char* name);
 
+void avpacket_queue_init(AVFormatContext *avctx, AVPacketQueue *q);
+void avpacket_queue_flush(AVPacketQueue *q);
+void avpacket_queue_end(AVPacketQueue *q);
+unsigned long long avpacket_queue_size(AVPacketQueue *q);
+int avpacket_queue_put(AVPacketQueue *q, AVPacket *pkt);
+int avpacket_queue_get(AVPacketQueue *q, AVPacket *pkt, int block);
+
 #endif /* AVDEVICE_DECKLINK_COMMON_H */

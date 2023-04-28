@@ -206,6 +206,9 @@ static av_cold void deint_cuda_uninit(AVFilterContext *ctx)
     av_frame_free(&y->cur);
     av_frame_free(&y->next);
 
+    if (yadif->cc_fifo)
+        ff_cc_fifo_free(yadif->cc_fifo);
+
     av_buffer_unref(&s->device_ref);
     s->hwctx = NULL;
     av_buffer_unref(&s->input_frames_ref);
@@ -291,6 +294,11 @@ static int config_output(AVFilterLink *link)
     if(y->mode & 1)
         link->frame_rate = av_mul_q(ctx->inputs[0]->frame_rate,
                                     (AVRational){2, 1});
+    else
+        outlink->frame_rate = ctx->inputs[0]->frame_rate;
+
+    if (!(s->cc_fifo = ff_cc_fifo_alloc(&outlink->frame_rate, ctx)))
+        av_log(ctx, AV_LOG_VERBOSE, "Failure to setup CC FIFO queue\n");
 
     if (link->w < 3 || link->h < 3) {
         av_log(ctx, AV_LOG_ERROR, "Video of less than 3 columns or lines is not supported\n");

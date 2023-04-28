@@ -568,7 +568,7 @@ static void handle_klv(AVFormatContext *avctx, decklink_ctx *ctx, IDeckLinkVideo
         klv_packet.data = klv.data();
         klv_packet.size = klv.size();
 
-        if (avpacket_queue_put(&ctx->queue, &klv_packet) < 0) {
+        if (ff_decklink_packet_queue_put(&ctx->queue, &klv_packet) < 0) {
             ++ctx->dropped;
         }
     }
@@ -760,7 +760,7 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
     if (videoFrame) {
         AVPacket pkt = { 0 };
         if (ctx->frameCount % 25 == 0) {
-            unsigned long long qsize = avpacket_queue_size(&ctx->queue);
+            unsigned long long qsize = ff_decklink_packet_queue_size(&ctx->queue);
             av_log(avctx, AV_LOG_DEBUG,
                     "Frame received (#%lu) - Valid (%liB) - QSize %fMB\n",
                     ctx->frameCount,
@@ -924,7 +924,7 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
                     txt_pkt.stream_index = ctx->teletext_st->index;
                     txt_pkt.data = txt_buf0;
                     txt_pkt.size = txt_buf - txt_buf0;
-                    if (avpacket_queue_put(&ctx->queue, &txt_pkt) < 0) {
+                    if (ff_decklink_packet_queue_put(&ctx->queue, &txt_pkt) < 0) {
                         ++ctx->dropped;
                     }
                 }
@@ -935,7 +935,7 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
         if (pkt.buf)
             videoFrame->AddRef();
 
-        if (avpacket_queue_put(&ctx->queue, &pkt) < 0) {
+        if (ff_decklink_packet_queue_put(&ctx->queue, &pkt) < 0) {
             ++ctx->dropped;
         }
     }
@@ -957,7 +957,7 @@ HRESULT decklink_input_callback::VideoInputFrameArrived(
         pkt.stream_index = ctx->audio_st->index;
         pkt.data         = (uint8_t *)audioFrameBytes;
 
-        if (avpacket_queue_put(&ctx->queue, &pkt) < 0) {
+        if (ff_decklink_packet_queue_put(&ctx->queue, &pkt) < 0) {
             ++ctx->dropped;
         }
     }
@@ -1039,7 +1039,7 @@ av_cold int ff_decklink_read_close(AVFormatContext *avctx)
     }
 
     ff_decklink_cleanup(avctx);
-    avpacket_queue_end(&ctx->queue);
+    ff_decklink_packet_queue_end(&ctx->queue);
 
     av_freep(&cctx->ctx);
 
@@ -1297,7 +1297,7 @@ av_cold int ff_decklink_read_header(AVFormatContext *avctx)
         goto error;
     }
 
-    avpacket_queue_init (avctx, &ctx->queue);
+    ff_decklink_packet_queue_init(avctx, &ctx->queue);
 
     if (ctx->dli->StartStreams() != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Cannot start input stream\n");
@@ -1317,7 +1317,7 @@ int ff_decklink_read_packet(AVFormatContext *avctx, AVPacket *pkt)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
 
-    avpacket_queue_get(&ctx->queue, pkt, 1);
+    ff_decklink_packet_queue_get(&ctx->queue, pkt, 1);
 
     if (ctx->tc_format && !(av_dict_get(ctx->video_st->metadata, "timecode", NULL, 0))) {
         size_t size;

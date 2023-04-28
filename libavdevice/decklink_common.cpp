@@ -390,17 +390,17 @@ int ff_decklink_set_format(AVFormatContext *avctx, decklink_direction_t directio
     return ff_decklink_set_format(avctx, 0, 0, 0, 0, AV_FIELD_UNKNOWN, direction);
 }
 
-void avpacket_queue_init(AVFormatContext *avctx, AVPacketQueue *q)
+void ff_decklink_packet_queue_init(AVFormatContext *avctx, DecklinkPacketQueue *q)
 {
     struct decklink_cctx *ctx = (struct decklink_cctx *)avctx->priv_data;
-    memset(q, 0, sizeof(AVPacketQueue));
+    memset(q, 0, sizeof(DecklinkPacketQueue));
     pthread_mutex_init(&q->mutex, NULL);
     pthread_cond_init(&q->cond, NULL);
     q->avctx = avctx;
     q->max_q_size = ctx->queue_size;
 }
 
-void avpacket_queue_flush(AVPacketQueue *q)
+void ff_decklink_packet_queue_flush(DecklinkPacketQueue *q)
 {
     PacketListEntry *pkt, *pkt1;
 
@@ -417,14 +417,14 @@ void avpacket_queue_flush(AVPacketQueue *q)
     pthread_mutex_unlock(&q->mutex);
 }
 
-void avpacket_queue_end(AVPacketQueue *q)
+void ff_decklink_packet_queue_end(DecklinkPacketQueue *q)
 {
-    avpacket_queue_flush(q);
+    ff_decklink_packet_queue_flush(q);
     pthread_mutex_destroy(&q->mutex);
     pthread_cond_destroy(&q->cond);
 }
 
-unsigned long long avpacket_queue_size(AVPacketQueue *q)
+unsigned long long ff_decklink_packet_queue_size(DecklinkPacketQueue *q)
 {
     unsigned long long size;
     pthread_mutex_lock(&q->mutex);
@@ -433,12 +433,12 @@ unsigned long long avpacket_queue_size(AVPacketQueue *q)
     return size;
 }
 
-int avpacket_queue_put(AVPacketQueue *q, AVPacket *pkt)
+int ff_decklink_packet_queue_put(DecklinkPacketQueue *q, AVPacket *pkt)
 {
     PacketListEntry *pkt1;
 
     // Drop Packet if queue size is > maximum queue size
-    if (avpacket_queue_size(q) > (uint64_t)q->max_q_size) {
+    if (ff_decklink_packet_queue_size(q) > (uint64_t)q->max_q_size) {
         av_packet_unref(pkt);
         av_log(q->avctx, AV_LOG_WARNING,  "Decklink input buffer overrun!\n");
         return -1;
@@ -475,7 +475,7 @@ int avpacket_queue_put(AVPacketQueue *q, AVPacket *pkt)
     return 0;
 }
 
-int avpacket_queue_get(AVPacketQueue *q, AVPacket *pkt, int block)
+int ff_decklink_packet_queue_get(DecklinkPacketQueue *q, AVPacket *pkt, int block)
 {
     int ret;
 

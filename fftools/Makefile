@@ -1,11 +1,12 @@
 AVPROGS-$(CONFIG_FFMPEG)   += ffmpeg
 AVPROGS-$(CONFIG_FFPLAY)   += ffplay
 AVPROGS-$(CONFIG_FFPROBE)  += ffprobe
+AVPROGS-$(CONFIG_LTNDECODER) += ltndecoder
 
 AVPROGS     := $(AVPROGS-yes:%=%$(PROGSSUF)$(EXESUF))
 PROGS       += $(AVPROGS)
 
-AVBASENAMES  = ffmpeg ffplay ffprobe
+AVBASENAMES  = ffmpeg ffplay ffprobe ltndecoder
 ALLAVPROGS   = $(AVBASENAMES:%=%$(PROGSSUF)$(EXESUF))
 ALLAVPROGS_G = $(AVBASENAMES:%=%$(PROGSSUF)_g$(EXESUF))
 
@@ -24,6 +25,20 @@ OBJS-ffmpeg +=                  \
     fftools/thread_queue.o      \
 
 OBJS-ffplay += fftools/ffplay_renderer.o
+
+OBJS-ltndecoder +=                  \
+    fftools/ltndecoder_dec.o        \
+    fftools/ltndecoder_demux.o      \
+    fftools/ltndecoder_enc.o        \
+    fftools/ltndecoder_filter.o     \
+    fftools/ltndecoder_hw.o         \
+    fftools/ltndecoder_mux.o        \
+    fftools/ltndecoder_mux_init.o   \
+    fftools/ltndecoder_opt.o        \
+    fftools/ltndecoder_sched.o      \
+    fftools/objpool.o               \
+    fftools/sync_queue.o            \
+    fftools/thread_queue.o          \
 
 define DOFFTOOL
 OBJS-$(1) += fftools/cmdutils.o fftools/opt_common.o fftools/$(1).o $(OBJS-$(1)-yes)

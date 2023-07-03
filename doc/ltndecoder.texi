@@ -1,0 +1,28 @@
+\input texinfo @c -*- texinfo -*-
+@documentencoding UTF-8
+
+@settitle ltndecoder Documentation
+@titlepage
+@center @titlefont{ltndecodre Documentation}
+@end titlepage
+
+@top
+
+@contents
+
+@chapter Synopsis
+
+ltndecoder is a binary which is cloned from the ffmpeg tool but includes various
+changes specific to the LTN decoder use case.
+
+See the help for ffmpeg for usage on ltndecoder as they accept the same command
+line arguments.
+
+@ignore
+
+@setfilename ltndecoder
+@settitle ltndecoder video converter
+
+@end ignore
+
+@bye

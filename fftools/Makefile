@@ -1,11 +1,12 @@
 AVPROGS-$(CONFIG_FFMPEG)   += ffmpeg
 AVPROGS-$(CONFIG_FFPLAY)   += ffplay
 AVPROGS-$(CONFIG_FFPROBE)  += ffprobe
+AVPROGS-$(CONFIG_LTNDECODER) += ltndecoder
 
 AVPROGS     := $(AVPROGS-yes:%=%$(PROGSSUF)$(EXESUF))
 PROGS       += $(AVPROGS)
 
-AVBASENAMES  = ffmpeg ffplay ffprobe
+AVBASENAMES  = ffmpeg ffplay ffprobe ltndecoder
 ALLAVPROGS   = $(AVBASENAMES:%=%$(PROGSSUF)$(EXESUF))
 ALLAVPROGS_G = $(AVBASENAMES:%=%$(PROGSSUF)_g$(EXESUF))
 
@@ -18,6 +19,19 @@ OBJS-ffmpeg +=                  \
     fftools/ffmpeg_mux.o        \
     fftools/ffmpeg_mux_init.o   \
     fftools/ffmpeg_opt.o        \
+    fftools/objpool.o           \
+    fftools/sync_queue.o        \
+    fftools/thread_queue.o      \
+
+OBJS-ltndecoder +=              \
+    fftools/ltndecoder_dec.o        \
+    fftools/ltndecoder_demux.o      \
+    fftools/ltndecoder_enc.o        \
+    fftools/ltndecoder_filter.o     \
+    fftools/ltndecoder_hw.o         \
+    fftools/ltndecoder_mux.o        \
+    fftools/ltndecoder_mux_init.o   \
+    fftools/ltndecoder_opt.o        \
     fftools/objpool.o           \
     fftools/sync_queue.o        \
     fftools/thread_queue.o      \

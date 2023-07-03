@@ -116,6 +116,7 @@ Program options:
   --disable-ffmpeg         disable ffmpeg build
   --disable-ffplay         disable ffplay build
   --disable-ffprobe        disable ffprobe build
+  --disable-ltndecoder     disable ltndecoder build
 
 Documentation options:
   --disable-doc            do not build documentation
@@ -2001,6 +2002,7 @@ PROGRAM_LIST="
     ffplay
     ffprobe
     ffmpeg
+    ltndecoder
 "
 
 SUBSYSTEM_LIST="
@@ -3910,6 +3912,11 @@ ffmpeg_select="aformat_filter anull_filter atrim_filter format_filter
                hflip_filter null_filter
                transpose_filter trim_filter vflip_filter"
 ffmpeg_suggest="ole32 psapi shell32"
+ltndecoder_deps="avcodec avfilter avformat threads"
+ltndecoder_select="aformat_filter anull_filter atrim_filter format_filter
+               hflip_filter null_filter
+               transpose_filter trim_filter vflip_filter"
+ltndecoder_suggest="ole32 psapi shell32"
 ffplay_deps="avcodec avformat avfilter swscale swresample sdl2"
 ffplay_select="rdft crop_filter transpose_filter hflip_filter vflip_filter rotate_filter"
 ffplay_suggest="shell32"

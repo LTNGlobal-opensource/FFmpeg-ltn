@@ -48,6 +48,7 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/bswap.h"
+#include "libavutil/avstring.h"
 #include "avdevice.h"
 }
 
@@ -507,6 +508,7 @@ int ff_decklink_list_devices(AVFormatContext *avctx,
     IDeckLink *dl = NULL;
     IDeckLinkIterator *iter = decklink_create_iterator(avctx);
     int ret = 0;
+    int i = 0;
 
     if (!iter)
         return AVERROR(EIO);
@@ -546,8 +548,17 @@ int ff_decklink_list_devices(AVFormatContext *avctx,
                 ret = AVERROR(ENOMEM);
                 goto next;
             }
-
+#if 0
             new_device->device_name = av_strdup(unique_name ? unique_name : display_name);
+#else
+            /* use "decklink0" naming convention */
+            new_device->device_name = av_asprintf("decklink%d", i);
+            if (!new_device->device_name) {
+                ret = AVERROR(ENOMEM);
+                goto next;
+            }
+            i++;
+#endif
             new_device->device_description = av_strdup(display_name);
 
             if (!new_device->device_name ||
@@ -667,16 +678,21 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     IDeckLink *dl = NULL;
+    int i = 0;
+    int dev_no = -1;
     IDeckLinkIterator *iter = decklink_create_iterator(avctx);
     if (!iter)
         return AVERROR_EXTERNAL;
+
+    /* See if the name passed is a device name, or a device description */
+    sscanf(name, "decklink%d", &dev_no);
 
     while (iter->Next(&dl) == S_OK) {
         const char *display_name = NULL;
         const char *unique_name = NULL;
         decklink_get_attr_string(dl, BMDDeckLinkDisplayName, &display_name);
         decklink_get_attr_string(dl, BMDDeckLinkDeviceHandle, &unique_name);
-        if (display_name && !strcmp(name, display_name) || unique_name && !strcmp(name, unique_name)) {
+        if (dev_no == i || display_name && !strcmp(name, display_name) || unique_name && !strcmp(name, unique_name)) {
             av_free((void *)unique_name);
             av_free((void *)display_name);
             ctx->dl = dl;
@@ -685,6 +701,7 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
         av_free((void *)display_name);
         av_free((void *)unique_name);
         dl->Release();
+        i++;
     }
     iter->Release();
     if (!ctx->dl)

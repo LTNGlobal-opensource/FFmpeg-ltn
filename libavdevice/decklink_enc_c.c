@@ -62,6 +62,21 @@ static const AVOption options[] = {
     { "true"        ,  NULL                     , 0                   , AV_OPT_TYPE_CONST , { .i64 = 1   }, 0, 0, ENC, "level_a"},
     { "timing_offset", "genlock timing pixel offset", OFFSET(timing_offset), AV_OPT_TYPE_INT,   { .i64 = INT_MIN }, INT_MIN, INT_MAX, ENC, "timing_offset"},
     { "unset"       ,  NULL                     , 0                        , AV_OPT_TYPE_CONST, { .i64 = INT_MIN },       0,       0, ENC, "timing_offset"},
+
+    /* LTN specific options */
+    { "discard"     , "discard initial seconds of video", OFFSET(discard), AV_OPT_TYPE_DOUBLE, { .dbl = 1.5 }, 0, 5, ENC },
+    { "afd_line"    , "VANC line to insert AFD packets", OFFSET(afd_line), AV_OPT_TYPE_INT, { .i64 = 11 }, -1, INT64_MAX, ENC },
+    { "cea708_line" , "VANC line to insert CEA-708 CC packets", OFFSET(cea708_line), AV_OPT_TYPE_INT, { .i64 = 12 }, -1, INT64_MAX, ENC },
+    { "scte104_line", "VANC line to insert SCTE-104 packets", OFFSET(scte104_line), AV_OPT_TYPE_INT, { .i64 = 13 }, -1, INT64_MAX, ENC },
+    { "cea608_vbi" , "Enable output of CEA-608 as VBI waveform", OFFSET(cea608_vbi), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, ENC },
+    { "use_3glevel_a","use Level A if output 3G-SDI", OFFSET(use_3glevel_a), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, ENC },
+    { "decklink_live","Drop/Insert frames as needed to stay at preroll level", OFFSET(decklink_live), AV_OPT_TYPE_BOOL, {.i64 = 0}, -1, 1, ENC },
+    { "decklink_debug_level",  "Verbosity of logging output", OFFSET(debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
+    { "latency_debug_level",  "Verbosity of latency logging", OFFSET(latency_debug_level), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT64_MAX, ENC },
+    { "decklink_audio_delay",  "Comma separate list of delay per stream in ms", OFFSET(audio_delay_param),  AV_OPT_TYPE_STRING, { .str = NULL}, 0, 0, ENC },
+    { "decklink_thumbnail",  "Filename to write thumbnail images to", OFFSET(thumbnail_filename),  AV_OPT_TYPE_STRING, { .str = NULL}, 0, 0, ENC },
+    { "thumbnail_interval"     , "Frequency to generate thumbnails in seconds", OFFSET(thumbnail_interval), AV_OPT_TYPE_DOUBLE, { .dbl = 0.5 }, 0, 60, ENC },
+    { "thumbnail_quality", "Thumbnail image quality [0-32]", OFFSET(thumbnail_quality), AV_OPT_TYPE_INT, { .i64 = 2 }, -1, INT64_MAX, ENC },
     { NULL },
 };
 

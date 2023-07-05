@@ -75,6 +75,21 @@ struct decklink_cctx {
     int timing_offset;
     int wait_for_tc;
     DecklinkSignalLossAction signal_loss_action;
+
+    /* LTN specific */
+    double discard;
+    int afd_line;
+    int cea708_line;
+    int scte104_line;
+    int cea608_vbi;
+    int use_3glevel_a;
+    int decklink_live;
+    int debug_level;
+    int latency_debug_level;
+    char *audio_delay_param;
+    char *thumbnail_filename;
+    double thumbnail_interval;
+    int thumbnail_quality;
 };
 
 #endif /* AVDEVICE_DECKLINK_COMMON_C_H */

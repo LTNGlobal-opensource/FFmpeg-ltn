@@ -32,6 +32,7 @@ extern "C" {
 
 extern "C" {
 #include "libavformat/avformat.h"
+#include "libavformat/ltnlog.h"
 #include "libavcodec/bytestream.h"
 #include "libavutil/internal.h"
 #include "libavutil/imgutils.h"
@@ -215,6 +216,8 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     ctx->frames_preroll = st->time_base.den * ctx->preroll;
     if (st->time_base.den > 1000)
         ctx->frames_preroll /= 1000;
+
+    ltnlog_stat("PREROLL_TARGET", ctx->frames_preroll * st->time_base.num * 1000 / st->time_base.den);
 
     /* Buffer twice as many frames as the preroll. */
     ctx->frames_buffer = ctx->frames_preroll * 2;
@@ -457,6 +460,7 @@ static void construct_cc(AVFormatContext *avctx, struct decklink_ctx *ctx,
         av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
         return;
     }
+    ltnlog_stat("CC COUNT", cc_count);
 }
 
 /* See SMPTE ST 2016-3:2009 */
@@ -535,6 +539,8 @@ static void construct_afd(AVFormatContext *avctx, struct decklink_ctx *ctx,
             goto out;
         }
     }
+
+    ltnlog_stat("AFD", data[0]);
 
 out:
     if (afd)
@@ -749,6 +755,8 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         return AVERROR(EIO);
     }
 
+    ltnlog_stat("PICTURE", pkt->pts);
+
     ctx->dlo->GetBufferedVideoFrameCount(&buffered);
     av_log(avctx, AV_LOG_DEBUG, "Buffered video frames: %d.\n", (int) buffered);
     if (pkt->pts > 2 && buffered <= 2)
@@ -781,6 +789,7 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     int sample_count;
     uint32_t buffered;
     uint8_t *outbuf = NULL;
+    uint32_t written;
     int ret = 0;
 
     ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
@@ -800,10 +809,14 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
         outbuf = pkt->data;
     }
 
-    if (ctx->dlo->ScheduleAudioSamples(outbuf, sample_count, pkt->pts,
-                                       bmdAudioSampleRate48kHz, NULL) != S_OK) {
+    ret = ctx->dlo->ScheduleAudioSamples(outbuf, sample_count, pkt->pts,
+                                         bmdAudioSampleRate48kHz, &written);
+    if (ret != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not schedule audio samples.\n");
+        ltnlog_stat("ERROR AUDIO", 0);
         ret = AVERROR(EIO);
+    } else {
+        ltnlog_stat("PLAY AUDIO BYTES", written);
     }
 
     if (st->codecpar->codec_id == AV_CODEC_ID_AC3)
@@ -926,6 +939,9 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         av_log(ctx, AV_LOG_ERROR, "Failure to setup CC FIFO queue\n");
         goto error;
     }
+
+    ltnlog_stat("VIDEOMODE", ctx->bmd_mode);
+    ltnlog_stat("AUDIO CHANNELCOUNT", ctx->channels);
 
     return 0;
 

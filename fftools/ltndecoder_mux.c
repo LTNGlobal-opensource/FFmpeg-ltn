@@ -32,6 +32,7 @@
 #include "libavutil/mem.h"
 #include "libavutil/time.h"
 #include "libavutil/timestamp.h"
+#include "libavformat/ltnlog.h"
 
 #include "libavcodec/packet.h"
 
@@ -567,6 +568,8 @@ int mux_check_init(void *arg)
     }
     //assert_avoptions(of->opts);
     mux->header_written = 1;
+
+    ltnlog_stat("STATEMACHINE", LTED_RUNNING);
 
     av_dump_format(fc, of->index, fc->url, 1);
     atomic_fetch_add(&nb_output_dumped, 1);

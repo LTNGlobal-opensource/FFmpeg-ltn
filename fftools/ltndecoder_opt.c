@@ -1383,6 +1383,7 @@ int ffmpeg_parse_options(int argc, char **argv, Scheduler *sch)
     term_init();
 
     /* open input files */
+    ltnlog_stat("STATEMACHINE", LTED_SETUP_OUTPUT);
     ret = open_files(&octx.groups[GROUP_INFILE], "input", sch, ifile_open);
     if (ret < 0) {
         errmsg = "opening input files";

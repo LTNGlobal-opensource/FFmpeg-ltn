@@ -39,6 +39,7 @@
 #include "libavcodec/packet.h"
 
 #include "libavformat/avformat.h"
+#include "libavformat/ltnlog.h"
 
 typedef struct DemuxStream {
     InputStream              ist;
@@ -1619,6 +1620,7 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
     const char* subtitle_codec_name = NULL;
     const char*     data_codec_name = NULL;
     int scan_all_pmts_set = 0;
+    int64_t find_stream_start_time;
 
     int64_t start_time     = o->start_time;
     int64_t start_time_eof = o->start_time_eof;
@@ -1743,6 +1745,9 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
         av_dict_set(&o->g->format_opts, "scan_all_pmts", "1", AV_DICT_DONT_OVERWRITE);
         scan_all_pmts_set = 1;
     }
+
+    ltnlog_stat("STATEMACHINE", LTED_WAITING_FOR_INITIAL_DATA);
+
     /* open the input file with generic avformat function */
     err = avformat_open_input(&ic, filename, file_iformat, &o->g->format_opts);
     if (err < 0) {
@@ -1778,6 +1783,9 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
         AVDictionary **opts;
         int orig_nb_streams = ic->nb_streams;
 
+        ltnlog_stat("STATEMACHINE", LTED_PROBING);
+        find_stream_start_time = av_gettime();
+
         ret = setup_find_stream_info_opts(ic, o->g->codec_opts, &opts);
         if (ret < 0)
             return ret;
@@ -1786,6 +1794,7 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
            first frames to get it. (used in mpeg case for example) */
         ret = avformat_find_stream_info(ic, opts);
 
+        ltnlog_stat("FIND_STREAM_INFO_MS", (av_gettime() - find_stream_start_time) / 1000);
         for (int i = 0; i < orig_nb_streams; i++)
             av_dict_free(&opts[i]);
         av_freep(&opts);
@@ -1796,6 +1805,8 @@ int ifile_open(const OptionsContext *o, const char *filename, Scheduler *sch)
                 return ret;
         }
     }
+
+    ltnlog_stat("STATEMACHINE", LTED_SETUP_INPUT);
 
     if (start_time != AV_NOPTS_VALUE && start_time_eof != AV_NOPTS_VALUE) {
         av_log(d, AV_LOG_WARNING, "Cannot use -ss and -sseof both, using -ss\n");

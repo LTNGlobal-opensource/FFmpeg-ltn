@@ -92,6 +92,7 @@
 #include "libavcodec/version.h"
 
 #include "libavformat/avformat.h"
+#include "libavformat/ltnlog.h"
 
 #include "libavdevice/avdevice.h"
 
@@ -1209,6 +1210,8 @@ static int transcode(int *err_rate_exceeded)
 
     *err_rate_exceeded = 0;
     atomic_store(&transcode_init_done, 1);
+
+    ltnlog_stat("STATEMACHINE", LTED_RUNNING);
 
     if (stdin_interaction) {
         av_log(NULL, AV_LOG_INFO, "Press [q] to stop, [?] for help\n");

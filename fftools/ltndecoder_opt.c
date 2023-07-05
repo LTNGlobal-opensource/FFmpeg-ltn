@@ -1287,6 +1287,7 @@ int ffmpeg_parse_options(int argc, char **argv)
     term_init();
 
     /* open input files */
+    ltnlog_stat("STATEMACHINE", LTED_SETUP_OUTPUT);
     ret = open_files(&octx.groups[GROUP_INFILE], "input", ifile_open);
     if (ret < 0) {
         av_log(NULL, AV_LOG_FATAL, "Error opening input files: ");

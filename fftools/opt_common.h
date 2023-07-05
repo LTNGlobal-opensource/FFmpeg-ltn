@@ -226,6 +226,8 @@ int opt_cpucount(void *optctx, const char *opt, const char *arg);
     { "cpuflags",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpuflags },     "force specific cpu flags", "flags" },     \
     { "cpucount",    HAS_ARG | OPT_EXPERT, { .func_arg = opt_cpucount },     "force specific cpu count", "count" },     \
     { "hide_banner", OPT_BOOL | OPT_EXPERT, {&hide_banner},     "do not show program banner", "hide_banner" },          \
+    { "log_ms",      OPT_BOOL | OPT_EXPERT, { &log_ms },                     "show millisecond timestamps", "log_ms" }, \
+    { "logfile",     HAS_ARG | OPT_STRING | OPT_EXPERT, {&log_filename},      "write output to logfile", "file" },      \
     CMDUTILS_COMMON_OPTIONS_AVDEVICE                                                                                    \
 
 #endif /* FFTOOLS_OPT_COMMON_H */

@@ -60,6 +60,8 @@ AVDictionary *swr_opts;
 AVDictionary *format_opts, *codec_opts;
 
 int hide_banner = 0;
+char *log_filename = NULL;
+int log_ms = 0;
 
 void uninit_opts(void)
 {
@@ -501,6 +503,13 @@ void parse_loglevel(int argc, char **argv, const OptionDef *options)
     idx = locate_option(argc, argv, options, "hide_banner");
     if (idx)
         hide_banner = 1;
+
+    idx = locate_option(argc, argv, options, "logfile");
+    if (idx && argv[idx + 1])
+        log_filename = strdup(argv[idx + 1]);
+
+    if (locate_option(argc, argv, options, "log_ms"))
+        log_ms = 1;
 }
 
 static const AVOption *opt_find(void *obj, const char *name, const char *unit,

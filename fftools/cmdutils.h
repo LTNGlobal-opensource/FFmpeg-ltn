@@ -48,6 +48,8 @@ extern AVDictionary *sws_dict;
 extern AVDictionary *swr_opts;
 extern AVDictionary *format_opts, *codec_opts;
 extern int hide_banner;
+extern char *log_filename;
+extern int log_ms;
 
 /**
  * Register a program-specific cleanup routine.

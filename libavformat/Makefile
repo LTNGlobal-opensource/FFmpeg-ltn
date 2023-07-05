@@ -38,7 +38,7 @@ OBJS-$(CONFIG_ISO_MEDIA)                 += isom.o
 OBJS-$(CONFIG_ISO_WRITER)                += av1.o avc.o hevc.o nal.o vvc.o vpcc.o
 OBJS-$(CONFIG_IAMFDEC)                   += iamf_reader.o iamf_parse.o iamf.o
 OBJS-$(CONFIG_IAMFENC)                   += iamf_writer.o iamf.o
-OBJS-$(CONFIG_NETWORK)                   += network.o
+OBJS-$(CONFIG_NETWORK)                   += network.o ltnlog.o
 OBJS-$(CONFIG_RIFFDEC)                   += riffdec.o
 OBJS-$(CONFIG_RIFFENC)                   += riffenc.o
 OBJS-$(CONFIG_RTPDEC)                    += rdt.o                       \
@@ -751,7 +751,7 @@ SHLIBOBJS-$(HAVE_GNU_WINDRES)            += avformatres.o
 
 SKIPHEADERS-$(CONFIG_IMF_DEMUXER)        += imf.h
 SKIPHEADERS-$(CONFIG_FFRTMPCRYPT_PROTOCOL) += rtmpdh.h
-SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h
+SKIPHEADERS-$(CONFIG_NETWORK)            += network.h rtsp.h ltnlog.h
 
 TESTPROGS = seek                                                        \
             url                                                         \

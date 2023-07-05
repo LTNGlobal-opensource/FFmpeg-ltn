@@ -2011,6 +2011,11 @@ const OptionDef options[] = {
         { .func_arg = opt_filter_hw_device },
         "set hardware device used when filtering", "device" },
 
+    { "log_ms",      OPT_TYPE_BOOL, OPT_EXPERT, { &log_ms },
+      "show millisecond timestamps", "log_ms" },
+    { "logfile",     OPT_TYPE_STRING, OPT_EXPERT, { &log_filename },
+      "write output to logfile", "file" },
+
     // deprecated options
 #if FFMPEG_OPT_ADRIFT_THRESHOLD
     { "adrift_threshold", OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,

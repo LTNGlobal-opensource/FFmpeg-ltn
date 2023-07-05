@@ -42,6 +42,8 @@
 #include "os_support.h"
 #include "url.h"
 #include "ip.h"
+#include "ltnlog.h"
+#include "udpstats.h"
 
 #ifdef __APPLE__
 #include "TargetConditionals.h"
@@ -83,6 +85,7 @@
 typedef struct UDPContext {
     const AVClass *class;
     int udp_fd;
+    int64_t udp_inode;
     int ttl;
     int udplite_coverage;
     int buffer_size;
@@ -117,6 +120,11 @@ typedef struct UDPContext {
     char *sources;
     char *block;
     IPSourceFilters filters;
+
+    int warn_src_change;
+    struct tool_context_s stats_ctx;
+    int fifo_depth;
+    time_t now;
 } UDPContext;
 
 #define OFFSET(x) offsetof(UDPContext, x)
@@ -141,6 +149,7 @@ static const AVOption options[] = {
     { "timeout",        "set raise error timeout, in microseconds (only in read mode)",OFFSET(timeout),         AV_OPT_TYPE_INT,  {.i64 = 0}, 0, INT_MAX, D },
     { "sources",        "Source list",                                     OFFSET(sources),        AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
     { "block",          "Block list",                                      OFFSET(block),          AV_OPT_TYPE_STRING, { .str = NULL },               .flags = D|E },
+    { "warn_src_change","log warnings if UDP source IP changes",           OFFSET(warn_src_change),AV_OPT_TYPE_BOOL,   { .i64 = 1  },     0, 1,       D },
     { NULL }
 };
 
@@ -485,7 +494,9 @@ static void *circular_buffer_task_rx( void *_URLContext)
 {
     URLContext *h = _URLContext;
     UDPContext *s = h->priv_data;
+    struct sockaddr_storage prev_srcaddr = { };
     int old_cancelstate;
+    time_t last_warning, last_fifo_warning;
 
     ff_thread_setname("udp-rx");
 
@@ -520,17 +531,54 @@ static void *circular_buffer_task_rx( void *_URLContext)
             continue;
         AV_WL32(s->tmp, len);
 
+        /* See if it came from a different address than previous packet */
+        if (s->warn_src_change) {
+            struct sockaddr_in *srcaddr = (struct sockaddr_in *) &addr;
+            struct sockaddr_in *prevaddr = (struct sockaddr_in *) &prev_srcaddr;
+            if (prevaddr->sin_port == 0) {
+                /* Set initial value */
+                prev_srcaddr = addr;
+            } else if (memcmp(&prev_srcaddr, srcaddr, sizeof(struct sockaddr_in)) != 0) {
+                time_t now;
+                time(&now);
+                if (now != last_warning) {
+                    char prev[INET_ADDRSTRLEN];
+                    char cur[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &(prevaddr->sin_addr), prev, INET_ADDRSTRLEN);
+                    inet_ntop(AF_INET, &(srcaddr->sin_addr), cur, INET_ADDRSTRLEN);
+                    ltnlog_msg("UDPWARN", "Datagram's IP address changed %s:%d (was %s:%d)\n",
+                               cur, (int) ntohs(srcaddr->sin_port),
+                               prev, (int) ntohs(prevaddr->sin_port));
+                    av_log(h, AV_LOG_WARNING, "Datagram's IP address changed %s:%d (was %s:%d)\n",
+                           cur, (int) ntohs(srcaddr->sin_port),
+                           prev, (int) ntohs(prevaddr->sin_port));
+                    last_warning = now;
+                    prev_srcaddr = addr;
+                }
+            }
+        }
+
+        udp_stats(&s->stats_ctx, s->tmp + 4, len);
+
+
         if (av_fifo_can_write(s->fifo) < len + 4) {
             /* No Space left */
             if (s->overrun_nonfatal) {
-                av_log(h, AV_LOG_WARNING, "Circular buffer overrun. "
-                        "Surviving due to overrun_nonfatal option\n");
+                time_t now;
+                time(&now);
+                if (now != last_fifo_warning) {
+                    av_log(h, AV_LOG_WARNING, "Circular buffer overrun. "
+                           "Surviving due to overrun_nonfatal option\n");
+                }
+                last_fifo_warning = now;
                 continue;
             } else {
                 av_log(h, AV_LOG_ERROR, "Circular buffer overrun. "
                         "To avoid, increase fifo_size URL option. "
                         "To survive in such case, use overrun_nonfatal option\n");
                 s->circular_buffer_error = AVERROR(EIO);
+                ltnlog_msg("UDPWARN", "UDP input buffer overrun forcing restart."
+                           "  Decoder not keeping up with realtime?");
                 goto end;
             }
         }
@@ -655,8 +703,11 @@ static int udp_open(URLContext *h, const char *uri, int flags)
     const char *p;
     char buf[256];
     struct sockaddr_storage my_addr;
+    struct stat fd_info;
     socklen_t len;
     int ret;
+
+    ltnlog_msg("UDP SOURCE", "%s", uri);
 
     h->is_streamed = 1;
 
@@ -792,6 +843,9 @@ static int udp_open(URLContext *h, const char *uri, int flags)
     }
 
     s->local_addr_storage=my_addr; //store for future multicast join
+
+    if (fstat(udp_fd, &fd_info) == 0)
+        s->udp_inode = fd_info.st_ino;
 
     /* Follow the requested reuse option, unless it's multicast in which
      * case enable reuse unless explicitly disabled.
@@ -997,6 +1051,54 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
     socklen_t addr_len = sizeof(addr);
 #if HAVE_PTHREAD_CANCEL
     int avail, nonblock = h->flags & AVIO_FLAG_NONBLOCK;
+    FILE *fd;
+    char line[256];
+
+    if (s->now != s->stats_ctx.bytesWrittenTime) {
+        s->now = s->stats_ctx.bytesWrittenTime;
+
+        ltnlog_stat("UDP BPS", s->stats_ctx.bytesWritten * 8);
+        for (int i = 0; i < MAX_PID; i++) {
+            struct pid_statistics_s *pid = &s->stats_ctx.stream.pids[i];
+            if (!pid->enabled)
+                continue;
+
+            ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld\n",
+                       i, pid->packetCount, pid->ccErrors, pid->teiErrors);
+        }
+        ltnlog_stat("UDP FIFO", s->fifo_depth);
+        s->fifo_depth = 0;
+
+        /* Check the kernel RX queue depth */
+        fd = fopen("/proc/net/udp", "r");
+        if (fd) {
+            char *ret;
+            while (1) {
+                char more[512];
+                char local_addr[64], rem_addr[64], pointer[64];
+                int num, local_port, rem_port, d, state, timer_run, uid, timeout, ref;
+                unsigned long rxq, txq, time_len, retr, inode, drops;
+
+                ret = fgets(line, sizeof(line), fd);
+                if (!ret)
+                    break;
+
+                more[0] = '\0';
+                num = sscanf(line,
+                             "%d: %64[0-9A-Fa-f]:%X %64[0-9A-Fa-f]:%X %X %lX:%lX %X:%lX %lX %d %d %ld %d %64[0-9A-Fa-f] %ld %512s\n",
+                             &d, local_addr, &local_port,
+                             rem_addr, &rem_port, &state,
+                             &txq, &rxq, &timer_run, &time_len, &retr, &uid, &timeout, &inode, &ref, pointer, &drops, more);
+
+                if (num > 14 && s->udp_inode > 0 && s->udp_inode == inode) {
+                    ltnlog_stat("UDP RX QUEUE", rxq);
+                    ltnlog_stat("UDP RX DROPS", drops);
+                    break;
+                }
+            }
+            fclose(fd);
+        }
+    }
 
     if (s->fifo) {
         pthread_mutex_lock(&s->mutex);
@@ -1004,6 +1106,9 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
             avail = av_fifo_can_read(s->fifo);
             if (avail) { // >=size) {
                 uint8_t tmp[4];
+
+                if (avail > s->fifo_depth)
+                    s->fifo_depth = avail;
 
                 av_fifo_read(s->fifo, tmp, 4);
                 avail = AV_RL32(tmp);

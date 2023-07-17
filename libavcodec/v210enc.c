@@ -75,6 +75,9 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int ret;
     uint8_t *dst;
 
+    avctx->color_trc = pic->color_trc;
+    fprintf(stderr, "v210 encode_frame colorspace=%d trc=%d ctx=%p\n", avctx->colorspace, avctx->color_trc, avctx);
+
     ret = ff_get_encode_buffer(avctx, pkt, avctx->height * stride, 0);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "Error getting output packet.\n");
@@ -98,6 +101,22 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_AFD);
     if (side_data && side_data->size) {
         uint8_t *buf = av_packet_new_side_data(pkt, AV_PKT_DATA_AFD, side_data->size);
+        if (!buf)
+            return AVERROR(ENOMEM);
+        memcpy(buf, side_data->data, side_data->size);
+    }
+
+    side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
+    if (side_data && side_data->size) {
+        uint8_t *buf = av_packet_new_side_data(pkt, AV_PKT_DATA_MASTERING_DISPLAY_METADATA, side_data->size);
+        if (!buf)
+            return AVERROR(ENOMEM);
+        memcpy(buf, side_data->data, side_data->size);
+    }
+
+    side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
+    if (side_data && side_data->size) {
+        uint8_t *buf = av_packet_new_side_data(pkt, AV_PKT_DATA_CONTENT_LIGHT_LEVEL, side_data->size);
         if (!buf)
             return AVERROR(ENOMEM);
         memcpy(buf, side_data->data, side_data->size);

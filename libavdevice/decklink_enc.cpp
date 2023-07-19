@@ -77,7 +77,7 @@ public:
         if (_codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
             return _avframe->linesize[0] < 0 ? bmdFrameFlagFlipVertical : bmdFrameFlagDefault;
         } else {
-            if (hdr || lighting)
+            if (_ctx->supports_hdr && (hdr || lighting))
                 return bmdFrameFlagDefault | bmdFrameContainsHDRMetadata;
             else
                 return bmdFrameFlagDefault;

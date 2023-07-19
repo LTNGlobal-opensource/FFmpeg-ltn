@@ -252,6 +252,12 @@ int ff_decklink_set_configs(AVFormatContext *avctx,
         }
     }
 
+    DECKLINK_BOOL hdr_supported;
+    if (ctx->attr->GetFlag(BMDDeckLinkSupportsHDRMetadata, &hdr_supported) == S_OK) {
+        if (hdr_supported)
+            ctx->supports_hdr = 1;
+    }
+
     return 0;
 }
 

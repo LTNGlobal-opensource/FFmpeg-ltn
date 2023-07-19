@@ -175,7 +175,7 @@ public:
     }
     virtual HRESULT GetFloat(BMDDeckLinkFrameMetadataID metadataID, double* value)
     {
-        *value = -1;
+        *value = 0;
 
         switch (metadataID) {
         case bmdDeckLinkFrameMetadataHDRDisplayPrimariesRedX:
@@ -232,18 +232,20 @@ public:
             fprintf(stderr, "bmdDeckLinkFrameMetadataHDRMaximumContentLightLevel");
             if (lighting)
                 *value = (float) lighting->MaxCLL;
+            else
+                *value = 0;
             break;
         case bmdDeckLinkFrameMetadataHDRMaximumFrameAverageLightLevel:
             fprintf(stderr, "bmdDeckLinkFrameMetadataHDRMaximumFrameAverageLightLevel");
             if (lighting)
                 *value = (float) lighting->MaxFALL;
+            else
+                *value = 0;
             break;
         default:
+            return E_INVALIDARG;
             break;
         }
-
-        if (*value == -1)
-            return E_INVALIDARG;
 
         fprintf(stderr, " GetFloat %d val=%f\n", metadataID, *value);
         return S_OK;

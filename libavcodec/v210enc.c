@@ -75,9 +75,6 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     int ret;
     uint8_t *dst;
 
-    avctx->color_trc = pic->color_trc;
-    fprintf(stderr, "v210 encode_frame colorspace=%d trc=%d ctx=%p\n", avctx->colorspace, avctx->color_trc, avctx);
-
     ret = ff_get_encode_buffer(avctx, pkt, avctx->height * stride, 0);
     if (ret < 0) {
         av_log(avctx, AV_LOG_ERROR, "Error getting output packet.\n");

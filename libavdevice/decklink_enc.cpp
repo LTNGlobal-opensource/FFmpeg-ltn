@@ -155,6 +155,10 @@ public:
             break;
 
         case bmdDeckLinkFrameMetadataColorspace:
+            if (!_ctx->supports_colorspace) {
+                result = E_NOTIMPL;
+                break;
+            }
             switch(_colorspace) {
             case AVCOL_SPC_BT470BG:
             case AVCOL_SPC_SMPTE170M:

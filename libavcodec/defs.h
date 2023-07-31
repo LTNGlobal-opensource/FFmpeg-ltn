@@ -28,6 +28,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "libavutil/rational.h"
 
 /**
  * @ingroup lavc_decoding
@@ -117,6 +118,17 @@ typedef struct AVPanScan {
      */
     int16_t position[3][2];
 } AVPanScan;
+
+/**
+ * Original Transport Timestamp.  Provides the original timestamp
+ * of the packet as specified by the libavformat source  This allows that
+ * data to be used in calculations even if the clocks have been
+ * rebased or otherwise modified.
+ */
+typedef struct AVTransportTimestamp {
+    int64_t pts;
+    AVRational time_base;
+} AVTransportTimestamp;
 
 /**
  * This structure describes the bitrate properties of an encoded bitstream. It

@@ -138,6 +138,7 @@
 #define STREAM_TYPE_AUDIO_AC3       0x81
 #define STREAM_TYPE_AUDIO_DTS       0x82
 #define STREAM_TYPE_AUDIO_TRUEHD    0x83
+#define STREAM_TYPE_SCTE_35         0x86
 #define STREAM_TYPE_AUDIO_EAC3      0x87
 
 /* ISO/IEC 13818-1 Table 2-22 */

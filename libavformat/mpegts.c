@@ -1784,8 +1784,17 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
     prg = av_find_program_from_stream(ts->stream, NULL, idx);
     if (prg && prg->pcr_pid != -1 && prg->discard != AVDISCARD_ALL) {
         MpegTSFilter *f = ts->pids[prg->pcr_pid];
-        if (f && f->last_pcr != -1)
+        if (f && f->last_pcr != -1) {
+            AVTransportTimestamp *transport_ts;
             ts->pkt->pts = ts->pkt->dts = f->last_pcr/300;
+            transport_ts = (AVTransportTimestamp *) av_packet_new_side_data(ts->pkt,
+                                                                            AV_PKT_DATA_TRANSPORT_TIMESTAMP,
+                                                                            sizeof(AVTransportTimestamp));
+            if (transport_ts) {
+                transport_ts->pts = ts->pkt->pts;
+                transport_ts->time_base = av_make_q(1, 90000);
+            }
+        }
     }
     ts->stop_parse = 1;
 

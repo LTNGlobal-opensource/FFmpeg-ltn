@@ -2337,6 +2337,8 @@ static int mpegts_check_bitstream(AVFormatContext *s, AVStream *st,
                               (st->codecpar->extradata_size > 0 &&
                                st->codecpar->extradata[0] == 1)))
             ret = ff_stream_add_bitstream_filter(st, "hevc_mp4toannexb", NULL);
+    } else if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35) {
+        ret = ff_stream_add_bitstream_filter(st, "scte35ptsadjust", NULL);
     }
 
     return ret;

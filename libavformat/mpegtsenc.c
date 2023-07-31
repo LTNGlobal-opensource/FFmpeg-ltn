@@ -2389,6 +2389,9 @@ static int mpegts_check_bitstream(AVFormatContext *s, AVStream *st,
                         ((st->codecpar->extradata[0] & e->mask) == e->value))))
             return ff_stream_add_bitstream_filter(st, e->bsf_name, NULL);
     }
+    if (st->codecpar->codec_id == AV_CODEC_ID_SCTE_35)
+        return ff_stream_add_bitstream_filter(st, "scte35ptsadjust", NULL);
+
     return 1;
 }
 

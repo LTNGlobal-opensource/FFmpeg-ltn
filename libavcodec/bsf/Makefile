@@ -35,6 +35,7 @@ OBJS-$(CONFIG_PCM_RECHUNK_BSF)            += bsf/pcm_rechunk.o
 OBJS-$(CONFIG_PGS_FRAME_MERGE_BSF)        += bsf/pgs_frame_merge.o
 OBJS-$(CONFIG_PRORES_METADATA_BSF)        += bsf/prores_metadata.o
 OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += bsf/remove_extradata.o
+OBJS-$(CONFIG_SCTE35PTSADJUST_BSF)        += bsf/scte35ptsadjust.o
 OBJS-$(CONFIG_SETTS_BSF)                  += bsf/setts.o
 OBJS-$(CONFIG_SHOWINFO_BSF)               += bsf/showinfo.o
 OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += bsf/movsub.o

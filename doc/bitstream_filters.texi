@@ -842,6 +842,15 @@ Remove extradata from all frames.
 @end table
 @end table
 
+@section scte35ptsadjust
+This bitstream filter makes use of side data injected by the MPEG-TS demux
+in order to rewrite the PTS adjust field within SCTE-35 packets.  This
+ensures the pts_adjust field contains a valid value if the caller changes
+the timebase of the stream.
+
+The bitstream filter is added automatically by the mpegtsenc mux, and no
+action is required on the part of the user.
+
 @section setts
 Set PTS and DTS in packets.
 

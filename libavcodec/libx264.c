@@ -116,6 +116,7 @@ typedef struct X264Context {
     int scenechange_threshold;
     int noise_reduction;
     int udu_sei;
+    int s12m_tc;
 
     AVDictionary *x264_params;
 
@@ -565,6 +566,36 @@ FF_ENABLE_DEPRECATION_WARNINGS
             sei->payloads[0].payload      = sei_data;
             sei->payloads[0].payload_type = SEI_TYPE_USER_DATA_REGISTERED_ITU_T_T35;
             sei->num_payloads = 1;
+        }
+    }
+
+    if (x4->s12m_tc && av_frame_get_side_data(frame, AV_FRAME_DATA_S12M_TIMECODE)) {
+        x264_sei_payload_t *sei_payload;
+        void *tc_data = NULL;
+        size_t tc_size = 0;
+
+        if (ff_alloc_timecode_sei(frame, ctx->framerate, 0, &tc_data, &tc_size) < 0) {
+            av_log(ctx, AV_LOG_ERROR, "Not enough memory for timecode sei, skipping\n");
+        }
+
+        if (tc_data) {
+            void *tmp;
+            tmp = av_fast_realloc(sei->payloads, &sei_data_size, (sei->num_payloads + 1) * sizeof(*sei_payload));
+            if (!tmp) {
+                ret = AVERROR(ENOMEM);
+                goto fail;
+            }
+            sei->payloads = tmp;
+            sei->sei_free = av_free;
+            sei_payload = &sei->payloads[sei->num_payloads];
+            sei_payload->payload = tc_data;
+            if (!sei_payload->payload) {
+                ret = AVERROR(ENOMEM);
+                goto fail;
+            }
+            sei_payload->payload_size = tc_size;
+            sei_payload->payload_type = SEI_TYPE_TIME_CODE;
+            sei->num_payloads++;
         }
     }
 
@@ -1428,6 +1459,7 @@ static const AVOption options[] = {
     { "sc_threshold", "Scene change threshold",                           OFFSET(scenechange_threshold), AV_OPT_TYPE_INT, { .i64 = -1 }, INT_MIN, INT_MAX, VE },
     { "noise_reduction", "Noise reduction",                               OFFSET(noise_reduction), AV_OPT_TYPE_INT, { .i64 = -1 }, INT_MIN, INT_MAX, VE },
     { "udu_sei",      "Use user data unregistered SEI if available",      OFFSET(udu_sei),  AV_OPT_TYPE_BOOL,   { .i64 = 0 }, 0, 1, VE },
+    { "s12m_tc",      "Output s12m timestamps if available",              OFFSET(s12m_tc),  AV_OPT_TYPE_BOOL,   { .i64 = 1 }, 0, 1, VE },
     { "x264-params",  "Override the x264 configuration using a :-separated list of key=value parameters", OFFSET(x264_params), AV_OPT_TYPE_DICT, { 0 }, 0, 0, VE },
     { "mb_info",      "Set mb_info data through AVSideData, only useful when used from the API", OFFSET(mb_info), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { NULL },

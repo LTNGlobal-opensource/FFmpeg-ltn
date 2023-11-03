@@ -31,6 +31,7 @@
 #include "internal.h"
 #include "video.h"
 #include "libavutil/opt.h"
+#include "libavutil/bprint.h"
 
 struct cc_lookup {
     int num;
@@ -207,14 +208,16 @@ static const char *element_name(uint8_t e)
 static void parse_sb(CCValidateContext *ctx, uint8_t *sb, unsigned int len)
 {
     uint8_t c = 0;
+    AVBPrint buf;
 
-    av_log(ctx, AV_LOG_DEBUG, "SB: ");
-    for (int i = 0; i < len; i++) {
-        av_log(ctx, AV_LOG_DEBUG, "%02x ", sb[i]);
-    }
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprintf(&buf, "SB: ");
+    for (int i = 0; i < len; i++)
+        av_bprintf(&buf, "%02x ", sb[i]);
     if (len == 0)
-        av_log(ctx, AV_LOG_DEBUG, "NULL service block");
-    av_log(ctx, AV_LOG_DEBUG, "\n");
+        av_bprintf(&buf, "NULL service block");
+    av_log(ctx, AV_LOG_DEBUG, "%s\n", buf.str);
+    av_bprint_finalize(&buf, NULL);
 
     while (c < len) {
         uint8_t code = sb[c];
@@ -249,13 +252,18 @@ static void parse_ccp(CCValidateContext *ctx, uint8_t *ccp, unsigned int len)
     uint8_t service_num;
     uint8_t block_size;
     uint8_t sb[255];
+    AVBPrint buf;
     int c = 0;
 
-    av_log(ctx, AV_LOG_DEBUG, "CCP: ");
+
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprintf(&buf, "CCP: ");
     for (int j = 0; j < len; j++) {
-        av_log(ctx, AV_LOG_DEBUG, "%02x ", ccp[j]);
+        av_bprintf(&buf, "%02x ", ccp[j]);
     }
-    av_log(ctx, AV_LOG_DEBUG, "\n");
+    av_log(ctx, AV_LOG_DEBUG, "%s\n", buf.str);
+    av_bprint_finalize(&buf, NULL);
+
 
     /* Iterate and extract service blocks */
     while (c < len) {
@@ -346,6 +354,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     CCValidateContext *ctx = inlink->dst->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
+    AVBPrint buf;
     uint8_t *cc_data;
     uint64_t cc_count;
     uint64_t last_dumped;
@@ -371,9 +380,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
         ctx->cc_count_errors++;
     }
 
+    av_bprint_init(&buf, 0, AV_BPRINT_SIZE_UNLIMITED);
+    av_bprintf(&buf, "CC_DATA: ");
     for (i = 0; i < side_data->size; i++)
-        av_log(ctx, AV_LOG_DEBUG, "%02x ", cc_data[i]);
-    av_log(ctx, AV_LOG_DEBUG, "\n");
+        av_bprintf(&buf, "%02x ", cc_data[i]);
+    av_log(ctx, AV_LOG_DEBUG, "%s\n", buf.str);
+    av_bprint_finalize(&buf, NULL);
 
     /* Let's decode the CCP */
 

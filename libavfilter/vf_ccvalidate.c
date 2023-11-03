@@ -74,7 +74,8 @@ typedef struct CCValidateContext
     uint64_t ccp_pkt_count;
     uint64_t ccp_size_errors;
     uint64_t ccp_seq_errors;
-    uint64_t sb_pkt_count;
+    uint64_t sb_total_pkt_count;
+    uint64_t sb_pkt_count[64];
     uint64_t sb_errors;
     uint64_t unknown_element_errors;
     int report;
@@ -274,13 +275,16 @@ static void parse_ccp(CCValidateContext *ctx, uint8_t *ccp, unsigned int len)
             av_log(ctx, AV_LOG_ERROR, "Error: block size=%d but only %d bytes remaining\n",
                    block_size, len - c);
         }
+
+        ctx->sb_total_pkt_count++;
+        ctx->sb_pkt_count[service_num]++;
+
         if (service_num != 0) {
             memset(sb, 0, sizeof(sb));
             for (int i = 0; i < block_size; i++) {
                 sb[i] = ccp[c++];
             }
             parse_sb(ctx, sb, block_size);
-            ctx->sb_pkt_count++;
         }
     }
 }
@@ -310,7 +314,11 @@ static void dump_status(CCValidateContext *ctx)
     av_log(ctx, AV_LOG_INFO, "CEA-708 CCP packet count: %" PRIu64 "\n", ctx->ccp_pkt_count);
     av_log(ctx, AV_LOG_INFO, "CEA-708 CCP size errors: %" PRIu64 "\n", ctx->ccp_size_errors);
     av_log(ctx, AV_LOG_INFO, "CEA-708 CCP sequence errors: %" PRIu64 "\n", ctx->ccp_seq_errors);
-    av_log(ctx, AV_LOG_INFO, "CEA-708 Service Block packet count: %" PRIu64 "\n", ctx->sb_pkt_count);
+    av_log(ctx, AV_LOG_INFO, "CEA-708 Service Block packet count: %" PRIu64 "\n", ctx->sb_total_pkt_count);
+    for (int service_num = 0; service_num < 64; service_num++) {
+        if (ctx->sb_pkt_count[service_num] > 0)
+            av_log(ctx, AV_LOG_INFO, "CEA-708 Service Block packet count (Service %d): %" PRIu64 "\n", service_num, ctx->sb_pkt_count[service_num]);
+    }
     av_log(ctx, AV_LOG_INFO, "CEA-708 Service Block errors: %" PRIu64 "\n", ctx->sb_errors);
     av_log(ctx, AV_LOG_INFO, "CEA-708 Unknown element errors: %" PRIu64 "\n", ctx->unknown_element_errors);
 }

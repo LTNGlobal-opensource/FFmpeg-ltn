@@ -347,6 +347,8 @@ static int config_input(AVFilterLink *link)
         }
     }
 
+    ctx->ccp_sequence_num = 0xff;
+
     return 0;
 }
 
@@ -439,11 +441,11 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
                 expected_ccp_seq = ctx->ccp_sequence_num + 1;
                 if (expected_ccp_seq == 4)
                     expected_ccp_seq = 0;
-                ctx->ccp_sequence_num = ccp_seq;
-                if (ccp_seq != expected_ccp_seq) {
+                if (ccp_seq != expected_ccp_seq && ctx->ccp_sequence_num != 0xff) {
                     av_log(ctx, AV_LOG_ERROR, "CCP Sequence inconsistent.  Received=%d Expected=%d\n", ccp_seq, expected_ccp_seq);
                     ctx->ccp_seq_errors++;
                 }
+                ctx->ccp_sequence_num = ccp_seq;
 
                 if (ctx->packet_data_size > 0)
                     ctx->ccp[ctx->ccp_count++] = cc[2];

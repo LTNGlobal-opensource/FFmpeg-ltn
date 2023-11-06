@@ -102,7 +102,7 @@ struct element_prop {
 struct element_prop element_names[] = {
     /* C0 */
     { 0x00, "NUL" },
-    { 0x03, "EXT" },
+    { 0x03, "ETX" },
     { 0x08, "BS" },
     { 0x0c, "FF" },
     { 0x0d, "CR" },

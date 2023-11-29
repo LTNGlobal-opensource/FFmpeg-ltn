@@ -3703,6 +3703,12 @@ static const AVCodecDescriptor codec_descriptors[] = {
         .long_name = NULL_IF_CONFIG_SMALL("LCEVC (Low Complexity Enhancement Video Coding) / MPEG-5 LCEVC / MPEG-5 part 2"),
     },
     {
+        .id        = AV_CODEC_ID_SCTE_104,
+        .type      = AVMEDIA_TYPE_DATA,
+        .name      = "scte_104",
+        .long_name = NULL_IF_CONFIG_SMALL("SCTE 104 Digital Program Insertion"),
+    },
+    {
         .id        = AV_CODEC_ID_MPEG2TS,
         .type      = AVMEDIA_TYPE_DATA,
         .name      = "mpegts",

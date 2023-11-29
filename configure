@@ -245,6 +245,7 @@ External library support:
   --enable-libjack         enable JACK audio sound server [no]
   --enable-libjxl          enable JPEG XL de/encoding via libjxl [no]
   --enable-libklvanc       enable Kernel Labs VANC processing [no]
+  --enable-libklscte35     enable Kernel Labs SCTE-35 processing [no]
   --enable-libkvazaar      enable HEVC encoding via libkvazaar [no]
   --enable-liblc3          enable LC3 de/encoding via liblc3 [no]
   --enable-liblcevc-dec    enable LCEVC decoding via liblcevc-dec [no]
@@ -1930,6 +1931,7 @@ EXTERNAL_LIBRARY_LIST="
     libjack
     libjxl
     libklvanc
+    libklscte35
     libkvazaar
     liblc3
     liblcevc_dec
@@ -3468,6 +3470,7 @@ h264_redundant_pps_bsf_select="cbs_h264"
 hevc_metadata_bsf_select="cbs_h265"
 mjpeg2jpeg_bsf_select="jpegtables"
 mpeg2_metadata_bsf_select="cbs_mpeg2"
+scte35toscte104_bsf_select="libklscte35"
 trace_headers_bsf_select="cbs cbs_vp8"
 vp9_metadata_bsf_select="cbs_vp9"
 vvc_metadata_bsf_select="cbs_h266"
@@ -6918,6 +6921,7 @@ enabled libilbc           && require libilbc ilbc.h WebRtcIlbcfix_InitDecode -li
 enabled libjxl            && require_pkg_config libjxl "libjxl >= 0.7.0" jxl/decode.h JxlDecoderVersion &&
                              require_pkg_config libjxl_threads "libjxl_threads >= 0.7.0" jxl/thread_parallel_runner.h JxlThreadParallelRunner
 enabled libklvanc         && require libklvanc libklvanc/vanc.h klvanc_context_create -lklvanc
+enabled libklscte35       && require libklscte35 libklscte35/scte35.h scte35_splice_info_section_unpackFrom -lklscte35 -lklvanc
 enabled libkvazaar        && require_pkg_config libkvazaar "kvazaar >= 2.0.0" kvazaar.h kvz_api_get
 enabled liblc3            && require_pkg_config liblc3 "lc3 >= 1.1.0" lc3.h lc3_hr_setup_encoder
 enabled liblensfun        && require_pkg_config liblensfun lensfun lensfun.h lf_db_create

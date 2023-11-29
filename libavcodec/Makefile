@@ -1254,6 +1254,7 @@ OBJS-$(CONFIG_PGS_FRAME_MERGE_BSF)        += pgs_frame_merge_bsf.o
 OBJS-$(CONFIG_PRORES_METADATA_BSF)        += prores_metadata_bsf.o
 OBJS-$(CONFIG_REMOVE_EXTRADATA_BSF)       += remove_extradata_bsf.o av1_parse.o
 OBJS-$(CONFIG_SCTE35PTSADJUST_BSF)        += scte35ptsadjust_bsf.o
+OBJS-$(CONFIG_SCTE35TOSCTE104_BSF)        += scte35toscte104_bsf.o
 OBJS-$(CONFIG_SETTS_BSF)                  += setts_bsf.o
 OBJS-$(CONFIG_TEXT2MOVSUB_BSF)            += movsub_bsf.o
 OBJS-$(CONFIG_TRACE_HEADERS_BSF)          += trace_headers_bsf.o

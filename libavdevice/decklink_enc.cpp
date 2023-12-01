@@ -911,12 +911,9 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         } else if (c->codec_type == AVMEDIA_TYPE_VIDEO) {
             if (decklink_setup_video(avctx, st))
                 goto error;
-        } else if (c->codec_type == AVMEDIA_TYPE_DATA) {
-            if (decklink_setup_data(avctx, st))
-                goto error;
-        } else if (c->codec_type == AVMEDIA_TYPE_SUBTITLE) {
-            if (decklink_setup_subtitle(avctx, st))
-                goto error;
+        } else if (c->codec_type == AVMEDIA_TYPE_DATA ||
+                   c->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            /* Do nothing (we initialize those streams later) */
         } else {
             av_log(avctx, AV_LOG_ERROR, "Unsupported stream type.\n");
             goto error;
@@ -932,6 +929,24 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
            c->codec_type == AVMEDIA_TYPE_SUBTITLE)
             avpriv_set_pts_info(st, 64, ctx->bmd_tb_num, ctx->bmd_tb_den);
     }
+
+    /* Now that video has been setup and the time_base has been set for any
+       data/subtitle streams, do the setup.  This ensures that any automatically
+       inserted bitstream filters are initialized with the correct time base.  */
+    for (n = 0; n < avctx->nb_streams; n++) {
+        AVStream *st = avctx->streams[n];
+        AVCodecParameters *c = st->codecpar;
+        if (c->codec_type == AVMEDIA_TYPE_DATA) {
+            if (decklink_setup_data(avctx, st))
+                goto error;
+        } else if (c->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+            if (decklink_setup_subtitle(avctx, st))
+                goto error;
+        }
+    }
+
+    /* Set up the VANC queue for receiving packets that arrive separately from
+       the video */
     ff_decklink_packet_queue_init(avctx, &ctx->vanc_queue, cctx->vanc_queue_size);
 
     ret = ff_ccfifo_init(&ctx->cc_fifo, av_make_q(ctx->bmd_tb_den, ctx->bmd_tb_num), avctx);

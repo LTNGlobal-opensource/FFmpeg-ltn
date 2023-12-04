@@ -118,6 +118,11 @@ struct decklink_ctx {
     /* Output VANC queue */
     DecklinkPacketQueue vanc_queue;
 
+    /* Audio output interleaving */
+    pthread_mutex_t audio_mutex;
+    DecklinkPacketQueue output_audio_list;
+    unsigned int audio_pkt_numsamples = 0;
+
     /* Streams present */
     int audio;
     int video;

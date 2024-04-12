@@ -1297,97 +1297,114 @@ static OutputStream *ost_add(Muxer *mux, const OptionsContext *o,
     return ost;
 }
 
+/* Returns 1 if audio stream added successfully */
+static int do_add_video(Muxer *mux, const OptionsContext *o, InputStream *ist)
+{
+    AVStream *st = ist->st;
+
+    if (ist->user_set_discard == AVDISCARD_ALL ||
+        st->codecpar->codec_type != AVMEDIA_TYPE_VIDEO)
+        return 0;
+
+    ost_add(mux, o, AVMEDIA_TYPE_VIDEO, ist, NULL);
+    return 1;
+}
+
 static void map_auto_video(Muxer *mux, const OptionsContext *o)
 {
     AVFormatContext *oc = mux->fc;
-    InputStream *best_ist = NULL;
-    int best_score = 0;
-    int qcr;
+    InputFile *ifile = input_files[0];
+    int ret;
 
-    /* video: highest resolution */
     if (av_guess_codec(oc->oformat, NULL, oc->url, NULL, AVMEDIA_TYPE_VIDEO) == AV_CODEC_ID_NONE)
         return;
 
-    qcr = avformat_query_codec(oc->oformat, oc->oformat->video_codec, 0);
-    for (int j = 0; j < nb_input_files; j++) {
-        InputFile *ifile = input_files[j];
-        InputStream *file_best_ist = NULL;
-        int file_best_score = 0;
-        for (int i = 0; i < ifile->nb_streams; i++) {
-            InputStream *ist = ifile->streams[i];
-            int score;
+    /* Unlike the stock ffmpeg, our selection algorithm is based on the first video
+       feed in the PMT (of the selected program), rather than just whichever video
+       stream has the highest resolution */
 
-            if (ist->user_set_discard == AVDISCARD_ALL ||
-                ist->st->codecpar->codec_type != AVMEDIA_TYPE_VIDEO)
-                continue;
+    if (ifile->ctx->nb_programs > 0) {
+        /* Arranged into programs, so make sure we only select audio
+           streams associated with the selected program */
+        AVProgram *prg = NULL;
 
-            score = ist->st->codecpar->width * ist->st->codecpar->height
-                       + 100000000 * !!(ist->st->event_flags & AVSTREAM_EVENT_FLAG_NEW_PACKETS)
-                       + 5000000*!!(ist->st->disposition & AV_DISPOSITION_DEFAULT);
-            if((qcr!=MKTAG('A', 'P', 'I', 'C')) && (ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
-                score = 1;
+        /* Pick the program that we're going to use.  For the moment
+           assume it's always the first program in the PMT... */
+        prg = ifile->ctx->programs[0];
 
-            if (score > file_best_score) {
-                if((qcr==MKTAG('A', 'P', 'I', 'C')) && !(ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
-                    continue;
-                file_best_score = score;
-                file_best_ist   = ist;
-            }
+        /* Find the first video stream in the program and use that */
+        for (int i = 0; i < prg->nb_stream_indexes; i++) {
+            ret = do_add_video(mux, o, ifile->streams[prg->stream_index[i]]);
+            if (ret == 1)
+                break;
         }
-        if (file_best_ist) {
-            if((qcr == MKTAG('A', 'P', 'I', 'C')) ||
-               !(file_best_ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC))
-                file_best_score -= 5000000*!!(file_best_ist->st->disposition & AV_DISPOSITION_DEFAULT);
-            if (file_best_score > best_score) {
-                best_score = file_best_score;
-                best_ist = file_best_ist;
-            }
-       }
+    } else {
+        /* Streams not arranged into programs, so just iterate all streams on the input */
+        for (int i = 0; i < ifile->nb_streams; i++) {
+            ret = do_add_video(mux, o, ifile->streams[i]);
+            if (ret == 1)
+                break;
+        }
     }
-    if (best_ist)
-        ost_add(mux, o, AVMEDIA_TYPE_VIDEO, best_ist, NULL);
+}
+
+/* Returns 1 if audio stream added successfully */
+static int do_add_audio(Muxer *mux, const OptionsContext *o, InputStream *ist)
+{
+    AVStream *st = ist->st;
+
+    if (ist->user_set_discard == AVDISCARD_ALL ||
+        st->codecpar->codec_type != AVMEDIA_TYPE_AUDIO)
+        return 0;
+
+    if (st->codecpar->ch_layout.nb_channels == 0 ||
+        st->codecpar->sample_rate == 0) {
+        av_log(NULL, AV_LOG_WARNING, "Insufficent data to add audio stream. chan=%d sr=%d\n",
+               st->codecpar->ch_layout.nb_channels,
+               st->codecpar->sample_rate);
+        return 0;
+    }
+    ost_add(mux, o, AVMEDIA_TYPE_AUDIO, ist, NULL);
+    return 1;
 }
 
 static void map_auto_audio(Muxer *mux, const OptionsContext *o)
 {
+    InputFile *ifile = input_files[0];
     AVFormatContext *oc = mux->fc;
-    InputStream *best_ist = NULL;
-    int best_score = 0;
+    int ret;
 
-        /* audio: most channels */
     if (av_guess_codec(oc->oformat, NULL, oc->url, NULL, AVMEDIA_TYPE_AUDIO) == AV_CODEC_ID_NONE)
         return;
 
-    for (int j = 0; j < nb_input_files; j++) {
-        InputFile *ifile = input_files[j];
-        InputStream *file_best_ist = NULL;
-        int file_best_score = 0;
-        for (int i = 0; i < ifile->nb_streams; i++) {
-            InputStream *ist = ifile->streams[i];
-            int score;
+    if (ifile->ctx->nb_programs > 0) {
+        /* Arranged into programs, so make sure we only select
+           streams associated with the selected program */
+        AVProgram *prg = NULL;
 
-            if (ist->user_set_discard == AVDISCARD_ALL ||
-                ist->st->codecpar->codec_type != AVMEDIA_TYPE_AUDIO)
-                continue;
+        /* Pick the program that we're going to use.  For the moment
+           assume it's always the first program in the PMT... */
+        prg = ifile->ctx->programs[0];
 
-            score = ist->st->codecpar->ch_layout.nb_channels
-                    + 100000000 * !!(ist->st->event_flags & AVSTREAM_EVENT_FLAG_NEW_PACKETS)
-                    + 5000000*!!(ist->st->disposition & AV_DISPOSITION_DEFAULT);
-            if (score > file_best_score) {
-                file_best_score = score;
-                file_best_ist   = ist;
+        for (int i = 0; i < prg->nb_stream_indexes; i++) {
+            ret = do_add_audio(mux, o, ifile->streams[prg->stream_index[i]]);
+            if (ret == 1 && !o->enable_all_audio) {
+                /* We've successfully added a stream and we're not set
+                   to output all streams, so bail out */
+                break;
             }
         }
-        if (file_best_ist) {
-            file_best_score -= 5000000*!!(file_best_ist->st->disposition & AV_DISPOSITION_DEFAULT);
-            if (file_best_score > best_score) {
-                best_score = file_best_score;
-                best_ist   = file_best_ist;
+    } else {
+        /* Streams not arranged into programs, so just iterate all streams on the input */
+        for (int i = 0; i < ifile->nb_streams; i++) {
+            ret = do_add_audio(mux, o, ifile->streams[i]);
+            if (ret == 1 && !o->enable_all_audio) {
+                /* We've successfully added a stream and we're not set
+                   to output all streams, so bail out */
+                break;
             }
-       }
+        }
     }
-    if (best_ist)
-        ost_add(mux, o, AVMEDIA_TYPE_AUDIO, best_ist, NULL);
 }
 
 static void map_auto_subtitle(Muxer *mux, const OptionsContext *o)
@@ -1428,21 +1445,50 @@ static void map_auto_subtitle(Muxer *mux, const OptionsContext *o)
         }
 }
 
+/* Returns 1 if audio stream added successfully */
+static int do_add_data(Muxer *mux, const OptionsContext *o, InputStream *ist)
+{
+    AVStream *st = ist->st;
+
+    if (ist->user_set_discard == AVDISCARD_ALL ||
+        st->codecpar->codec_type != AVMEDIA_TYPE_DATA)
+        return 0;
+
+    if (ist->st->codecpar->codec_id == AV_CODEC_ID_SCTE_35 &&
+        o->enable_scte35) {
+        ost_add(mux, o, AVMEDIA_TYPE_DATA, ist, NULL);
+        return 1;
+    }
+    if (ist->st->codecpar->codec_id == AV_CODEC_ID_SMPTE_2038 &&
+        o->enable_smpte2038) {
+        ost_add(mux, o, AVMEDIA_TYPE_DATA, ist, NULL);
+        return 1;
+    }
+
+    return 0;
+}
+
 static void map_auto_data(Muxer *mux, const OptionsContext *o)
 {
-    AVFormatContext *oc = mux->fc;
-    /* Data only if codec id match */
-    enum AVCodecID codec_id = av_guess_codec(oc->oformat, NULL, oc->url, NULL, AVMEDIA_TYPE_DATA);
+    InputFile *ifile = input_files[0];
 
-    if (codec_id == AV_CODEC_ID_NONE)
-        return;
+    if (ifile->ctx->nb_programs > 0) {
+        /* Arranged into programs, so make sure we only select
+           streams associated with the selected program */
+        AVProgram *prg = NULL;
 
-    for (InputStream *ist = ist_iter(NULL); ist; ist = ist_iter(ist)) {
-        if (ist->user_set_discard == AVDISCARD_ALL)
-            continue;
-        if (ist->st->codecpar->codec_type == AVMEDIA_TYPE_DATA &&
-            ist->st->codecpar->codec_id == codec_id )
-            ost_add(mux, o, AVMEDIA_TYPE_DATA, ist, NULL);
+        /* Pick the program that we're going to use.  For the moment
+           assume it's always the first program in the PMT... */
+        prg = ifile->ctx->programs[0];
+
+        for (int i = 0; i < prg->nb_stream_indexes; i++) {
+            do_add_data(mux, o, ifile->streams[prg->stream_index[i]]);
+        }
+    } else {
+        /* Streams not arranged into programs, so just iterate all streams on the input */
+        for (InputStream *ist = ist_iter(NULL); ist; ist = ist_iter(ist)) {
+            do_add_data(mux, o, ist);
+        }
     }
 }
 

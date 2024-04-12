@@ -1744,6 +1744,14 @@ const OptionDef options[] = {
     { "canvas_size", OPT_SUBTITLE | HAS_ARG | OPT_STRING | OPT_SPEC | OPT_INPUT, { .off = OFFSET(canvas_sizes) },
         "set canvas size (WxH or abbreviation)", "size" },
 
+    /* Stream selection options */
+    { "enable_all_audio", OPT_BOOL | OPT_OFFSET | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(enable_all_audio) },
+        "Send all audio streams to output", "" },
+    { "enable_scte35", OPT_BOOL | OPT_OFFSET | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(enable_scte35) },
+        "Send SCTE-35 to output", "" },
+    { "enable_smpte2038", OPT_BOOL | OPT_OFFSET | OPT_EXPERT | OPT_OUTPUT, { .off = OFFSET(enable_smpte2038) },
+        "Send SMPTE-2038 VANC to output", "" },
+
     /* muxer options */
     { "muxdelay",   OPT_FLOAT | HAS_ARG | OPT_EXPERT | OPT_OFFSET | OPT_OUTPUT, { .off = OFFSET(mux_max_delay) },
         "set the maximum demux-decode delay", "seconds" },

@@ -202,6 +202,10 @@ typedef struct OptionsContext {
     // keys are stream indices
     AVDictionary *streamid;
 
+    int enable_all_audio;
+    int enable_scte35;
+    int enable_smpte2038;
+
     SpecifierOptList metadata;
     SpecifierOptList max_frames;
     SpecifierOptList bitstream_filters;

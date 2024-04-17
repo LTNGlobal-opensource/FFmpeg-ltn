@@ -3066,6 +3066,10 @@ static int set_side_data(HEVCContext *s)
         }
     }
 
+    if (s->sei.picture_timing.picture_struct) {
+        av_dict_set_int(&out->metadata, "pic_struct", s->sei.picture_timing.picture_struct, 0);
+    }
+
     return 0;
 }
 

@@ -151,11 +151,13 @@ static HEVCFrame *alloc_frame(HEVCContext *s, HEVCLayerContext *l)
         for (j = 0; j < frame->ctb_count; j++)
             frame->rpl_tab[j] = frame->rpl;
 
-        if (s->sei.picture_timing.picture_struct == AV_PICTURE_STRUCTURE_TOP_FIELD)
-            frame->f->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
-        if ((s->sei.picture_timing.picture_struct == AV_PICTURE_STRUCTURE_TOP_FIELD) ||
-            (s->sei.picture_timing.picture_struct == AV_PICTURE_STRUCTURE_BOTTOM_FIELD))
+        if (s->sei.picture_timing.field_order != AV_FIELD_PROGRESSIVE &&
+            s->sei.picture_timing.field_order != AV_FIELD_UNKNOWN) {
             frame->f->flags |= AV_FRAME_FLAG_INTERLACED;
+            if (s->sei.picture_timing.field_order == AV_FIELD_TT ||
+                s->sei.picture_timing.field_order == AV_FIELD_BT)
+                frame->f->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
+        }
 
         ret = ff_hwaccel_frame_priv_alloc(s->avctx, &frame->hwaccel_picture_private);
         if (ret < 0)

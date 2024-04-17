@@ -68,7 +68,7 @@ static int hevc_parse_slice_header(AVCodecParserContext *s, H2645NAL *nal,
 
     first_slice_in_pic_flag = get_bits1(gb);
     s->picture_structure = sei->picture_timing.picture_struct;
-    s->field_order = sei->picture_timing.picture_struct;
+    s->field_order = sei->picture_timing.field_order;
 
     if (IS_IRAP_NAL(nal)) {
         s->key_frame = 1;

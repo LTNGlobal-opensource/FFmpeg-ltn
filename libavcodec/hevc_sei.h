@@ -32,8 +32,19 @@
 
 
 typedef enum {
+        HEVC_SEI_PIC_STRUCT_FRAME             = 0, ///<  0: %frame
+        HEVC_SEI_PIC_STRUCT_TOP_FIELD         = 1, ///<  1: top field
+        HEVC_SEI_PIC_STRUCT_BOTTOM_FIELD      = 2, ///<  2: bottom field
+        HEVC_SEI_PIC_STRUCT_TOP_BOTTOM        = 3, ///<  3: top field, bottom field, in that order
+        HEVC_SEI_PIC_STRUCT_BOTTOM_TOP        = 4, ///<  4: bottom field, top field, in that order
+        HEVC_SEI_PIC_STRUCT_TOP_BOTTOM_TOP    = 5, ///<  5: top field, bottom field, top field repeated, in that order
+        HEVC_SEI_PIC_STRUCT_BOTTOM_TOP_BOTTOM = 6, ///<  6: bottom field, top field, bottom field repeated, in that order
         HEVC_SEI_PIC_STRUCT_FRAME_DOUBLING = 7,
-        HEVC_SEI_PIC_STRUCT_FRAME_TRIPLING = 8
+        HEVC_SEI_PIC_STRUCT_FRAME_TRIPLING = 8,
+        HEVC_SEI_PIC_STRUCT_PAIRED_TOP_BOTTOM = 9, ///<  9: top field paired with previous bottom field in output order
+        HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_TOP      = 10, ///< 10: bottom field paired with previous top field in output order
+        HEVC_SEI_PIC_STRUCT_PAIRED_TOP_NEXT_BOTTOM = 11, ///< 11: top field paired with next bottom field in output order
+        HEVC_SEI_PIC_STRUCT_PAIRED_BOTTOM_NEXT_TOP = 12 ///< 12:  bottom field paired with next top field in output order
 } HEVC_SEI_PicStructType;
 
 typedef struct HEVCSEIPictureHash {
@@ -51,6 +62,7 @@ typedef struct HEVCSEIFramePacking {
 
 typedef struct HEVCSEIPictureTiming {
     int picture_struct;
+    enum AVFieldOrder field_order;
 } HEVCSEIPictureTiming;
 
 typedef struct HEVCSEIMasteringDisplay {

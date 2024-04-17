@@ -112,11 +112,13 @@ static HEVCFrame *alloc_frame(HEVCContext *s)
         for (j = 0; j < frame->ctb_count; j++)
             frame->rpl_tab[j] = (RefPicListTab *)frame->rpl_buf->data;
 
-        if (s->sei.picture_timing.picture_struct == AV_PICTURE_STRUCTURE_TOP_FIELD)
-            frame->frame->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
-        if ((s->sei.picture_timing.picture_struct == AV_PICTURE_STRUCTURE_TOP_FIELD) ||
-            (s->sei.picture_timing.picture_struct == AV_PICTURE_STRUCTURE_BOTTOM_FIELD))
+        if (s->sei.picture_timing.field_order != AV_FIELD_PROGRESSIVE &&
+            s->sei.picture_timing.field_order != AV_FIELD_UNKNOWN) {
             frame->frame->flags |= AV_FRAME_FLAG_INTERLACED;
+            if (s->sei.picture_timing.field_order == AV_FIELD_TT ||
+                s->sei.picture_timing.field_order == AV_FIELD_BT)
+                frame->frame->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
+        }
 
         if (s->avctx->hwaccel) {
             const AVHWAccel *hwaccel = s->avctx->hwaccel;

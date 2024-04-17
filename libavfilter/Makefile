@@ -308,6 +308,7 @@ OBJS-$(CONFIG_FIELD_FILTER)                  += vf_field.o
 OBJS-$(CONFIG_FIELDHINT_FILTER)              += vf_fieldhint.o
 OBJS-$(CONFIG_FIELDMATCH_FILTER)             += vf_fieldmatch.o
 OBJS-$(CONFIG_FIELDORDER_FILTER)             += vf_fieldorder.o
+OBJS-$(CONFIG_FIELDMERGE_FILTER)             += vf_fieldmerge.o
 OBJS-$(CONFIG_FILLBORDERS_FILTER)            += vf_fillborders.o
 OBJS-$(CONFIG_FIND_RECT_FILTER)              += vf_find_rect.o lavfutils.o
 OBJS-$(CONFIG_FLOODFILL_FILTER)              += vf_floodfill.o

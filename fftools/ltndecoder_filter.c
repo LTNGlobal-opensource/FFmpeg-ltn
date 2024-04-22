@@ -1960,6 +1960,17 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
 
     fgp->is_meta = graph_is_meta(fgt->graph);
 
+    if (dump_filtergraph) {
+        char *dump = avfilter_graph_dump(fgt->graph, dump_filtergraph);
+        if (!dump) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+        fputs(dump, stderr);
+        fflush(stderr);
+        av_free(dump);
+    }
+
     /* limit the lists of allowed formats to the ones selected, to
      * make sure they stay the same if the filtergraph is reconfigured later */
     for (int i = 0; i < fg->nb_outputs; i++) {

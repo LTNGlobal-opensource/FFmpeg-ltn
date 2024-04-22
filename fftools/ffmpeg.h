@@ -663,6 +663,7 @@ extern int        nb_filtergraphs;
 
 extern char *vstats_filename;
 extern char *sdp_filename;
+extern char *dump_filtergraph;
 
 extern float dts_delta_threshold;
 extern float dts_error_threshold;

@@ -63,6 +63,7 @@ HWDevice *filter_hw_device;
 
 char *vstats_filename;
 char *sdp_filename;
+char *dump_filtergraph;
 
 float audio_drift_threshold = 0.1;
 float dts_delta_threshold   = 10;
@@ -900,6 +901,13 @@ static int opt_target(void *optctx, const char *opt, const char *arg)
     return 0;
 }
 
+static int opt_dumpgraph(void *optctx, const char *opt, const char *arg)
+{
+    av_free (dump_filtergraph);
+    dump_filtergraph = av_strdup(arg);
+    return 0;
+}
+
 static int opt_vstats_file(void *optctx, const char *opt, const char *arg)
 {
     av_free (vstats_filename);
@@ -1552,6 +1560,8 @@ const OptionDef options[] = {
     { "dump_attachment", HAS_ARG | OPT_STRING | OPT_SPEC |
                          OPT_EXPERT | OPT_INPUT,                     { .off = OFFSET(dump_attachment) },
         "extract an attachment into a file", "filename" },
+    { "dump_filtergraph",HAS_ARG | OPT_EXPERT,                       { .func_arg = opt_dumpgraph },
+      "dump filter graph to stderr with options"},
     { "stream_loop", OPT_INT | HAS_ARG | OPT_EXPERT | OPT_INPUT |
                         OPT_OFFSET,                                  { .off = OFFSET(loop) }, "set number of times input stream shall be looped", "loop count" },
     { "debug_ts",       OPT_BOOL | OPT_EXPERT,                       { &debug_ts },

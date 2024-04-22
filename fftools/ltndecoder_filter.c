@@ -1575,6 +1575,17 @@ static int configure_filtergraph(FilterGraph *fg)
     if ((ret = avfilter_graph_config(fg->graph, NULL)) < 0)
         goto fail;
 
+    if (dump_filtergraph) {
+        char *dump = avfilter_graph_dump(fg->graph, dump_filtergraph);
+        if (!dump) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
+        fputs(dump, stderr);
+        fflush(stderr);
+        av_free(dump);
+    }
+
     fgp->is_meta = graph_is_meta(fg->graph);
 
     /* limit the lists of allowed formats to the ones selected, to

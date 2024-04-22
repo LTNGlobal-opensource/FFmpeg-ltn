@@ -1278,6 +1278,8 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     AVRational sar;
     AVBPrint args;
     char name[255];
+    int width = ifp->width;
+    int height = ifp->height;
     int ret, pad_idx = 0;
     int64_t tsoffset = 0;
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
@@ -1365,6 +1367,19 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
         }
         if (ret < 0)
             return ret;
+    }
+
+    /* Special case for HEVC interlaced */
+    if (height == 240 || height == 288 || height == 540) {
+        AVFilterContext *fm_filter;
+        snprintf(name, sizeof(name), "fieldmerge_%d_%d", ist->file_index, ist->st->index);
+        if ((ret = avfilter_graph_create_filter(&fm_filter, avfilter_get_by_name("fieldmerge"),
+                                                name, "", NULL, fg->graph)) < 0)
+            return ret;
+        if ((ret = avfilter_link(last_filter, 0, fm_filter, 0)) < 0)
+            return ret;
+        last_filter = fm_filter;
+        height *= 2;
     }
 
     snprintf(name, sizeof(name), "trim_in_%d_%d",

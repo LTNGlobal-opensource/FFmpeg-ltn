@@ -1776,6 +1776,13 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
         ifp->displaymatrix_applied = 1;
     }
 
+    /* Special case for HEVC interlaced */
+    if (ifp->height == 240 || ifp->height == 288 || ifp->height == 540) {
+        ret = insert_filter(&last_filter, &pad_idx, "fieldmerge", NULL);
+        if (ret < 0)
+            return ret;
+    }
+
     snprintf(name, sizeof(name), "trim_in_%s", ifp->opts.name);
     ret = insert_trim(ifp->opts.trim_start_us, ifp->opts.trim_end_us,
                       &last_filter, &pad_idx, name);

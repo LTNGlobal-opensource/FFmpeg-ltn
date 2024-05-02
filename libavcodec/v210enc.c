@@ -86,6 +86,10 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         v210_enc_10(avctx, dst, pic);
     else if(pic->format == AV_PIX_FMT_YUV422P)
         v210_enc_8(avctx, dst, pic);
+    else if(pic->format == AV_PIX_FMT_YUV420P)
+        v210_enc_420p_8(avctx, dst, pic);
+    else if(pic->format == AV_PIX_FMT_YUV420P10)
+        v210_enc_420p_10(avctx, dst, pic);
 
     side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_A53_CC);
     if (side_data && side_data->size) {
@@ -117,5 +121,5 @@ const FFCodec ff_v210_encoder = {
     .priv_data_size = sizeof(V210EncContext),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_frame),
-    .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV422P, AV_PIX_FMT_NONE },
+    .p.pix_fmts     = (const enum AVPixelFormat[]){ AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV420P10, AV_PIX_FMT_NONE },
 };

@@ -78,3 +78,85 @@ static void RENAME(v210_enc)(AVCodecContext *avctx,
         v += pic->linesize[2] / BYTES_PER_PIXEL - avctx->width / 2;
     }
 }
+
+static void RENAME(v210_enc_420p)(AVCodecContext *avctx,
+        uint8_t *dst, const AVFrame *pic)
+{
+    V210EncContext *s = avctx->priv_data;
+    int aligned_width = ((avctx->width + 47) / 48) * 48;
+    int stride = aligned_width * 8 / 3;
+    int line_padding = stride - ((avctx->width * 8 + 11) / 12) * 4;
+    int h, w;
+    const TYPE *y = (const TYPE *)pic->data[0];
+    const TYPE *u = (const TYPE *)pic->data[1];
+    const TYPE *v = (const TYPE *)pic->data[2];
+    const TYPE *u_even = u;
+    const TYPE *v_even = v;
+    const int sample_size = 6 * s->RENAME(sample_factor);
+    const int sample_w    = avctx->width / sample_size;
+
+    for (h = 0; h < avctx->height; h++) {
+        uint32_t val;
+        w = sample_w * sample_size;
+
+        if (pic->flags & AV_FRAME_FLAG_INTERLACED) {
+            /* Interlaced chroma */
+            if (h % 4 == 0) {
+                u_even = u;
+                v_even = v;
+            } else if (h % 4 == 2) {
+                /* Go back and use first line */
+                u = u_even;
+                v = v_even;
+            }
+        } else {
+            /* Non-interlaced chroma */
+            if (h % 2 == 1) {
+                /* Reuse previous chroma line */
+                u = u_even;
+                v = v_even;
+            } else {
+                u_even = u;
+                v_even = v;
+            }
+        }
+
+        s->RENAME(pack_line)(y, u, v, dst, w);
+
+        y += w;
+        u += w >> 1;
+        v += w >> 1;
+        dst += sample_w * 16 * s->RENAME(sample_factor);
+
+        for (; w < avctx->width - 5; w += 6) {
+            WRITE_PIXELS(u, y, v, DEPTH);
+            WRITE_PIXELS(y, u, y, DEPTH);
+            WRITE_PIXELS(v, y, u, DEPTH);
+            WRITE_PIXELS(y, v, y, DEPTH);
+        }
+        if (w < avctx->width - 1) {
+            WRITE_PIXELS(u, y, v, DEPTH);
+
+            val = CLIP(*y++, DEPTH) << (10-DEPTH);
+            if (w == avctx->width - 2) {
+                AV_WL32(dst, val);
+                dst += 4;
+            }
+        }
+        if (w < avctx->width - 3) {
+            val |= (CLIP(*u++, DEPTH) << (20-DEPTH)) | (CLIP(*y++, DEPTH) << (30-DEPTH));
+            AV_WL32(dst, val);
+            dst += 4;
+
+            val = CLIP(*v++, DEPTH) << (10-DEPTH) | (CLIP(*y++, DEPTH) << (20-DEPTH));
+            AV_WL32(dst, val);
+            dst += 4;
+        }
+
+        memset(dst, 0, line_padding);
+        dst += line_padding;
+        y += pic->linesize[0] / BYTES_PER_PIXEL - avctx->width;
+        u += pic->linesize[1] / BYTES_PER_PIXEL - avctx->width / 2;
+        v += pic->linesize[2] / BYTES_PER_PIXEL - avctx->width / 2;
+    }
+}

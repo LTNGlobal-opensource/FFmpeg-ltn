@@ -745,6 +745,13 @@ static int input_thread(void *arg)
                              f->ctx->streams[dt.pkt_demux->stream_index]);
         }
 
+        if (dt.pkt_demux->pts != AV_NOPTS_VALUE) {
+            InputStream *st = f->streams[dt.pkt_demux->stream_index];
+            if (st->last_pts != 0 && (dt.pkt_demux->pts - st->last_pts) > st->pts_delta)
+                st->pts_delta = dt.pkt_demux->pts - st->last_pts;
+            st->last_pts = dt.pkt_demux->pts;
+        }
+
         /* the following test is needed in case new streams appear
            dynamically in stream : we ignore them */
         ds = dt.pkt_demux->stream_index < f->nb_streams ?

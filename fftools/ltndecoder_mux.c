@@ -38,6 +38,7 @@
 
 #include "libavformat/avformat.h"
 #include "libavformat/avio.h"
+#include "libavformat/ltnlog.h"
 
 typedef struct MuxThreadContext {
     AVPacket *pkt;
@@ -559,6 +560,53 @@ int mux_check_init(void *arg)
     OutputFile *of = &mux->of;
     AVFormatContext *fc = mux->fc;
     int ret;
+
+    if (strcmp(fc->oformat->name, "decklink") == 0) {
+        InputFile *inf = input_files[0];
+        InputStream *ist;
+        double target_preroll = 0;
+        AVDictionaryEntry *t;
+        char buf[64];
+
+        for(int i = 0; i< inf->nb_streams; i++) {
+            double delay;
+
+            ist = inf->streams[i];
+            delay = (double) ist->pts_delta *
+                    (double) ist->st->time_base.num / (double) ist->st->time_base.den;
+            av_log(NULL, AV_LOG_DEBUG, "Delay for stream %d is %f\n", i, delay);
+            if ((ist->dec->type == AVMEDIA_TYPE_VIDEO) ||
+                (ist->dec->type == AVMEDIA_TYPE_AUDIO) && delay > target_preroll)
+                target_preroll = delay;
+        }
+
+        target_preroll = target_preroll * 2;
+
+        if ((t = av_dict_get(mux->opts, "preroll", NULL, AV_DICT_IGNORE_SUFFIX))) {
+            double user_preroll = atof(t->value);
+            av_log(NULL, AV_LOG_INFO, "User specified preroll was %f\n", user_preroll);
+            ltnlog_stat("PREROLL_USER", user_preroll * 1000);
+            if (target_preroll < user_preroll) {
+                av_log(NULL, AV_LOG_WARNING, "Computed preroll lower than user specified, computed=%f user=%f\n",
+                       target_preroll, user_preroll);
+                target_preroll = user_preroll;
+            }
+        } else {
+            /* No user specified preroll, so force the lower bound to 0.1 sec */
+            if (target_preroll < 0.1)
+                target_preroll = 0.1;
+        }
+
+        /* No matter what, make sure it's never more than 5 seconds, as that would
+           cause the hardware to reject the setting and bail out */
+        if (target_preroll > 5)
+            target_preroll = 5;
+
+        av_log(NULL, AV_LOG_INFO, "Selecting preroll of %f\n", target_preroll);
+        ltnlog_stat("PREROLL_TARGET", target_preroll * 1000);
+        snprintf(buf, sizeof(buf), "%f", target_preroll);
+        av_dict_set(&mux->opts, "preroll", buf, 0);
+    }
 
     ret = avformat_write_header(fc, &mux->opts);
     if (ret < 0) {

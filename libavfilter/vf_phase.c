@@ -177,6 +177,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (!s->frame) {
         s->frame = in;
         mode = PROGRESSIVE;
+        return 0;
     } else {
         mode = s->analyze_plane(ctx, s->mode, s->frame, in);
     }
@@ -193,6 +194,16 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             from += in->linesize[plane];
             to += out->linesize[plane];
         }
+    }
+
+    if (mode == TOP_FIRST) {
+        out->flags |= AV_FRAME_FLAG_INTERLACED;
+        out->flags &= ~AV_FRAME_FLAG_TOP_FIELD_FIRST;
+    } else if (mode == BOTTOM_FIRST) {
+        out->flags |= AV_FRAME_FLAG_INTERLACED;
+        out->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
+    } else {
+        out->flags &= ~AV_FRAME_FLAG_INTERLACED;
     }
 
     if (in != s->frame)

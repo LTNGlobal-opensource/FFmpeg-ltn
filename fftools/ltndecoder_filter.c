@@ -133,6 +133,8 @@ typedef struct InputFilterPriv {
     AVRational          sample_aspect_ratio;
     enum AVColorSpace   color_space;
     enum AVColorRange   color_range;
+    int interlaced;
+    int top_field_first;
 
     int                 sample_rate;
     AVChannelLayout     ch_layout;
@@ -204,6 +206,10 @@ typedef struct OutputFilterPriv {
     AVChannelLayout         ch_layout;
     enum AVColorSpace       color_space;
     enum AVColorRange       color_range;
+
+    /* Input stream properties (to help with decision making) */
+    int                     in_width, in_height, in_top_field_first;
+    AVRational              in_framerate;
 
     // time base in which the output is sent to our downstream
     // does not need to match the filtersink's timebase
@@ -1500,6 +1506,8 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 {
     OutputFilterPriv *ofp = ofp_from_ofilter(ofilter);
     AVFilterContext *last_filter = out->filter_ctx;
+    int width = ofp->in_width;
+    int height = ofp->in_height;
     AVBPrint bprint;
     int pad_idx = out->pad_idx;
     int ret;
@@ -1534,6 +1542,8 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
         last_filter = filter;
         pad_idx = 0;
+        width = ofp->width;
+        height = ofp->height;
     }
 
     av_assert0(!(ofp->flags & OFILTER_FLAG_DISABLE_CONVERT) ||
@@ -1559,6 +1569,61 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
         last_filter = filter;
         pad_idx     = 0;
+    }
+
+    if (ofp->in_framerate.num) {
+        char args[255];
+        snprintf(args, sizeof(args), "fps=%d/%d",
+                 do_interlace ? ofp->in_framerate.num * 2 : ofp->in_framerate.num,
+                 ofp->in_framerate.den);
+
+        ret = insert_filter(&last_filter, &pad_idx, "fps", args);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (do_interlace) {
+        const char *mode = "mode=interleave_top";
+
+        if (ofp->flags & OFILTER_FLAG_SDIOUTPUT && height == 480) {
+            mode = "mode=interleave_bottom";
+        }
+
+        ret = insert_filter(&last_filter, &pad_idx, "tinterlace", mode);
+        if (ret < 0)
+            return ret;
+    }
+
+    if (ofp->flags & OFILTER_FLAG_SDIOUTPUT) {
+        /* Special case for SD output to Decklink cards (which expect ITU-656 video) */
+        if (height == 480) {
+            char args[255];
+            int x = 0;
+
+            if (width == 704) {
+                /* Original encoder encoded in D1, so we pad 8 pixels on
+                   each side per the standard convention... */
+                x = 8;
+            }
+
+            /* Vertical padding is 2 on the top, 4 on the bottom, to preserve
+               field dominance */
+            snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2:color=black", 720, 486, x);
+            ret = insert_filter(&last_filter, &pad_idx, "pad", args);
+            if (ret < 0)
+                return ret;
+
+            width = 720;
+            height = 486;
+        }
+
+        /* Special case if the source 480i video is TFF, since 480i video
+           over SDI is always supposed to be BFF */
+        if (height == 486 && ofp->in_top_field_first) {
+            ret = insert_filter(&last_filter, &pad_idx, "phase", "mode=t");
+            if (ret < 0)
+                return ret;
+        }
     }
 
     snprintf(name, sizeof(name), "trim_out_%s", ofp->name);
@@ -1691,6 +1756,8 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
     char name[255];
     int ret, pad_idx = 0;
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
+    int interlaced_frame = ifp->interlaced;
+
     if (!par)
         return AVERROR(ENOMEM);
 
@@ -1781,6 +1848,14 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
         ret = insert_filter(&last_filter, &pad_idx, "fieldmerge", NULL);
         if (ret < 0)
             return ret;
+    }
+
+    if (interlaced_frame && do_deinterlace) {
+        char args[255];
+
+        snprintf(args, sizeof(args), "mode=%d", 1);
+        ret = insert_filter(&last_filter, &pad_idx, "yadif", args);
+        interlaced_frame = 0;
     }
 
     snprintf(name, sizeof(name), "trim_in_%s", ifp->opts.name);
@@ -1888,7 +1963,7 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
 {
     FilterGraphPriv *fgp = fgp_from_fg(fg);
     AVBufferRef *hw_device;
-    AVFilterInOut *inputs, *outputs, *cur;
+    AVFilterInOut *inputs, *outputs, *cur, *cur2;
     int ret, i, simple = filtergraph_is_simple(fg);
     int have_input_eof = 0;
     const char *graph_desc = fgp->graph_desc;
@@ -1942,6 +2017,25 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
             avfilter_inout_free(&outputs);
             goto fail;
         }
+
+    /* Find the input video width/height, as we need it to make decisions on
+       the output filter graph construction) */
+    for (cur = inputs, i = 0; cur; cur = cur->next, i++) {
+        InputFilterPriv *ifp = ifp_from_ifilter(fg->inputs[i]);
+        if (ifp->type == AVMEDIA_TYPE_VIDEO) {
+            int j;
+            for (cur2 = outputs, j = 0; cur2; cur2 = cur2->next, j++) {
+                if (fg->outputs[j]->type == AVMEDIA_TYPE_VIDEO) {
+                    OutputFilterPriv *ofp = ofp_from_ofilter(fg->outputs[j]);
+                    ofp->in_width = ifp->width;
+                    ofp->in_height = ifp->height;
+                    ofp->in_framerate = ifp->opts.framerate;
+                    ofp->in_top_field_first = ifp->top_field_first;
+                }
+            }
+        }
+    }
+
     avfilter_inout_free(&inputs);
 
     for (cur = outputs, i = 0; cur; cur = cur->next, i++) {
@@ -2064,6 +2158,8 @@ static int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *fr
     ifp->sample_aspect_ratio = frame->sample_aspect_ratio;
     ifp->color_space         = frame->colorspace;
     ifp->color_range         = frame->color_range;
+    ifp->interlaced          = frame->flags & AV_FRAME_FLAG_INTERLACED ? 1 : 0;
+    ifp->top_field_first     = frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST ? 1 : 0;
 
     ifp->sample_rate         = frame->sample_rate;
     ret = av_channel_layout_copy(&ifp->ch_layout, &frame->ch_layout);

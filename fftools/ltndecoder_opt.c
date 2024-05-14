@@ -62,6 +62,8 @@ float dts_error_threshold   = 3600*30;
 enum VideoSyncMethod video_sync_method = VSYNC_AUTO;
 #endif
 float frame_drop_threshold = 0;
+int do_deinterlace    = 0;
+int do_interlace      = 0;
 int do_benchmark      = 0;
 int do_benchmark_all  = 0;
 int do_hex_dump       = 0;
@@ -1822,6 +1824,12 @@ const OptionDef options[] = {
     { "passlogfile",                OPT_TYPE_STRING, OPT_VIDEO | OPT_EXPERT | OPT_PERSTREAM | OPT_OUTPUT,
         { .off = OFFSET(passlogfiles) },
         "select two pass log file name prefix", "prefix" },
+    { "deinterlace",                OPT_TYPE_BOOL, OPT_VIDEO | OPT_EXPERT,
+        { &do_deinterlace },
+        "deinterlace the video prior to output" },
+    { "interlace",  OPT_TYPE_BOOL, OPT_VIDEO | OPT_EXPERT,
+        { &do_interlace },
+        "interlace the video prior to output" },
     { "vstats",                     OPT_TYPE_FUNC,   OPT_VIDEO | OPT_EXPERT,
         { .func_arg = opt_vstats },
         "dump video coding statistics to file" },

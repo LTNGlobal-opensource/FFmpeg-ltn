@@ -621,6 +621,13 @@ static void *input_thread(void *arg)
                              f->ctx->streams[pkt->stream_index]);
         }
 
+        if (pkt->pts != AV_NOPTS_VALUE) {
+            InputStream *st = f->streams[pkt->stream_index];
+            if (st->last_pts != 0 && (pkt->pts - st->last_pts) > st->pts_delta)
+                st->pts_delta = pkt->pts - st->last_pts;
+            st->last_pts = pkt->pts;
+        }
+
         /* the following test is needed in case new streams appear
            dynamically in stream : we ignore them */
         if (pkt->stream_index >= f->nb_streams ||

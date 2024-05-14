@@ -394,6 +394,10 @@ typedef struct InputStream {
     uint64_t frames_decoded;
     uint64_t samples_decoded;
     uint64_t decode_errors;
+
+    /* LTN computing of PTS delta for prerolls */
+    int64_t last_pts;
+    int64_t pts_delta;
 } InputStream;
 
 typedef struct LastFrameDuration {

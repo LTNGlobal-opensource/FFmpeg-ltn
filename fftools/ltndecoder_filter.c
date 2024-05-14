@@ -92,6 +92,8 @@ typedef struct InputFilterPriv {
 
     int width, height;
     AVRational sample_aspect_ratio;
+    int interlaced;
+    int top_field_first;
 
     int sample_rate;
     AVChannelLayout ch_layout;
@@ -1046,6 +1048,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     OutputStream *ost = ofilter->ost;
     OutputFile    *of = output_files[ost->file_index];
     AVFilterContext *last_filter = out->filter_ctx;
+    int width = ost->ist->par->width;
+    int height = ost->ist->par->height;
     AVBPrint bprint;
     int pad_idx = out->pad_idx;
     int ret;
@@ -1082,6 +1086,8 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
 
         last_filter = filter;
         pad_idx = 0;
+        width = ofilter->width;
+        height = ofilter->height;
     }
 
     av_bprint_init(&bprint, 0, AV_BPRINT_SIZE_UNLIMITED);
@@ -1100,6 +1106,98 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
         last_filter = filter;
         pad_idx     = 0;
     }
+
+
+    if (ost->frame_rate.num) {
+        AVFilterContext *fps;
+        char args[255];
+        snprintf(args, sizeof(args), "fps=%d/%d",
+                 do_interlace ? ost->frame_rate.num * 2 : ost->frame_rate.num,
+                 ost->frame_rate.den);
+        snprintf(name, sizeof(name), "fps_out_%d_%d",
+                 ost->file_index, ost->index);
+        ret = avfilter_graph_create_filter(&fps, avfilter_get_by_name("fps"),
+                                           name, args, NULL, fg->graph);
+        if (ret < 0)
+            return ret;
+
+        ret = avfilter_link(last_filter, pad_idx, fps, 0);
+        if (ret < 0)
+            return ret;
+        last_filter = fps;
+        pad_idx = 0;
+    }
+
+    if (do_interlace) {
+        AVFilterContext *tinterlace;
+        const char *mode = "mode=interleave_top";
+
+        if (of->format && strcmp(of->format->name, "decklink") == 0 &&
+            height == 480) {
+            mode = "mode=interleave_bottom";
+        }
+
+        snprintf(name, sizeof(name), "interlace_out_%d_%d",
+                 ost->file_index, ost->st->index);
+        if ((ret = avfilter_graph_create_filter(&tinterlace,
+                                                avfilter_get_by_name("tinterlace"),
+                                                name, mode, NULL,
+                                                fg->graph)) < 0)
+            return ret;
+
+        if ((ret = avfilter_link(last_filter, 0, tinterlace, 0)) < 0)
+            return ret;
+
+        last_filter = tinterlace;
+    }
+
+    if (of->format && strcmp(of->format->name, "decklink") == 0) {
+        /* Special case for SD output to Decklink cards (which expect ITU-656 video) */
+        if (height == 480) {
+            AVFilterContext *pad_filter;
+            char args[255];
+            int x = 0;
+
+            if (width == 704) {
+                /* Original encoder encoded in D1, so we pad 8 pixels on
+                   each side per the standard convention... */
+                x = 8;
+            }
+
+            /* Vertical padding is 2 on the top, 4 on the bottom, to preserve
+               field dominance */
+            snprintf(args, sizeof(args), "w=%d:h=%d:x=%d:y=2:color=black", 720, 486, x);
+            snprintf(name, sizeof(name), "pad_out_%d_%d",
+                     ost->file_index, ost->st->index);
+
+            if ((ret = avfilter_graph_create_filter(&pad_filter, avfilter_get_by_name("pad"),
+                                                    name, args, NULL, fg->graph)) < 0)
+                return ret;
+            if ((ret = avfilter_link(last_filter, 0, pad_filter, 0)) < 0)
+                return ret;
+
+            last_filter = pad_filter;
+            width = 720;
+            height = 486;
+        }
+
+        /* Special case if the source 480i video is TFF, since 480i video
+           over SDI is always supposed to be BFF */
+        if (height == 486 && ost->ist->par->field_order == AV_FIELD_TT) {
+            AVFilterContext *phase_filter;
+            snprintf(name, sizeof(name), "phase_out_%d_%d",
+                     ost->file_index, ost->st->index);
+
+            if ((ret = avfilter_graph_create_filter(&phase_filter, avfilter_get_by_name("phase"),
+                                                    name, "mode=t", NULL, fg->graph)) < 0)
+                return ret;
+            if ((ret = avfilter_link(last_filter, 0, phase_filter, 0)) < 0)
+                return ret;
+
+            last_filter = phase_filter;
+        }
+    }
+
 
     snprintf(name, sizeof(name), "trim_out_%d_%d",
              ost->file_index, ost->index);
@@ -1283,6 +1381,7 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
     int ret, pad_idx = 0;
     int64_t tsoffset = 0;
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
+    int interlaced_frame = ifp->interlaced;
 
     if (!par)
         return AVERROR(ENOMEM);
@@ -1380,6 +1479,27 @@ static int configure_input_video_filter(FilterGraph *fg, InputFilter *ifilter,
             return ret;
         last_filter = fm_filter;
         height *= 2;
+    }
+
+    if (interlaced_frame && do_deinterlace) {
+        AVFilterContext *deint_filter;
+        char args[255];
+
+        snprintf(name, sizeof(name), "deinterlace_in_%d_%d",
+                 ist->file_index, ist->st->index);
+
+        snprintf(args, sizeof(args), "mode=%d", 1);
+        if ((ret = avfilter_graph_create_filter(&deint_filter,
+                                                avfilter_get_by_name("yadif"),
+                                                name, args, NULL,
+                                                fg->graph)) < 0)
+            return ret;
+
+        if ((ret = avfilter_link(last_filter, 0, deint_filter, 0)) < 0)
+            return ret;
+
+        interlaced_frame = 0;
+        last_filter = deint_filter;
     }
 
     snprintf(name, sizeof(name), "trim_in_%d_%d",
@@ -1687,6 +1807,8 @@ static int ifilter_parameters_from_frame(InputFilter *ifilter, const AVFrame *fr
     ifp->width               = frame->width;
     ifp->height              = frame->height;
     ifp->sample_aspect_ratio = frame->sample_aspect_ratio;
+    ifp->interlaced          = frame->flags & AV_FRAME_FLAG_INTERLACED ? 1 : 0;
+    ifp->top_field_first     = frame->flags & AV_FRAME_FLAG_TOP_FIELD_FIRST ? 1 : 0;
 
     ifp->sample_rate         = frame->sample_rate;
     ret = av_channel_layout_copy(&ifp->ch_layout, &frame->ch_layout);

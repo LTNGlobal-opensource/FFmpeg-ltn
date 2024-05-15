@@ -151,11 +151,6 @@ public:
         decklink_frame *frame = static_cast<decklink_frame *>(_frame);
         struct decklink_ctx *ctx = frame->_ctx;
 
-        if (frame->_avframe)
-            av_frame_unref(frame->_avframe);
-        if (frame->_avpacket)
-            av_packet_unref(frame->_avpacket);
-
         pthread_mutex_lock(&ctx->mutex);
         ctx->frames_buffer_available_spots++;
         pthread_cond_broadcast(&ctx->cond);

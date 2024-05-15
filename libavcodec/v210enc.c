@@ -74,6 +74,13 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     AVFrameSideData *side_data;
     int ret;
     uint8_t *dst;
+    static const struct {
+        enum AVPacketSideDataType packet;
+        enum AVFrameSideDataType frame;
+    } sd[] = {
+        { AV_PKT_DATA_A53_CC,                     AV_FRAME_DATA_A53_CC },
+        { AV_PKT_DATA_AFD,                        AV_FRAME_DATA_AFD },
+    };
 
     ret = ff_get_encode_buffer(avctx, pkt, avctx->height * stride, 0);
     if (ret < 0) {
@@ -91,20 +98,14 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     else if(pic->format == AV_PIX_FMT_YUV420P10)
         v210_enc_420p_10(avctx, dst, pic);
 
-    side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_A53_CC);
-    if (side_data && side_data->size) {
-        uint8_t *buf = av_packet_new_side_data(pkt, AV_PKT_DATA_A53_CC, side_data->size);
-        if (!buf)
-            return AVERROR(ENOMEM);
-        memcpy(buf, side_data->data, side_data->size);
-    }
-
-    side_data = av_frame_get_side_data(pic, AV_FRAME_DATA_AFD);
-    if (side_data && side_data->size) {
-        uint8_t *buf = av_packet_new_side_data(pkt, AV_PKT_DATA_AFD, side_data->size);
-        if (!buf)
-            return AVERROR(ENOMEM);
-        memcpy(buf, side_data->data, side_data->size);
+    for (int i = 0; i < FF_ARRAY_ELEMS(sd); i++) {
+        side_data = av_frame_get_side_data(pic, sd[i].frame);
+        if (side_data && side_data->size) {
+            uint8_t *buf = av_packet_new_side_data(pkt, sd[i].packet, side_data->size);
+            if (!buf)
+                return AVERROR(ENOMEM);
+            memcpy(buf, side_data->data, side_data->size);
+        }
     }
 
     *got_packet = 1;

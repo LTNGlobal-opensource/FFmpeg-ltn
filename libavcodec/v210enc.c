@@ -80,6 +80,8 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     } sd[] = {
         { AV_PKT_DATA_A53_CC,                     AV_FRAME_DATA_A53_CC },
         { AV_PKT_DATA_AFD,                        AV_FRAME_DATA_AFD },
+        { AV_PKT_DATA_MASTERING_DISPLAY_METADATA, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA },
+        { AV_PKT_DATA_CONTENT_LIGHT_LEVEL,        AV_FRAME_DATA_CONTENT_LIGHT_LEVEL },
     };
 
     ret = ff_get_encode_buffer(avctx, pkt, avctx->height * stride, 0);

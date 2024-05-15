@@ -1088,7 +1088,47 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
         pad_idx = 0;
         width = ofilter->width;
         height = ofilter->height;
+    } else {
+        struct sdi_video_modes {
+            int width;
+            int height;
+        };
+
+        const static struct sdi_video_modes modes[] = {
+            {1920, 1080},
+            {1280, 720},
+            {720, 576},
+            {720, 480},
+        };
+
+        int target_width = 0;
+        for (int i = 0; i < (sizeof(modes) / sizeof(struct sdi_video_modes)); i++) {
+            if (height == modes[i].height &&
+                width != modes[i].width) {
+                /* Horizontal scaling required */
+                target_width = modes[i].width;
+            }
+        }
+
+        if (target_width != 0) {
+            AVFilterContext *filter;
+            char args[255];
+
+            snprintf(args, sizeof(args), "%d:%d", target_width, height);
+            snprintf(name, sizeof(name), "scaler_sdi_%d_%d",
+                     ost->file_index, ost->index);
+            if ((ret = avfilter_graph_create_filter(&filter, avfilter_get_by_name("scale"),
+                                                    name, args, NULL, fg->graph)) < 0)
+                return ret;
+            if ((ret = avfilter_link(last_filter, pad_idx, filter, 0)) < 0)
+                return ret;
+
+            last_filter = filter;
+            pad_idx = 0;
+            width = target_width;
+        }
     }
+
 
     av_bprint_init(&bprint, 0, AV_BPRINT_SIZE_UNLIMITED);
     if ((pix_fmts = choose_pix_fmts(ofilter, &bprint))) {

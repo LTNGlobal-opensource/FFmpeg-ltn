@@ -110,6 +110,8 @@ struct decklink_ctx {
     int bmd_height;
     int bmd_field_dominance;
     int supports_vanc;
+    int supports_hdr;
+    int supports_colorspace;
 
     /* Capture buffer queue */
     DecklinkPacketQueue queue;

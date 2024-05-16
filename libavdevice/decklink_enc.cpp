@@ -317,6 +317,85 @@ private:
     std::atomic<int>  _refs;
 };
 
+static void decklink_insert_frame(AVFormatContext *_avctx, struct decklink_cctx *_cctx,
+                                  decklink_frame *frame, int64_t pts, int num_frames)
+{
+    struct decklink_ctx *ctx = (struct decklink_ctx *)_cctx->ctx;
+    uint32_t buffered;
+    uint32_t vid_buffered;
+    BMDTimeValue streamtime;
+    BMDTimeValue vid_streamtime;
+
+    ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
+    ctx->dlo->GetBufferedVideoFrameCount(&vid_buffered);
+    int ret = ctx->dlo->GetScheduledStreamTime(ctx->bmd_tb_den, &vid_streamtime, NULL);
+    if (ret != 0) {
+        av_log(_avctx, AV_LOG_WARNING, "Failed getting streamtime %d\n", ret);
+    }
+
+    av_log(_avctx, AV_LOG_WARNING, "Inserting %d frames (%d) (vid=%d)."
+           " vid_streamtime=%ld.  Advancing %d audio samples\n",
+           num_frames, buffered, vid_buffered,
+           vid_streamtime / ctx->bmd_tb_num,
+           ctx->audio_samples_per_frame * num_frames);
+
+    ctx->dlo->GetScheduledStreamTime(48000, &streamtime, NULL);
+    for (int i = 0; i < num_frames; i++) {
+        uint32_t written;
+        HRESULT result;
+
+        pthread_mutex_lock(&ctx->mutex);
+        while (ctx->frames_buffer_available_spots == 0) {
+            pthread_cond_wait(&ctx->cond, &ctx->mutex);
+        }
+        ctx->frames_buffer_available_spots--;
+        pthread_mutex_unlock(&ctx->mutex);
+
+        ctx->video_offset++;
+        ctx->frameCount++;
+        result = ctx->dlo->ScheduleVideoFrame((class IDeckLinkVideoFrame *) frame,
+                                              (pts + ctx->video_offset) * ctx->bmd_tb_num,
+                                              ctx->bmd_tb_num, ctx->bmd_tb_den);
+        if (result != S_OK) {
+            av_log(_avctx, AV_LOG_ERROR, "Failed to schedule video frame: %d\n",
+                   result);
+        }
+        result = ctx->dlo->ScheduleAudioSamples(ctx->empty_audio_buf,
+                                                ctx->audio_samples_per_frame, streamtime + buffered,
+                                                bmdAudioSampleRate48kHz,
+                                                &written);
+        if (result != S_OK) {
+            av_log(_avctx, AV_LOG_ERROR, "Failed to schedule audio: %d written=%d\n",
+                   result, written);
+            ltnlog_stat("ERROR AUDIO", result);
+        } else if (written != ctx->audio_samples_per_frame) {
+            av_log(_avctx, AV_LOG_ERROR, "Audio write failure: requested=%d written=%d\n",
+                   ctx->audio_samples_per_frame, written);
+        } else {
+            ltnlog_stat("PLAY AUDIO BYTES", written);
+        }
+
+        ctx->audio_offset += ctx->audio_samples_per_frame;
+        buffered += ctx->audio_samples_per_frame;
+    }
+}
+
+static void decklink_drop_frame(AVFormatContext *_avctx, struct decklink_cctx *_cctx,
+                                int num_frames)
+{
+    struct decklink_ctx *ctx = (struct decklink_ctx *)_cctx->ctx;
+    uint32_t buffered;
+    uint32_t vid_buffered;
+
+    ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
+    ctx->dlo->GetBufferedVideoFrameCount(&vid_buffered);
+    av_log(_avctx, AV_LOG_WARNING, "Dropping %d frames (%d) (vid=%d).\n",
+           num_frames, buffered, vid_buffered);
+
+    ctx->video_offset -= num_frames;
+    ctx->audio_offset -= ctx->audio_samples_per_frame * num_frames;
+}
+
 class decklink_output_callback : public IDeckLinkVideoOutputCallback, public IDeckLinkAudioOutputCallback
 {
 public:
@@ -332,6 +411,22 @@ public:
         ctx->frames_buffer_available_spots++;
         pthread_cond_broadcast(&ctx->cond);
         pthread_mutex_unlock(&ctx->mutex);
+
+        switch (result) {
+        case bmdOutputFrameCompleted:
+        case bmdOutputFrameFlushed:
+            break;
+        case bmdOutputFrameDisplayedLate:
+            ctx->late++;
+            av_log(_avctx, AV_LOG_WARNING, "Video buffer late\n");
+            ltnlog_stat("VIDEOLATE", ctx->late);
+            break;
+        case bmdOutputFrameDropped:
+            ctx->dropped++;
+            av_log(_avctx, AV_LOG_WARNING, "Video buffer dropped\n");
+            ltnlog_stat("VIDEODROP", ctx->dropped);
+            break;
+        }
 
         return S_OK;
     }
@@ -490,6 +585,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     ctx->output_callback = new decklink_output_callback(avctx);
     ctx->dlo->SetScheduledFrameCompletionCallback(ctx->output_callback);
     ctx->dlo->SetAudioCallback(ctx->output_callback);
+    ctx->audio_samples_per_frame = bmdAudioSampleRate48kHz * st->time_base.num / st->time_base.den;
 
     ctx->frames_preroll = st->time_base.den * ctx->preroll;
     if (st->time_base.den > 1000)
@@ -500,6 +596,11 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     /* Buffer twice as many frames as the preroll. */
     ctx->frames_buffer = ctx->frames_preroll * 2;
     ctx->frames_buffer = FFMIN(ctx->frames_buffer, 60);
+
+    /* Throw the first X frames so that all upstream FIFOs have the opportunity
+       to flush (to reduce realtime latency) */
+    ctx->frames_discard = st->time_base.den * cctx->discard / st->time_base.num;
+
     pthread_mutex_init(&ctx->mutex, NULL);
     pthread_mutex_init(&ctx->audio_mutex, NULL);
     pthread_cond_init(&ctx->cond, NULL);
@@ -561,6 +662,10 @@ static int decklink_enable_audio(AVFormatContext *avctx)
         ctx->channels = 8;
     else if (ctx->channels <= 16)
         ctx->channels = 16;
+
+    ctx->empty_audio_buf = malloc(ctx->audio_samples_per_frame * ctx->channels * 2);
+    if (!ctx->empty_audio_buf)
+        return -1;
 
     if (ctx->dlo->EnableAudioOutput(bmdAudioSampleRate48kHz,
                                     bmdAudioSampleType16bitInteger,
@@ -1021,6 +1126,51 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     ctx->last_pts = FFMAX(ctx->last_pts, pkt->pts);
 
+    BMDTimeValue streamtime;
+    int64_t delta;
+    ctx->dlo->GetScheduledStreamTime(ctx->bmd_tb_den, &streamtime, NULL);
+    delta = pkt->pts + ctx->video_offset - (streamtime / ctx->bmd_tb_num);
+
+    if (ctx->frames_discard-- > 0) {
+        av_log(avctx, AV_LOG_DEBUG, "Discarding frame with PTS %" PRId64 " discard=%d\n",
+               pkt->pts, ctx->frames_discard);
+        av_frame_free(&avframe);
+        av_packet_free(&avpacket);
+        return 0;
+    }
+
+    if (ctx->playback_started && (delta < 0 || delta > ctx->frames_buffer)) {
+        /* We're behind realtime, or way too far ahead, so restart clocks */
+        ltnlog_stat("OUTPUT RESTART", ++ctx->output_restart);
+        av_log(avctx, AV_LOG_ERROR, "Scheduled frames received too %s.  "
+               "Restarting output.  Delta=%" PRId64 "\n", delta < 0 ? "late" : "far into future", delta);
+        if (ctx->dlo->StopScheduledPlayback(0, NULL, 0) != S_OK) {
+            av_log(avctx, AV_LOG_ERROR, "Failed to stop scheduled playback\n");
+            return AVERROR(EIO);
+        }
+        if (ctx->audio) {
+            ctx->dlo->DisableAudioOutput();
+            free(ctx->empty_audio_buf);
+        }
+
+        ctx->frames_discard = st->time_base.den * cctx->discard / st->time_base.num;
+        ctx->first_pts = 0;
+        ctx->playback_started = 0;
+        ctx->audio_offset = 0;
+        ctx->video_offset = 0;
+        ctx->framebuffer_level = 0;
+        ctx->num_framebuffer_level = 0;
+        if (ctx->audio)
+            if (decklink_enable_audio(avctx)) {
+                av_log(avctx, AV_LOG_ERROR, "Error enabling audio\n");
+            }
+
+        /* Bail out after discarding the frame */
+        av_frame_free(&avframe);
+        av_packet_free(&avpacket);
+        return 0;
+    }
+
     if (st->codecpar->codec_id == AV_CODEC_ID_WRAPPED_AVFRAME) {
         if (tmp->format != AV_PIX_FMT_UYVY422 ||
             tmp->width  != ctx->bmd_width ||
@@ -1083,8 +1233,57 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     /* Schedule frame for playback. */
     hr = ctx->dlo->ScheduleVideoFrame((class IDeckLinkVideoFrame *) frame,
-                                      pkt->pts * ctx->bmd_tb_num,
+                                      (pkt->pts + ctx->video_offset) * ctx->bmd_tb_num,
                                       ctx->bmd_tb_num, ctx->bmd_tb_den);
+
+    ctx->dlo->GetBufferedVideoFrameCount(&buffered);
+    if (cctx->debug_level >= 3)
+        av_log(avctx, AV_LOG_INFO, "Buffered video frames: %d (offset=%d) pts=%ld streamtime=%ld latency=%ld\n",
+               (int) buffered, ctx->video_offset, pkt->pts, (streamtime / ctx->bmd_tb_num),
+               (pkt->pts + ctx->video_offset) - (streamtime / ctx->bmd_tb_num));
+
+    if (pkt->pts > (ctx->first_pts + 2) && buffered <= 2)
+        av_log(avctx, AV_LOG_WARNING, "There are not enough buffered video frames."
+               " Video may misbehave!\n");
+
+
+    /* Make sure there is at least 60ms worth of data */
+    int num_frames = (60 * ctx->bmd_tb_den / ctx->bmd_tb_num / 1000) + 1;
+    if (pkt->pts > (ctx->first_pts + num_frames) && buffered <= num_frames) {
+        av_log(avctx, AV_LOG_WARNING, "There are not enough buffered video frames to support audio."
+               " Video/audio may misbehave!\n");
+    }
+
+    /* Adjust number of buffers queued to closely track preroll depth (to achieve
+       desired target latency).  Because we only move up to one frame per minute, this is
+       intended to compesnate for SDI clocks which are slightly too slow or too fast
+       (i.e. milliseconds per hour of drift).  */
+    time_t cur_time;
+    time(&cur_time);
+    if (cctx->decklink_live && ctx->last_framebuffer_level != cur_time) {
+        ctx->framebuffer_level += buffered;
+        ctx->num_framebuffer_level++;
+        if (ctx->num_framebuffer_level > 59) {
+            /* It's been a minute, compute the average */
+            float fb_level = (float) ctx->framebuffer_level / (float) ctx->num_framebuffer_level;
+            if (cctx->debug_level >= 1)
+                av_log(avctx, AV_LOG_INFO, "Latency slipper: %d/%d=%f\n", ctx->framebuffer_level,
+                       ctx->num_framebuffer_level, fb_level);
+            if (fb_level > ctx->frames_preroll + 1) {
+                /* Drop a frame to bring us closer to expected latency level */
+                ltnlog_stat("OUTPUT SLIP", ++ctx->output_slipped);
+                decklink_drop_frame(avctx, cctx, 1);
+            } else if (fb_level < ctx->frames_preroll - 1) {
+                ltnlog_stat("OUTPUT SLIP", ++ctx->output_slipped);
+                decklink_insert_frame(avctx, cctx, frame, pkt->pts, 1);
+            }
+
+            ctx->framebuffer_level = 0;
+            ctx->num_framebuffer_level = 0;
+        }
+        ctx->last_framebuffer_level = cur_time;
+    }
+
     /* Pass ownership to DeckLink, or release on failure */
     frame->Release();
     if (hr != S_OK) {

@@ -124,6 +124,10 @@ struct decklink_ctx {
     pthread_mutex_t audio_mutex;
     DecklinkPacketQueue output_audio_list;
     unsigned int audio_pkt_numsamples = 0;
+    int audio_offset;
+    int video_offset;
+    unsigned int audio_samples_per_frame;
+    void *empty_audio_buf;
 
     /* Streams present */
     int audio;
@@ -135,6 +139,9 @@ struct decklink_ctx {
     int64_t last_pts;
     unsigned long frameCount;
     unsigned int dropped;
+    unsigned int late;
+    unsigned int output_restart;
+    unsigned int output_slipped;
     AVStream *audio_st;
     AVStream *video_st;
     AVStream *klv_st;
@@ -156,6 +163,12 @@ struct decklink_ctx {
 
     int frames_preroll;
     int frames_buffer;
+    int frames_discard;
+
+    /* Track hardware video fifo level */
+    int framebuffer_level;
+    int num_framebuffer_level;
+    time_t last_framebuffer_level;
 
     pthread_mutex_t mutex;
     pthread_cond_t cond;

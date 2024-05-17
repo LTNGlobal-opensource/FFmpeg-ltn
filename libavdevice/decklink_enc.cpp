@@ -1248,6 +1248,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         thumbnail_generate(&ctx->thumbnail_ctx, pkt);
 
     /* Schedule frame for playback. */
+    ctx->frameCount++;
     hr = ctx->dlo->ScheduleVideoFrame((class IDeckLinkVideoFrame *) frame,
                                       (pkt->pts + ctx->video_offset) * ctx->bmd_tb_num,
                                       ctx->bmd_tb_num, ctx->bmd_tb_den);

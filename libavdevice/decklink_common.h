@@ -38,6 +38,7 @@ extern "C" {
 #include "decklink_common_c.h"
 #if CONFIG_LIBKLVANC
 #include "libklvanc/vanc.h"
+#include "thumbnail.h"
 #endif
 
 #ifdef _WIN32
@@ -166,6 +167,7 @@ struct decklink_ctx {
     int frames_preroll;
     int frames_buffer;
     int frames_discard;
+    int thumbnail_frames;
 
     /* Track hardware video fifo level */
     int framebuffer_level;
@@ -180,6 +182,8 @@ struct decklink_ctx {
 #if CONFIG_LIBKLVANC
     struct klvanc_context_s *vanc_ctx;
 #endif
+
+    struct thumbnail_ctx thumbnail_ctx;
 
     int channels;
     int audio_depth;

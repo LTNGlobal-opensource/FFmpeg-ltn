@@ -24,6 +24,10 @@
 #define AVDEVICE_DECKLINK_COMMON_H
 
 #include <DeckLinkAPIVersion.h>
+#if BLACKMAGIC_DECKLINK_API_VERSION < 0x0b000000
+#define IID_IDeckLinkProfileAttributes IID_IDeckLinkAttributes
+#define IDeckLinkProfileAttributes IDeckLinkAttributes
+#endif
 
 #include "libavutil/thread.h"
 #include "decklink_common_c.h"
@@ -73,7 +77,7 @@ struct decklink_ctx {
     IDeckLinkOutput *dlo;
     IDeckLinkInput *dli;
     IDeckLinkConfiguration *cfg;
-    IDeckLinkAttributes *attr;
+    IDeckLinkProfileAttributes *attr;
 #if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a060100
     IDeckLinkStatus *status;
 #endif
@@ -201,6 +205,17 @@ static const BMDVideoConnection decklink_video_connection_map[] = {
     bmdVideoConnectionComposite,
     bmdVideoConnectionSVideo,
 };
+
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0b000000
+static const BMDProfileID decklink_profile_id_map[] = {
+    (BMDProfileID)0,
+    bmdProfileTwoSubDevicesHalfDuplex,
+    bmdProfileOneSubDeviceFullDuplex,
+    bmdProfileOneSubDeviceHalfDuplex,
+    bmdProfileTwoSubDevicesFullDuplex,
+    bmdProfileFourSubDevicesHalfDuplex,
+};
+#endif
 
 HRESULT ff_decklink_get_display_name(IDeckLink *This, const char **displayName);
 int ff_decklink_set_configs(AVFormatContext *avctx, decklink_direction_t direction);

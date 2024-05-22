@@ -47,10 +47,20 @@ static const AVOption options[] = {
     { "audio_mode",   "audio mode",               OFFSET(audio_mode),     AV_OPT_TYPE_INT,   { .i64 = AUDIO_MODE_DISCRETE}, 0, 1,    DEC, "audio_mode"},
     { "discrete",     NULL,                                           0,  AV_OPT_TYPE_CONST, { .i64 = AUDIO_MODE_DISCRETE}, 0, 0,    DEC, "audio_mode"},
     { "pairs",        NULL,                                           0,  AV_OPT_TYPE_CONST, { .i64 = AUDIO_MODE_PAIRS}, 0, 0,    DEC, "audio_mode"},
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0b000000
+    { "duplex_mode",  "duplex mode",              OFFSET(duplex_mode),    AV_OPT_TYPE_INT,   { .i64 = 0}, 0, 5,    DEC, "duplex_mode"},
+#else
     { "duplex_mode",  "duplex mode",              OFFSET(duplex_mode),    AV_OPT_TYPE_INT,   { .i64 = 0}, 0, 2,    DEC, "duplex_mode"},
+#endif
     { "unset",         NULL,                                          0,  AV_OPT_TYPE_CONST, { .i64 = 0}, 0, 0,    DEC, "duplex_mode"},
     { "half",          NULL,                                          0,  AV_OPT_TYPE_CONST, { .i64 = 1}, 0, 0,    DEC, "duplex_mode"},
     { "full",          NULL,                                          0,  AV_OPT_TYPE_CONST, { .i64 = 2}, 0, 0,    DEC, "duplex_mode"},
+#if BLACKMAGIC_DECKLINK_API_VERSION >= 0x0b000000
+    { "one_sub_device_full",      NULL,                               0,  AV_OPT_TYPE_CONST, { .i64 = 2}, 0, 0,    DEC, "duplex_mode"},
+    { "one_sub_device_half",      NULL,                               0,  AV_OPT_TYPE_CONST, { .i64 = 3}, 0, 0,    DEC, "duplex_mode"},
+    { "two_sub_device_full",      NULL,                               0,  AV_OPT_TYPE_CONST, { .i64 = 4}, 0, 0,    DEC, "duplex_mode"},
+    { "four_sub_device_half",     NULL,                               0,  AV_OPT_TYPE_CONST, { .i64 = 5}, 0, 0,    DEC, "duplex_mode"},
+#endif
     { "video_input",  "video input",              OFFSET(video_input),    AV_OPT_TYPE_INT,   { .i64 = 0}, 0, 6,    DEC, "video_input"},
     { "unset",         NULL,                                          0,  AV_OPT_TYPE_CONST, { .i64 = 0}, 0, 0,    DEC, "video_input"},
     { "sdi",           NULL,                                          0,  AV_OPT_TYPE_CONST, { .i64 = 1}, 0, 0,    DEC, "video_input"},

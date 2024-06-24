@@ -311,6 +311,13 @@ enum AVPacketSideDataType {
     AV_PKT_DATA_TRANSPORT_TIMESTAMP,
 
     /**
+     * SEI unregistered metadata
+     * The data contains the unregistered payload, starting with the 16-byte
+     * UUID.
+     */
+    AV_PKT_DATA_SEI_UNREGISTERED,
+
+    /**
      * The number of side data types.
      * This is not part of the public API/ABI in the sense that it may
      * change when new side data types are added.

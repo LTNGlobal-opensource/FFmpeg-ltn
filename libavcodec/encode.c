@@ -514,6 +514,7 @@ int attribute_align_arg avcodec_send_frame(AVCodecContext *avctx, const AVFrame 
         ret = encode_receive_packet_internal(avctx, avci->buffer_pkt);
         if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
             return ret;
+        av_packet_update_pipelinestats(avci->buffer_pkt, AVCODEC_ENCODE_END, av_gettime(), -1, -1);
     }
 
     avctx->frame_num++;
@@ -542,6 +543,7 @@ int attribute_align_arg avcodec_receive_packet(AVCodecContext *avctx, AVPacket *
         ret = encode_receive_packet_internal(avctx, avpkt);
         if (ret < 0)
             return ret;
+        av_packet_update_pipelinestats(avpkt, AVCODEC_ENCODE_END, av_gettime(), -1, -1);
     }
 
     return 0;

@@ -187,6 +187,10 @@ typedef struct FFFormatContext {
      * Contexts and child contexts do not contain a metadata option
      */
     int metafree;
+
+    /* Tracking for mux queue depth */
+    time_t last_mux_status;
+    int64_t mux_interleave_delta;
 } FFFormatContext;
 
 static av_always_inline FFFormatContext *ffformatcontext(AVFormatContext *s)

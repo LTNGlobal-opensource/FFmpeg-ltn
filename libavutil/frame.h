@@ -214,6 +214,14 @@ enum AVFrameSideDataType {
      * Ambient viewing environment metadata, as defined by H.274.
      */
     AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT,
+
+    /**
+     * Pipeline timing information, for measuring traversal through various
+     * layers in the ffmpeg stack.
+     * The data is the AVPipelineStats struct defined in
+     * libavutil/pipeline_stats.h.
+     */
+    AV_FRAME_DATA_PIPELINE_STATS,
 };
 
 enum AVActiveFormatDescription {

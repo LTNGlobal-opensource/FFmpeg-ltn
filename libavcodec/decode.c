@@ -631,6 +631,9 @@ int attribute_align_arg avcodec_send_packet(AVCodecContext *avctx, const AVPacke
             return ret;
     }
 
+    av_packet_update_pipelinestats(avci->buffer_pkt, AVCODEC_DECODE_START, av_gettime(),
+                                   -1, -1);
+
     ret = av_bsf_send_packet(avci->bsf, avci->buffer_pkt);
     if (ret < 0) {
         av_packet_unref(avci->buffer_pkt);
@@ -725,6 +728,9 @@ int ff_decode_receive_frame(AVCodecContext *avctx, AVFrame *frame)
         if (ret < 0)
             goto fail;
     }
+
+    avframe_update_pipelinestats(frame, AVCODEC_DECODE_END, av_gettime(),
+                                 -1, -1);
 
     avctx->frame_num++;
 #if FF_API_AVCTX_FRAME_NUMBER
@@ -1335,6 +1341,7 @@ int ff_decode_frame_props_from_pkt(const AVCodecContext *avctx,
         { AV_PKT_DATA_ICC_PROFILE,                AV_FRAME_DATA_ICC_PROFILE },
         { AV_PKT_DATA_S12M_TIMECODE,              AV_FRAME_DATA_S12M_TIMECODE },
         { AV_PKT_DATA_DYNAMIC_HDR10_PLUS,         AV_FRAME_DATA_DYNAMIC_HDR_PLUS },
+        { AV_PKT_DATA_PIPELINE_STATS,             AV_FRAME_DATA_PIPELINE_STATS },
     };
 
     frame->pts          = pkt->pts;

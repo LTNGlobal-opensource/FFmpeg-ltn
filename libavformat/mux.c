@@ -32,6 +32,7 @@
 #include "libavutil/avassert.h"
 #include "libavutil/internal.h"
 #include "libavutil/mathematics.h"
+#include "libavformat/ltnlog.h"
 
 /**
  * @file
@@ -931,6 +932,7 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
     FFFormatContext *const si = ffformatcontext(s);
     int stream_count = 0;
     int noninterleaved_count = 0;
+    time_t now;
     int ret;
     int eof = flush;
 
@@ -983,6 +985,16 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
                                     st->time_base,
                                     AV_TIME_BASE_Q);
             delta_dts = FFMAX(delta_dts, last_dts - top_dts);
+        }
+
+        if (si->mux_interleave_delta < delta_dts)
+            si->mux_interleave_delta = delta_dts;
+        time(&now);
+        if (now != si->last_mux_status) {
+            ltnlog_stat("MUX_QUEUE_MS",
+                        si->mux_interleave_delta / 1000);
+            si->last_mux_status = now;
+            si->mux_interleave_delta = 0;
         }
 
         if (delta_dts > s->max_interleave_delta) {
@@ -1183,6 +1195,10 @@ static int write_packets_common(AVFormatContext *s, AVPacket *pkt, int interleav
         return ret;
     st = s->streams[pkt->stream_index];
     sti = ffstream(st);
+
+    if (pkt)
+        av_packet_update_pipelinestats(pkt, AVFORMAT_WRITE_TIME, av_gettime(),
+                                       -1, pkt->pts);
 
     ret = prepare_input_packet(s, st, pkt);
     if (ret < 0)

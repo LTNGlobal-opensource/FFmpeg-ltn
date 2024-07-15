@@ -749,6 +749,9 @@ int attribute_align_arg avcodec_send_packet(AVCodecContext *avctx, const AVPacke
         dc->draining_started = 1;
 
     if (!avci->buffer_frame->buf[0] && !dc->draining_started) {
+        av_packet_update_pipelinestats(avci->buffer_pkt, AVCODEC_DECODE_START, av_gettime(),
+                                       -1, -1);
+
         ret = decode_receive_frame_internal(avctx, avci->buffer_frame);
         if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF)
             return ret;
@@ -836,6 +839,8 @@ int ff_decode_receive_frame(AVCodecContext *avctx, AVFrame *frame)
         if (ret < 0)
             goto fail;
     }
+
+    avframe_update_pipelinestats(frame, AVCODEC_DECODE_END, av_gettime(), -1, -1);
 
     avctx->frame_num++;
 
@@ -1518,6 +1523,7 @@ int ff_decode_frame_props_from_pkt(const AVCodecContext *avctx,
         { AV_PKT_DATA_S12M_TIMECODE,              AV_FRAME_DATA_S12M_TIMECODE },
         { AV_PKT_DATA_SKIP_SAMPLES,               AV_FRAME_DATA_SKIP_SAMPLES },
         { AV_PKT_DATA_LCEVC,                      AV_FRAME_DATA_LCEVC },
+        { AV_PKT_DATA_PIPELINE_STATS,             AV_FRAME_DATA_PIPELINE_STATS },
         { AV_PKT_DATA_NB }
     };
 

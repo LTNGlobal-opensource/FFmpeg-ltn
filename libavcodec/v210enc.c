@@ -83,6 +83,7 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         { AV_PKT_DATA_MASTERING_DISPLAY_METADATA, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA },
         { AV_PKT_DATA_CONTENT_LIGHT_LEVEL,        AV_FRAME_DATA_CONTENT_LIGHT_LEVEL },
         { AV_PKT_DATA_SEI_UNREGISTERED,           AV_FRAME_DATA_SEI_UNREGISTERED },
+        { AV_PKT_DATA_PIPELINE_STATS,             AV_FRAME_DATA_PIPELINE_STATS },
     };
 
     ret = ff_get_encode_buffer(avctx, pkt, avctx->height * stride, 0);

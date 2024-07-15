@@ -29,6 +29,7 @@
 #include "libavutil/dict.h"
 #include "libavutil/rational.h"
 #include "libavutil/version.h"
+#include "libavutil/pipeline_stats.h"
 
 #include "libavcodec/version_major.h"
 
@@ -362,6 +363,14 @@ enum AVPacketSideDataType {
      * UUID.
      */
     AV_PKT_DATA_SEI_UNREGISTERED,
+
+    /**
+     * Pipeline timing information, for measuring traversal through various
+     * layers in the ffmpeg stack.
+     * The data is the AVPipelineStats struct defined in
+     * libavutil/pipeline_stats.h.
+     */
+    AV_PKT_DATA_PIPELINE_STATS,
 
     /**
      * The number of side data types.
@@ -897,6 +906,9 @@ int av_packet_make_writable(AVPacket *pkt);
  *               converted
  */
 void av_packet_rescale_ts(AVPacket *pkt, AVRational tb_src, AVRational tb_dst);
+
+void av_packet_update_pipelinestats(struct AVPacket *pkt, enum pipeline_stat stat, int64_t ts,
+                                    int64_t in_pts, int64_t out_pts);
 
 /**
  * @}

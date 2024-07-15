@@ -243,6 +243,14 @@ enum AVFrameSideDataType {
      * The data is an int storing the view ID.
      */
     AV_FRAME_DATA_VIEW_ID,
+
+    /**
+     * Pipeline timing information, for measuring traversal through various
+     * layers in the ffmpeg stack.
+     * The data is the AVPipelineStats struct defined in
+     * libavutil/pipeline_stats.h.
+     */
+    AV_FRAME_DATA_PIPELINE_STATS,
 };
 
 enum AVActiveFormatDescription {

@@ -703,10 +703,11 @@ static int encode_frame(OutputFile *of, OutputStream *ost, AVFrame *frame)
 
         if (frame->sample_aspect_ratio.num && !ost->frame_aspect_ratio.num)
             enc->sample_aspect_ratio = frame->sample_aspect_ratio;
+
+        avframe_update_pipelinestats(frame, AVCODEC_ENCODE_START, av_gettime(), -1, -1);
     }
 
     update_benchmark(NULL);
-    avframe_update_pipelinestats(frame, AVCODEC_ENCODE_START, av_gettime(), -1, -1);
 
     ret = avcodec_send_frame(enc, frame);
     if (ret < 0 && !(ret == AVERROR_EOF && !frame)) {

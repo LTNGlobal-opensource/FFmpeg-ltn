@@ -629,10 +629,8 @@ int attribute_align_arg avcodec_send_packet(AVCodecContext *avctx, const AVPacke
         ret = av_packet_ref(avci->buffer_pkt, avpkt);
         if (ret < 0)
             return ret;
+        av_packet_update_pipelinestats(avci->buffer_pkt, AVCODEC_DECODE_START, av_gettime(), -1, -1);
     }
-
-    av_packet_update_pipelinestats(avci->buffer_pkt, AVCODEC_DECODE_START, av_gettime(),
-                                   -1, -1);
 
     ret = av_bsf_send_packet(avci->bsf, avci->buffer_pkt);
     if (ret < 0) {

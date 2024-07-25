@@ -739,6 +739,7 @@ const char *av_disposition_to_string(int disposition);
 #define AV_PTS_WRAP_IGNORE      0   ///< ignore the wrap
 #define AV_PTS_WRAP_ADD_OFFSET  1   ///< add the format specific offset on wrap detection
 #define AV_PTS_WRAP_SUB_OFFSET  -1  ///< subtract the format specific offset on wrap detection
+#define AV_PTS_WRAP_LTN         2   ///< Don't wrap, keep incrementing monotonically
 
 /**
  * Stream structure.

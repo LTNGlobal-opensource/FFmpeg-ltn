@@ -335,6 +335,11 @@ typedef struct FFStream {
      */
     int pts_wrap_behavior;
 
+    /* LTN wrap algorithm (handles multiple wraps) */
+    int64_t rollover_next;
+    int64_t rollover_current;
+    int rolled_over;
+
     /**
      * Internal data to prevent doing update_initial_durations() twice
      */

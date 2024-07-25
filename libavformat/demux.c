@@ -50,6 +50,7 @@
 static int64_t wrap_timestamp(const AVStream *st, int64_t timestamp)
 {
     const FFStream *const sti = cffstream(st);
+#if 0
     if (sti->pts_wrap_behavior != AV_PTS_WRAP_IGNORE && st->pts_wrap_bits < 64 &&
         sti->pts_wrap_reference != AV_NOPTS_VALUE && timestamp != AV_NOPTS_VALUE) {
         if (sti->pts_wrap_behavior == AV_PTS_WRAP_ADD_OFFSET &&
@@ -59,6 +60,32 @@ static int64_t wrap_timestamp(const AVStream *st, int64_t timestamp)
             timestamp >= sti->pts_wrap_reference)
             return timestamp - (1ULL << st->pts_wrap_bits);
     }
+#else
+    if (sti->pts_wrap_behavior != AV_PTS_WRAP_IGNORE &&
+        sti->pts_wrap_reference != AV_NOPTS_VALUE && timestamp != AV_NOPTS_VALUE) {
+        if (sti->pts_wrap_behavior == AV_PTS_WRAP_ADD_OFFSET &&
+            timestamp < sti->pts_wrap_reference)
+            return timestamp + (1ULL << st->pts_wrap_bits);
+        else if (sti->pts_wrap_behavior == AV_PTS_WRAP_SUB_OFFSET &&
+                 timestamp >= sti->pts_wrap_reference)
+            return timestamp - (1ULL << st->pts_wrap_bits);
+        else if (sti->pts_wrap_behavior == AV_PTS_WRAP_LTN &&
+                 timestamp < sti->pts_wrap_reference) {
+#if 0
+            av_log(NULL, AV_LOG_INFO, "%d Adding1 %ld ro=%d ts=%ld\n", st->index,
+                   (sti->rollover_next << 33), sti->rolled_over, timestamp);
+#endif
+            timestamp += sti->rollover_next << 33;
+        } else if (sti->pts_wrap_behavior == AV_PTS_WRAP_LTN &&
+                   timestamp >= sti->pts_wrap_reference) {
+#if 0
+            av_log(NULL, AV_LOG_INFO, "%d Adding2 %ld ro=%d ts=%ld pwr=%ld\n", st->index,
+                    (sti->rollover_current << 33), sti->rolled_over, timestamp, sti->pts_wrap_reference);
+#endif
+            timestamp += sti->rollover_current << 33;
+        }
+    }
+#endif
     return timestamp;
 }
 
@@ -478,7 +505,11 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
     int pts_wrap_behavior;
     int64_t pts_wrap_reference;
     AVProgram *first_program;
+    int64_t rollover_current = sti->rollover_current;
+    int64_t rollover_next = sti->rollover_next;
+    int rolled_over = sti->rolled_over;
 
+#ifdef LTN_ORIGINAL_WRAP_LOGIC
     if (ref == AV_NOPTS_VALUE)
         ref = pkt->pts;
     if (sti->pts_wrap_reference != AV_NOPTS_VALUE || st->pts_wrap_bits >= 63 || ref == AV_NOPTS_VALUE || !s->correct_ts_overflow)
@@ -491,6 +522,45 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
     pts_wrap_behavior = (ref < (1LL << st->pts_wrap_bits) - (1LL << st->pts_wrap_bits-3)) ||
         (ref < (1LL << st->pts_wrap_bits) - av_rescale(60, st->time_base.den, st->time_base.num)) ?
         AV_PTS_WRAP_ADD_OFFSET : AV_PTS_WRAP_SUB_OFFSET;
+#else
+    int64_t prewrap_point;
+    int64_t postwrap_point;
+    int64_t postwrap_point2;
+
+    if (ref == AV_NOPTS_VALUE || pkt->pts > pkt->dts)
+        ref = pkt->pts;
+
+    if (st->pts_wrap_bits >= 63 || ref == AV_NOPTS_VALUE)
+        return 0;
+    ref &= (1LL << st->pts_wrap_bits)-1;
+
+    pts_wrap_behavior = AV_PTS_WRAP_LTN;
+
+    prewrap_point = (1ULL << st->pts_wrap_bits) - (60 * 90000);
+    postwrap_point = 60 * 90000;
+    postwrap_point2 = postwrap_point + (60 * 9000);
+    pts_wrap_reference = postwrap_point;
+
+    if (ref > prewrap_point && rolled_over == 0) {
+#if 0
+        av_log(s, AV_LOG_INFO, "Incrementing rollover1 st=%d ts=%ld > x=%ld ro=%d rn=%ld rc=%ld\n",
+               st->index, ref, prewrap_point, rolled_over, rollover_next,
+               rollover_current);
+#endif
+        rollover_next++;
+        rolled_over = 1;
+    } else if (ref > postwrap_point && ref < postwrap_point2 && rolled_over == 1) {
+#if 0
+        av_log(s, AV_LOG_INFO, "Incrementing rollover2 st=%d y=%ld < ts=%ld < x=%ld ro=%d rn=%ld rc=%ld\n",
+               st->index, postwrap_point, ref, prewrap_point, rolled_over, rollover_next,
+               rollover_current);
+#endif
+        rollover_current = rollover_next;
+        rolled_over = 0;
+    } else {
+        return 0;
+    }
+#endif
 
     first_program = av_find_program_from_stream(s, NULL, stream_index);
 
@@ -504,10 +574,16 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
                     continue;
                 sti->pts_wrap_reference = pts_wrap_reference;
                 sti->pts_wrap_behavior  = pts_wrap_behavior;
+                sti->rollover_next = rollover_next;
+                sti->rollover_current = rollover_current;
+                sti->rolled_over = rolled_over;
             }
         } else {
             sti->pts_wrap_reference = default_sti->pts_wrap_reference;
             sti->pts_wrap_behavior  = default_sti->pts_wrap_behavior;
+            sti->rollover_next = rollover_next;
+            sti->rollover_current = rollover_current;
+            sti->rolled_over = rolled_over;
         }
     } else {
         AVProgram *program = first_program;
@@ -523,11 +599,18 @@ static int update_wrap_reference(AVFormatContext *s, AVStream *st, int stream_in
         // update every program with differing pts_wrap_reference
         program = first_program;
         while (program) {
+#ifdef LTN_ORIGINAL_WRAP_LOGIC
             if (program->pts_wrap_reference != pts_wrap_reference) {
+#else
+            if (1) {
+#endif
                 for (unsigned i = 0; i < program->nb_stream_indexes; i++) {
                     FFStream *const sti = ffstream(s->streams[program->stream_index[i]]);
                     sti->pts_wrap_reference = pts_wrap_reference;
                     sti->pts_wrap_behavior  = pts_wrap_behavior;
+                    sti->rollover_next = rollover_next;
+                    sti->rollover_current = rollover_current;
+                    sti->rolled_over = rolled_over;
                 }
 
                 program->pts_wrap_reference = pts_wrap_reference;

@@ -35,6 +35,7 @@
 #include "libavcodec/codec.h"
 
 #include "ffmpeg.h"
+#include "libavformat/ltnlog.h"
 
 typedef struct DecoderPriv {
     Decoder             dec;
@@ -1581,6 +1582,19 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
         return ret;
     }
 
+    /* Special case for HEVC 4:2:2, where if the thread count is 2 we
+       set it to 4.  It's likely this heuristic will have to improve
+       in the future... */
+    if (av_dict_get(*dec_opts, "threads_autotune", NULL, 0) &&
+        codec->id == AV_CODEC_ID_HEVC &&
+        dp->dec_ctx->pix_fmt == AV_PIX_FMT_YUV422P10LE) {
+        AVDictionaryEntry *e = av_dict_get(*dec_opts, "threads", NULL, 0);
+        if (e && atoi(e->value) == 2) {
+            av_log(NULL, AV_LOG_WARNING, "HEVC 4:2:2 detected, setting decode thread count to 4\n");
+            av_dict_set(dec_opts, "threads", "4", 0);
+        }
+    }
+
     ret = av_opt_set_dict2(dp->dec_ctx, dec_opts, AV_OPT_SEARCH_CHILDREN);
     if (ret < 0) {
         av_log(dp, AV_LOG_ERROR, "Error applying decoder options: %s\n",
@@ -1604,6 +1618,9 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
                av_err2str(ret));
         return ret;
     }
+
+    if (codec->type == AVMEDIA_TYPE_VIDEO)
+        ltnlog_stat("DECODE_THREAD_COUNT", dp->dec_ctx->thread_count);
 
     if (dp->dec_ctx->hw_device_ctx) {
         // Update decoder extra_hw_frames option to account for the

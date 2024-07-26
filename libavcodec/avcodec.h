@@ -1593,6 +1593,12 @@ typedef struct AVCodecContext {
     int thread_count;
 
     /**
+     * thread autotune - use LTN based heuristic for figuring out how many
+     * cores to use (as opposed to "auto" which just allocates 2x available cores)
+     */
+    int threads_autotune;
+
+    /**
      * Which multithreading methods to use.
      * Use of FF_THREAD_FRAME will increase decoding delay by one frame per thread,
      * so clients which cannot provide future frames should not use it.

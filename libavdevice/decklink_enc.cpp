@@ -1173,7 +1173,6 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
     /* ZVBI encoding of CC waveform */
     if (ctx->bmd_mode == bmdModeNTSC && cctx->cea608_vbi == 1) {
         const uint8_t *data;
-        int ret;
         size_t size;
         void *out_line;
 

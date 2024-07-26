@@ -42,6 +42,9 @@ extern "C" {
 #include "libavutil/sei-timestamp.h"
 #include "avdevice.h"
 #include "thumbnail.h"
+#if CONFIG_LIBZVBI
+#include <libzvbi.h>
+#endif
 }
 
 #include "decklink_common.h"
@@ -1034,6 +1037,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
                                    AVStream *st)
 {
     struct klvanc_line_set_s vanc_lines = { 0 };
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     int ret = 0, i;
 
     if (!ctx->supports_vanc)
@@ -1165,6 +1169,99 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
             continue;
         }
     }
+
+#if CONFIG_LIBZVBI
+    /* ZVBI encoding of CC waveform */
+    if (ctx->bmd_mode == bmdModeNTSC && cctx->cea608_vbi == 1) {
+        const uint8_t *data;
+        int ret;
+        size_t size;
+        void *out_line;
+
+        data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
+        if (data) {
+            uint8_t cc_count = size / 3;
+            uint8_t ccf1[2] = { 0x80, 0x80 };
+            uint8_t ccf2[2] = { 0x80, 0x80 };
+            vbi_sampling_par sp;
+            unsigned int raw_size;
+            unsigned int blank_level;
+            unsigned int black_level;
+            unsigned int white_level;
+            vbi_bool success;
+
+            for (size_t i = 0; i < cc_count; i++) {
+                uint8_t cc_type = data[3*i] & 0x03;
+
+                if (cc_type == 0x00) {
+                    ccf1[0] = data[3*i+1];
+                    ccf1[1] = data[3*i+2];
+                } else if (cc_type == 0x01) {
+                    ccf2[0] = data[3*i+1];
+                    ccf2[1] = data[3*i+2];
+                }
+            }
+
+            /* ZVBI parameters */
+            sp.scanning = 525;
+            sp.sampling_format = VBI_PIXFMT_YUV420;
+            sp.sampling_rate = 27000000;
+            sp.bytes_per_line = 1440;
+            sp.offset = (int)(9.7e-6 * sp.sampling_rate);
+            sp.start[0] = 21;
+            sp.count[0] = 1;
+            sp.start[1] = 284;
+            sp.count[1] = 1;
+            sp.interlaced = TRUE;
+            sp.synchronous = TRUE;
+            blank_level = 16;
+            black_level = 20;
+            white_level = 235;
+
+            raw_size = (sp.count[0] + sp.count[1]) * sp.bytes_per_line;
+            uint8_t *raw = (uint8_t *) malloc (raw_size);
+            if (raw == NULL)
+                return -1;
+
+            vbi_sliced sliced[2];
+            sliced[0].id = VBI_SLICED_CAPTION_525_F1;
+            sliced[0].line = 21;
+            sliced[0].data[0] = ccf1[0];
+            sliced[0].data[1] = ccf1[1];
+            sliced[1].id = VBI_SLICED_CAPTION_525_F2;
+            sliced[1].line = 284;
+            sliced[1].data[0] = ccf2[0];
+            sliced[1].data[1] = ccf2[1];
+
+            success = vbi_raw_video_image (raw, raw_size, &sp,
+                                           blank_level,
+                                           black_level,
+                                           white_level,
+                                           0xff, FALSE,
+                                           sliced,
+                                           sizeof(sliced) / sizeof(vbi_sliced));
+            if (success == TRUE) {
+                uint16_t vbi_21_284[2880];
+                for (int i = 0; i < 2880; i += 2) {
+                    vbi_21_284[i] = 0x80;
+                    vbi_21_284[i + 1] = raw[i];
+                }
+
+                /* Scale up 8-bit samples for both lines to 10-bit */
+                for (int i = 0; i < 2880; i++)
+                    vbi_21_284[i] = vbi_21_284[i] << 2;
+
+                result = vanc->GetBufferForVerticalBlankingLine(21, &out_line);
+                if (result == S_OK)
+                    klvanc_uyvy_to_v210(vbi_21_284, (uint8_t *) out_line, 1440);
+                result = vanc->GetBufferForVerticalBlankingLine(284, &out_line);
+                if (result == S_OK)
+                    klvanc_uyvy_to_v210(vbi_21_284+1440, (uint8_t *) out_line, 1440);
+            }
+            free(raw);
+        }
+    }
+#endif
 
     result = frame->SetAncillaryData(vanc);
     vanc->Release();

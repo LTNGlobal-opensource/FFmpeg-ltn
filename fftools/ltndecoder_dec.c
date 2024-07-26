@@ -31,6 +31,7 @@
 
 #include "ffmpeg.h"
 #include "thread_queue.h"
+#include "libavformat/ltnlog.h"
 
 struct Decoder {
     AVFrame         *frame;
@@ -1104,6 +1105,19 @@ int dec_open(InputStream *ist)
     if (ist->st->disposition & AV_DISPOSITION_ATTACHED_PIC)
         av_dict_set(&ist->decoder_opts, "threads", "1", 0);
 
+    /* Special case for HEVC 4:2:2, where if the thread count is 2 we
+       set it to 4.  It's likely this heuristic will have to improve
+       in the future... */
+    if (av_dict_get(ist->decoder_opts, "threads_autotune", NULL, 0) &&
+        ist->dec_ctx->codec_id == AV_CODEC_ID_HEVC &&
+        ist->dec_ctx->pix_fmt == AV_PIX_FMT_YUV422P10LE) {
+        AVDictionaryEntry *e = av_dict_get(ist->decoder_opts, "threads", NULL, 0);
+        if (e && atoi(e->value) == 2) {
+            av_log(NULL, AV_LOG_WARNING, "HEVC 4:2:2 detected, setting decode thread count to 4\n");
+            av_dict_set(&ist->decoder_opts, "threads", "4", 0);
+        }
+    }
+
     ret = hw_device_setup_for_decode(ist);
     if (ret < 0) {
         av_log(ist, AV_LOG_ERROR,
@@ -1121,6 +1135,9 @@ int dec_open(InputStream *ist)
         return ret;
     }
     assert_avoptions(ist->decoder_opts);
+
+    if (ist->dec_ctx->codec_type == AVMEDIA_TYPE_VIDEO)
+        ltnlog_stat("DECODE_THREAD_COUNT", ist->dec_ctx->thread_count);
 
     ret = dec_thread_start(ist);
     if (ret < 0) {

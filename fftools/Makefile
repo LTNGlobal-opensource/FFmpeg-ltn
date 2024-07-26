@@ -41,7 +41,7 @@ OBJS-ltndecoder +=                  \
     fftools/thread_queue.o          \
 
 define DOFFTOOL
-OBJS-$(1) += fftools/cmdutils.o fftools/opt_common.o fftools/$(1).o $(OBJS-$(1)-yes)
+OBJS-$(1) += fftools/cmdutils.o fftools/ltnversion.o fftools/opt_common.o fftools/$(1).o $(OBJS-$(1)-yes)
 ifdef HAVE_GNU_WINDRES
 OBJS-$(1) += fftools/fftoolsres.o
 endif
@@ -56,6 +56,11 @@ endef
 $(foreach P,$(AVPROGS-yes),$(eval $(call DOFFTOOL,$(P))))
 
 all: $(AVPROGS)
+
+ltnversion:
+	echo "#define LTN_VERSION \""`git describe --tags --dirty`"\"" > fftools/ltnversion.h
+
+fftools/ltnversion.o: ltnversion
 
 fftools/ffprobe.o fftools/cmdutils.o: libavutil/ffversion.h | fftools
 OUTDIRS += fftools

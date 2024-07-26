@@ -872,6 +872,7 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 static void construct_cc(AVFormatContext *avctx, struct decklink_ctx *ctx,
                          AVPacket *pkt, struct klvanc_line_set_s *vanc_lines)
 {
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct klvanc_packet_eia_708b_s *cdp;
     uint16_t *cdp_words;
     uint16_t len;
@@ -922,7 +923,7 @@ static void construct_cc(AVFormatContext *avctx, struct decklink_ctx *ctx,
         return;
     }
 
-    ret = klvanc_line_insert(ctx->vanc_ctx, vanc_lines, cdp_words, len, 11, 0);
+    ret = klvanc_line_insert(ctx->vanc_ctx, vanc_lines, cdp_words, len, cctx->cea708_line, 0);
     free(cdp_words);
     if (ret != 0) {
         av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");
@@ -936,11 +937,12 @@ static void construct_afd(AVFormatContext *avctx, struct decklink_ctx *ctx,
                           AVPacket *pkt, struct klvanc_line_set_s *vanc_lines,
                           AVStream *st)
 {
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct klvanc_packet_afd_s *afd = NULL;
     uint16_t *afd_words = NULL;
     uint16_t len;
     size_t size;
-    int f1_line = 12, f2_line = 0, ret;
+    int f1_line = cctx->afd_line, f2_line = 0, ret;
 
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
     if (!data || size == 0)
@@ -1123,7 +1125,7 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
                 break;
             }
             ret = klvanc_line_insert(ctx->vanc_ctx, &vanc_lines, vancWords,
-                                     vancWordCount, 13, 0);
+                                     vancWordCount, cctx->scte104_line, 0);
             free(vancWords);
             if (ret != 0) {
                 av_log(avctx, AV_LOG_ERROR, "VANC line insertion failed\n");

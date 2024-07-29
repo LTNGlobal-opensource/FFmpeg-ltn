@@ -55,6 +55,14 @@ extern "C" {
 #include "libklvanc/pixels.h"
 #endif
 
+/* If the PTS of the latest audio packet is within this number of the previous
+   packet received, just concatenate the blocks.  This is to deal with certain
+   encoders which provide PTS values that are slightly off from the actual number
+   of samples delivered.  Without this, we either introduce small gaps between
+   the audio blocks, or we end up overwriting the last few samples of the previous
+   audio block.  */
+#define AUDIO_PTS_FUDGEFACTOR 15
+
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame, public IDeckLinkVideoFrameMetadataExtensions
 {
@@ -856,6 +864,7 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 
     pthread_mutex_destroy(&ctx->mutex);
     pthread_cond_destroy(&ctx->cond);
+    av_freep(&ctx->audio_st_lastpts);
 
 #if CONFIG_LIBKLVANC
     klvanc_context_destroy(ctx->vanc_ctx);
@@ -1538,6 +1547,15 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     int64_t cur_pts;
     int ret = 0;
 
+    if (ctx->audio_st_lastpts[pkt->stream_index] != pkt->pts) {
+        int64_t delta = pkt->pts - ctx->audio_st_lastpts[pkt->stream_index];
+        if (delta > -AUDIO_PTS_FUDGEFACTOR && delta < AUDIO_PTS_FUDGEFACTOR) {
+            /* Within the fudge factor, so just slip the packet's
+               pts to match the where the last call left off */
+            pkt->pts = ctx->audio_st_lastpts[pkt->stream_index];
+        }
+    }
+
     ctx->dlo->GetBufferedAudioSampleFrameCount(&buffered);
     if (pkt->pts > 1 && !buffered)
         av_log(avctx, AV_LOG_WARNING, "There's no buffered audio."
@@ -1652,6 +1670,9 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
             ff_decklink_packet_queue_put(&ctx->output_audio_list, &pkt_new);
         }
     }
+
+    /* Stash the last PTS for the next call */
+    ctx->audio_st_lastpts[pkt->stream_index] = pkt->pts;
 
 done_unlock:
     pthread_mutex_unlock(&ctx->audio_mutex);
@@ -1793,6 +1814,9 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     }
 
     if (ctx->audio > 0) {
+        ctx->audio_st_lastpts = (int64_t *) av_malloc_array(avctx->nb_streams, sizeof(int64_t));
+        if (ctx->audio_st_lastpts == NULL)
+            goto error;
         if (decklink_enable_audio(avctx))
             goto error;
     }

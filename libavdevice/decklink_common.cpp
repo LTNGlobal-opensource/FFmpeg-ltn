@@ -315,6 +315,10 @@ int ff_decklink_set_format(AVFormatContext *avctx,
         mode->GetFrameRate(&bmd_tb_num, &bmd_tb_den);
         AVRational mode_tb = av_make_q(bmd_tb_num, bmd_tb_den);
 
+        av_log(avctx, AV_LOG_DEBUG, "Available Decklink mode %d x %d with rate %.2f%s\n",
+               bmd_width, bmd_height, 1/av_q2d(mode_tb),
+               (bmd_field_dominance==bmdLowerFieldFirst || bmd_field_dominance==bmdUpperFieldFirst)?"(i)":"");
+
         if ((bmd_width == width &&
              bmd_height == height &&
              !av_cmp_q(mode_tb, target_tb) &&

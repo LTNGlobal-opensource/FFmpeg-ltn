@@ -278,6 +278,19 @@ static int queue_packet(OutputStream *ost, AVPacket *pkt)
         size_t limit    = are_we_over_size ? ms->max_muxing_queue_size : SIZE_MAX;
         size_t new_size = FFMIN(2 * cur_size, limit);
 
+#ifndef LTN_EXIT_ON_MUXQUEUE_FULL
+        /* LTN specific heuristic:  throw away the oldest packet rather than
+           bailing out because there is too much in the queue... */
+        if (new_size <= cur_size) {
+            AVPacket *pkt1;
+            av_fifo_read(ms->muxing_queue, &pkt1, 1);
+            av_packet_free(&pkt1);
+        } else {
+            ret = av_fifo_grow2(ms->muxing_queue, new_size - cur_size);
+            if (ret < 0)
+                return ret;
+        }
+#else
         if (new_size <= cur_size) {
             av_log(ost, AV_LOG_ERROR,
                    "Too many packets buffered for output stream %d:%d.\n",
@@ -287,6 +300,7 @@ static int queue_packet(OutputStream *ost, AVPacket *pkt)
         ret = av_fifo_grow2(ms->muxing_queue, new_size - cur_size);
         if (ret < 0)
             return ret;
+#endif
     }
 
     if (pkt) {

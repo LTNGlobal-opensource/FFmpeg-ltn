@@ -698,6 +698,9 @@ int ff_decklink_init_device(AVFormatContext *avctx, const char* name)
     if (!iter)
         return AVERROR_EXTERNAL;
 
+    av_log(avctx, AV_LOG_VERBOSE, "Using BlackMagic SDK version %s\n",
+           BLACKMAGIC_DECKLINK_API_VERSION_STRING);
+
     /* See if the name passed is a device name, or a device description */
     sscanf(name, "decklink%d", &dev_no);
 

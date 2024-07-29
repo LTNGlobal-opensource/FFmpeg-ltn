@@ -655,6 +655,7 @@ void ofilter_bind_ost(OutputFilter *ofilter, OutputStream *ost)
 {
     FilterGraph  *fg = ofilter->graph;
     const AVCodec *c = ost->enc_ctx->codec;
+    OutputFile   *of = output_files[ost->file_index];
 
     ofilter->ost = ost;
     av_freep(&ofilter->linklabel);
@@ -675,7 +676,16 @@ void ofilter_bind_ost(OutputFilter *ofilter, OutputStream *ost)
         } else {
             ofilter->formats = c->sample_fmts;
         }
-        if (ost->enc_ctx->sample_rate) {
+        if (of->format && strcmp(of->format->name, "decklink") == 0) {
+            /* Regardless of what the encoder object claims, decklink
+               output only supports 48Khz output.  Note this causes a very small
+               memory leak when the application exits... */
+            int *sample_rates = av_malloc_array(2, sizeof(*ofilter->sample_rates));
+            if (!sample_rates)
+                break;
+            sample_rates[0] = 48000;
+            ofilter->sample_rates = sample_rates;
+        } else if (ost->enc_ctx->sample_rate) {
             ofilter->sample_rate = ost->enc_ctx->sample_rate;
         } else {
             ofilter->sample_rates = c->supported_samplerates;

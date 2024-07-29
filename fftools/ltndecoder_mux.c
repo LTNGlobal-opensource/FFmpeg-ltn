@@ -646,6 +646,8 @@ int mux_check_init(Muxer *mux)
     //assert_avoptions(of->opts);
     mux->header_written = 1;
 
+    ltnlog_stat("STATEMACHINE", LTED_RUNNING);
+
     av_dump_format(fc, of->index, fc->url, 1);
     nb_output_dumped++;
 

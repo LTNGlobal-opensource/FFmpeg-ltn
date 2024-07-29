@@ -1211,8 +1211,6 @@ static int transcode(int *err_rate_exceeded)
     *err_rate_exceeded = 0;
     atomic_store(&transcode_init_done, 1);
 
-    ltnlog_stat("STATEMACHINE", LTED_RUNNING);
-
     if (stdin_interaction) {
         av_log(NULL, AV_LOG_INFO, "Press [q] to stop, [?] for help\n");
     }
@@ -1244,6 +1242,7 @@ static int transcode(int *err_rate_exceeded)
             av_log(NULL, AV_LOG_ERROR, "Error while filtering: %s\n", av_err2str(ret));
             break;
         }
+        ltnlog_stat("STATEMACHINE", LTED_RUNNING);
 
         /* dump report by using the output first video and audio streams */
         print_report(0, timer_start, cur_time);

@@ -759,7 +759,11 @@ static int input_thread(void *arg)
         if (!ds || ds->discard || ds->finished) {
             report_new_stream(d, dt.pkt_demux);
             av_packet_unref(dt.pkt_demux);
-            continue;
+
+            /* LTN decoder doesn't support appearance of new streams after probing, so restart entirely */
+            av_log(d, AV_LOG_WARNING, "Exiting to allow restart by controller..");
+            ret = AVERROR_INVALIDDATA;
+            break;
         }
 
         if (dt.pkt_demux->flags & AV_PKT_FLAG_CORRUPT) {

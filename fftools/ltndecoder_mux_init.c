@@ -949,6 +949,7 @@ ost_bind_filter(const Muxer *mux, MuxStream *ms, OutputFilter *ofilter,
 
         .flags = OFILTER_FLAG_DISABLE_CONVERT * !!keep_pix_fmt |
                  OFILTER_FLAG_AUTOSCALE       * !!autoscale    |
+                 OFILTER_FLAG_SDIOUTPUT       * (strcmp(mux->fc->oformat->name, "decklink") == 0) |
                  OFILTER_FLAG_AUDIO_24BIT * !!(av_get_exact_bits_per_sample(enc_ctx->codec_id) == 24),
     };
 

@@ -878,7 +878,17 @@ int ofilter_bind_ost(OutputFilter *ofilter, OutputStream *ost,
         } else {
             ofp->formats = opts->formats;
         }
-        if (opts->sample_rate) {
+        if (ofp->flags & OFILTER_FLAG_SDIOUTPUT) {
+            /* Regardless of what the encoder object claims, decklink
+               output only supports 48Khz output.  Note this causes a very small
+               memory leak when the application exits... */
+            int *sample_rates = av_malloc_array(2, sizeof(*ofp->sample_rates));
+            if (!sample_rates)
+                break;
+            sample_rates[0] = 48000;
+            sample_rates[1] = 0;
+            ofp->sample_rates = sample_rates;
+        } else if (opts->sample_rate) {
             ofp->sample_rate = opts->sample_rate;
         } else
             ofp->sample_rates = opts->sample_rates;

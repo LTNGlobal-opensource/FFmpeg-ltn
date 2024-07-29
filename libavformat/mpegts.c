@@ -288,6 +288,19 @@ static struct Program * get_program(MpegTSContext *ts, unsigned int programid)
     return NULL;
 }
 
+
+static AVProgram * get_avprogram(MpegTSContext *ts, unsigned int programid)
+{
+    int i;
+
+    for (i = 0; i < ts->stream->nb_programs; i++) {
+        if (ts->stream->programs[i]->id == programid) {
+            return ts->stream->programs[i];
+        }
+    }
+    return NULL;
+}
+
 static void clear_avprogram(MpegTSContext *ts, unsigned int programid)
 {
     AVProgram *prg = NULL;
@@ -2345,6 +2358,7 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
     int program_info_length, pcr_pid, pid, stream_type;
     int desc_list_len;
     uint32_t prog_reg_desc = 0; /* registration descriptor */
+    uint32_t ltn_ver_desc = 0; /* ltn encoder version descriptor */
     int stream_identifier = -1;
     struct Program *prg;
 
@@ -2421,6 +2435,24 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         } else if (tag == REGISTRATION_DESCRIPTOR && len >= 4) {
             prog_reg_desc = bytestream_get_le32(&p);
             len -= 4;
+        } else if (tag == 0xa2 && len >= 4) { /* LTN encoder version */
+            AVProgram *prg = NULL;
+            ltn_ver_desc = bytestream_get_le32(&p);
+            len -= 4;
+            prg = get_avprogram(ts, h->id);
+            if (prg) {
+                if ((ltn_ver_desc & 0xff) == 0x01) {
+                    char version[128];
+                    snprintf(version, sizeof(version), "%d.%d.%d",
+                             (ltn_ver_desc >>  8) & 0xff,
+                             (ltn_ver_desc >> 16) & 0xff,
+                             (ltn_ver_desc >> 24) & 0xff);
+                    av_dict_set(&prg->metadata, "LTN Encoder Version", version, 0);
+                } else {
+                    av_log(ts->stream, AV_LOG_WARNING, "Unsupported LTN Encoder tag: 0x%08x\n",
+                           ltn_ver_desc);
+                }
+            }
         }
         p += len;
     }

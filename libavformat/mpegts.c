@@ -1029,12 +1029,12 @@ static int new_pes_packet(PESContext *pes, AVPacket *pkt)
 
     av_packet_unref(pkt);
 
-    av_packet_update_pipelinestats(pkt, AVFORMAT_INPUT_TIME, pes->pkt_start_time,
-                                   -1, -1);
-
     pkt->buf  = pes->buffer;
     pkt->data = pes->buffer->data;
     pkt->size = pes->data_index;
+
+    av_packet_update_pipelinestats(pkt, AVFORMAT_INPUT_TIME, pes->pkt_start_time,
+                                   -1, -1);
 
     if (pes->PES_packet_length &&
         pes->pes_header_size + pes->data_index != pes->PES_packet_length +

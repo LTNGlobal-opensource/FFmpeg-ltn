@@ -196,6 +196,8 @@ extern const AVFilter ff_vf_blurdetect;
 extern const AVFilter ff_vf_bm3d;
 extern const AVFilter ff_vf_boxblur;
 extern const AVFilter ff_vf_boxblur_opencl;
+extern const AVFilter ff_vf_burnreader;
+extern const AVFilter ff_vf_burnwriter;
 extern const AVFilter ff_vf_bwdif;
 extern const AVFilter ff_vf_bwdif_cuda;
 extern const AVFilter ff_vf_bwdif_vulkan;

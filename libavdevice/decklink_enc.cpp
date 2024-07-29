@@ -1102,6 +1102,18 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
                be encapsulated in SMPTE 2010 first) */
             uint8_t *smpte2010_bytes;
             uint16_t smpte2010_len;
+
+            /* There is a known limitation in the libklvanc ST2010 generator where it
+               cannot create payloads that span multiple packets.  For now just discard
+               those messages */
+            if (vanc_pkt.size > 254) {
+                av_log(avctx, AV_LOG_INFO,
+                       "SCTE-104 message exceeds ST2010 maximum and cannot be output.  Size=%d\n",
+                       vanc_pkt.size);
+                av_packet_unref(&vanc_pkt);
+                continue;
+            }
+
             ret = klvanc_convert_SCTE_104_packetbytes_to_SMPTE_2010(ctx->vanc_ctx,
                                                                     vanc_pkt.data,
                                                                     vanc_pkt.size,

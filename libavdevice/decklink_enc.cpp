@@ -1507,6 +1507,15 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         }
     }
 
+    /* Once per second, update the reported status of the Reference Input */
+    time(&cur_time);
+    if (ctx->last_refstatus_report != cur_time) {
+        int64_t ref_mode = 0;
+        ctx->status->GetInt(bmdDeckLinkStatusReferenceSignalMode, &ref_mode);
+        ltnlog_stat("REFERENCESIGNALMODE", ref_mode);
+        ctx->last_refstatus_report = cur_time;
+    }
+
     return 0;
 }
 

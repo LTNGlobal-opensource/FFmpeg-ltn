@@ -1813,6 +1813,19 @@ static int mux_queue_packet(SchMux *mux, SchMuxStream *ms, AVPacket *pkt)
         size_t max_packets = thresh_reached ? q->max_packets : SIZE_MAX;
         size_t new_size = FFMIN(2 * packets, max_packets);
 
+#ifndef LTN_EXIT_ON_MUXQUEUE_FULL
+        /* LTN specific heuristic:  throw away the oldest packet rather than
+           bailing out because there is too much in the queue... */
+        if (new_size <= packets) {
+            AVPacket *pkt1;
+            av_fifo_read(q->fifo, &pkt1, 1);
+            av_packet_free(&pkt1);
+        } else {
+            ret = av_fifo_grow2(q->fifo, new_size - packets);
+            if (ret < 0)
+                return ret;
+        }
+#else
         if (new_size <= packets) {
             av_log(mux, AV_LOG_ERROR,
                    "Too many packets buffered for output stream.\n");
@@ -1821,6 +1834,7 @@ static int mux_queue_packet(SchMux *mux, SchMuxStream *ms, AVPacket *pkt)
         ret = av_fifo_grow2(q->fifo, new_size - packets);
         if (ret < 0)
             return ret;
+#endif
     }
 
     if (pkt) {

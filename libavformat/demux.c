@@ -46,6 +46,7 @@
 #include "id3v2.h"
 #include "internal.h"
 #include "url.h"
+#include "ltnlog.h"
 
 static int64_t wrap_timestamp(const AVStream *st, int64_t timestamp)
 {
@@ -256,6 +257,7 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     FFFormatContext *si;
     AVDictionary *tmp = NULL;
     ID3v2ExtraMeta *id3v2_extra_meta = NULL;
+    int64_t read_header_start_time;
     int ret = 0;
 
     if (!s && !(s = avformat_alloc_context()))
@@ -338,12 +340,16 @@ int avformat_open_input(AVFormatContext **ps, const char *filename,
     if (s->pb)
         ff_id3v2_read_dict(s->pb, &si->id3v2_meta, ID3v2_DEFAULT_MAGIC, &id3v2_extra_meta);
 
+    read_header_start_time = av_gettime();
+
     if (s->iformat->read_header)
         if ((ret = s->iformat->read_header(s)) < 0) {
             if (s->iformat->flags_internal & FF_FMT_INIT_CLEANUP)
                 goto close;
             goto fail;
         }
+
+    ltnlog_stat("READ_HEADER_MS", (av_gettime() - read_header_start_time) / 1000);
 
     if (!s->metadata) {
         s->metadata    = si->id3v2_meta;
@@ -3081,6 +3087,8 @@ find_stream_info_err:
         FFIOContext *const ctx = ffiocontext(ic->pb);
         av_log(ic, AV_LOG_DEBUG, "After avformat_find_stream_info() pos: %"PRId64" bytes read:%"PRId64" seeks:%d frames:%d\n",
                avio_tell(ic->pb), ctx->bytes_read, ctx->seek_count, count);
+        ltnlog_stat("FIND_STREAM_INFO_BYTES", ic->pb->bytes_read);
+        av_log(ic, AV_LOG_INFO, "%s required %" PRId64 " bytes\n", __func__, ic->pb->bytes_read);
     }
     return ret;
 

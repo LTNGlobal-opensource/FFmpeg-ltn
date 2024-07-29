@@ -43,6 +43,7 @@
 #include "demux.h"
 #include "mpeg.h"
 #include "isom.h"
+#include "ltnlog.h"
 #if CONFIG_ICONV
 #include <iconv.h>
 #endif
@@ -3183,6 +3184,9 @@ static int mpegts_read_header(AVFormatContext *s)
 
         handle_packets(ts, probesize / ts->raw_packet_size);
         /* if could not find service, enable auto_guess */
+
+        av_log(s, AV_LOG_INFO, "%s required %d bytes\n", __func__, avio_tell(pb));
+        ltnlog_stat("READ_HEADER_BYTES", avio_tell(s->pb));
 
         ts->auto_guess = 1;
 

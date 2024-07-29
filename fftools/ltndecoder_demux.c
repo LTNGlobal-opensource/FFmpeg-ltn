@@ -154,6 +154,10 @@ static void report_new_stream(Demuxer *d, const AVPacket *pkt)
            av_get_media_type_string(st->codecpar->codec_type),
            pkt->stream_index, pkt->pos, av_ts2timestr(pkt->dts, &st->time_base));
     d->nb_streams_warn = pkt->stream_index + 1;
+
+    /* LTN decoder doesn't support appearance of new streams after probing, so restart entirely */
+    av_log(d, AV_LOG_WARNING, "Exiting to allow restart by controller..");
+    exit_program(1);
 }
 
 static void ifile_duration_update(Demuxer *d, DemuxStream *ds,

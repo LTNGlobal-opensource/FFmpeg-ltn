@@ -98,6 +98,7 @@ struct decklink_ctx {
     IDeckLinkInput *dli;
     IDeckLinkConfiguration *cfg;
     IDeckLinkProfileAttributes *attr;
+    IDeckLinkStatus *status;
     decklink_output_callback *output_callback;
 
     /* DeckLink mode information */
@@ -149,6 +150,7 @@ struct decklink_ctx {
     AVStream *klv_st;
     AVStream *teletext_st;
     uint16_t cdp_sequence_num;
+    time_t last_refstatus_report;
 
     /* Options */
     int list_devices;

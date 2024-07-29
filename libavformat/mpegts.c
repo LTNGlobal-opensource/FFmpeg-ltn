@@ -3188,7 +3188,9 @@ static int mpegts_read_header(AVFormatContext *s)
         av_log(s, AV_LOG_INFO, "%s required %d bytes\n", __func__, avio_tell(pb));
         ltnlog_stat("READ_HEADER_BYTES", avio_tell(s->pb));
 
+#ifdef LTN_CONTINUE_EVEN_IF_PMT_NOT_FOUND
         ts->auto_guess = 1;
+#endif
 
         av_log(ts->stream, AV_LOG_TRACE, "tuning done\n");
 

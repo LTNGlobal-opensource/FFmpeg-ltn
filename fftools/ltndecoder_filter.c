@@ -684,6 +684,7 @@ void ofilter_bind_ost(OutputFilter *ofilter, OutputStream *ost)
             if (!sample_rates)
                 break;
             sample_rates[0] = 48000;
+            sample_rates[1] = 0;
             ofilter->sample_rates = sample_rates;
         } else if (ost->enc_ctx->sample_rate) {
             ofilter->sample_rate = ost->enc_ctx->sample_rate;

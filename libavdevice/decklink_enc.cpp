@@ -658,11 +658,11 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     if (st->time_base.den > 1000)
         ctx->frames_preroll /= 1000;
 
-    ltnlog_stat("PREROLL_TARGET", ctx->frames_preroll * st->time_base.num * 1000 / st->time_base.den);
-
     /* Buffer twice as many frames as the preroll. */
+    ctx->frames_preroll = FFMIN(ctx->frames_preroll, 30);
     ctx->frames_buffer = ctx->frames_preroll * 2;
-    ctx->frames_buffer = FFMIN(ctx->frames_buffer, 60);
+
+    ltnlog_stat("PREROLL_TARGET", ctx->frames_preroll * st->time_base.num * 1000 / st->time_base.den);
 
     /* Throw the first X frames so that all upstream FIFOs have the opportunity
        to flush (to reduce realtime latency) */

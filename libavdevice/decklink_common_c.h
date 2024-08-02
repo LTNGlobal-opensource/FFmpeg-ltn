@@ -75,6 +75,7 @@ struct decklink_cctx {
     int afd_line;
     int cea708_line;
     int scte104_line;
+    int sdp_line;
     int cea608_vbi;
     int use_3glevel_a;
     int decklink_live;

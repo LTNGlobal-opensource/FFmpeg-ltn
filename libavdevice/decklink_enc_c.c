@@ -69,6 +69,7 @@ static const AVOption options[] = {
     { "afd_line"    , "VANC line to insert AFD packets", OFFSET(afd_line), AV_OPT_TYPE_INT, { .i64 = 11 }, -1, INT64_MAX, ENC },
     { "cea708_line" , "VANC line to insert CEA-708 CC packets", OFFSET(cea708_line), AV_OPT_TYPE_INT, { .i64 = 12 }, -1, INT64_MAX, ENC },
     { "scte104_line", "VANC line to insert SCTE-104 packets", OFFSET(scte104_line), AV_OPT_TYPE_INT, { .i64 = 13 }, -1, INT64_MAX, ENC },
+    { "sdp_line"    , "VANC line to insert OP-47 Teletext packets", OFFSET(sdp_line), AV_OPT_TYPE_INT, { .i64 = 12 }, -1, INT64_MAX, ENC },
     { "cea608_vbi" , "Enable output of CEA-608 as VBI waveform", OFFSET(cea608_vbi), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, ENC },
     { "use_3glevel_a","use Level A if output 3G-SDI", OFFSET(use_3glevel_a), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, ENC },
     { "decklink_live","Drop/Insert frames as needed to stay at preroll level", OFFSET(decklink_live), AV_OPT_TYPE_BOOL, {.i64 = 0}, -1, 1, ENC },

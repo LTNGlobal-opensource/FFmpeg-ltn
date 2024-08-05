@@ -1342,7 +1342,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         }
 
         ctx->frames_discard = st->time_base.den * cctx->discard / st->time_base.num;
-        ctx->first_pts = 0;
+        ctx->first_pts = AV_NOPTS_VALUE;
         ctx->playback_started = 0;
         ctx->audio_offset = 0;
         ctx->video_offset = 0;

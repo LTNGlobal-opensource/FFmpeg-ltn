@@ -1085,9 +1085,6 @@ static void construct_sdp(AVFormatContext *avctx, struct decklink_ctx *ctx,
         uint8_t field_parity = data_field[0] & 0x20 >> 5;
         uint8_t line_offset = data_field[0] & 0x1f;
 
-        /* FIXME: always put line offset as 12 to workaround bug in Dektec SDEye */
-        line_offset = 0x12;
-
         sdp->descriptors[packets_added].line = line_offset;
         sdp->descriptors[packets_added].field = field_parity;
 

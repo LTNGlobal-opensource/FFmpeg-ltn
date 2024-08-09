@@ -1247,6 +1247,38 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
 
             last_filter = phase_filter;
         }
+
+        if (height < 720) {
+            if (ost->ist->par->color_primaries == AVCOL_PRI_BT709) {
+                /* SD needs conversion from 709 to 601 */
+                AVFilterContext *csc_filter;
+                snprintf(name, sizeof(name), "colorspace_%d_%d",
+                         ost->file_index, ost->st->index);
+
+                if ((ret = avfilter_graph_create_filter(&csc_filter, avfilter_get_by_name("colorspace"),
+                                                        name, "all=smpte170m", NULL, fg->graph)) < 0)
+                    return ret;
+                if ((ret = avfilter_link(last_filter, 0, csc_filter, 0)) < 0)
+                    return ret;
+
+                last_filter = csc_filter;
+            }
+        } else {
+            if (ost->ist->par->color_primaries == AVCOL_PRI_SMPTE170M) {
+                /* HD needs conversion from 601 to 709 */
+                AVFilterContext *csc_filter;
+                snprintf(name, sizeof(name), "colorspace_%d_%d",
+                         ost->file_index, ost->st->index);
+
+                if ((ret = avfilter_graph_create_filter(&csc_filter, avfilter_get_by_name("colorspace"),
+                                                        name, "all=bt709", NULL, fg->graph)) < 0)
+                    return ret;
+                if ((ret = avfilter_link(last_filter, 0, csc_filter, 0)) < 0)
+                    return ret;
+
+                last_filter = csc_filter;
+            }
+        }
     }
 
 

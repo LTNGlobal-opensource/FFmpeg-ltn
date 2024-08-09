@@ -182,8 +182,15 @@ public:
                 *value = bmdColorspaceRec2020;
                 break;
             case AVCOL_SPC_BT709:
-            default:
                 *value = bmdColorspaceRec709;
+                break;
+            default:
+                /* CTA 861-G Sec 5.1 says if unspecified, SD should default to
+                   170M and both HD and 2160p should default to BT.709 */
+                if (_ctx->bmd_height < 720)
+                    *value = bmdColorspaceRec601;
+                else
+                    *value = bmdColorspaceRec709;
                 break;
             }
             break;

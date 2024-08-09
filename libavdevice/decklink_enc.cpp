@@ -895,6 +895,9 @@ static void construct_cc(AVFormatContext *avctx, struct decklink_ctx *ctx,
     size_t size;
     int ret, i;
 
+    if (cctx->cea708_line == -1)
+        return;
+
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_A53_CC, &size);
     if (!data)
         return;
@@ -958,6 +961,9 @@ static void construct_afd(AVFormatContext *avctx, struct decklink_ctx *ctx,
     uint16_t len;
     size_t size;
     int f1_line = cctx->afd_line, f2_line = 0, ret;
+
+    if (cctx->afd_line == -1)
+        return;
 
     const uint8_t *data = av_packet_get_side_data(pkt, AV_PKT_DATA_AFD, &size);
     if (!data || size == 0)
@@ -1117,6 +1123,11 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
                be encapsulated in SMPTE 2010 first) */
             uint8_t *smpte2010_bytes;
             uint16_t smpte2010_len;
+
+            if (cctx->scte104_line == -1) {
+                av_packet_unref(&vanc_pkt);
+                continue;
+            }
 
             /* There is a known limitation in the libklvanc ST2010 generator where it
                cannot create payloads that span multiple packets.  For now just discard

@@ -54,6 +54,7 @@ static const char *const var_names[] = {
     "dar",
     "hsub",
     "vsub",
+    "div_y",
     NULL
 };
 
@@ -69,6 +70,7 @@ enum var_name {
     VAR_DAR,
     VAR_HSUB,
     VAR_VSUB,
+    VAR_DIV_Y,
     VARS_NB
 };
 
@@ -90,6 +92,7 @@ typedef struct PadContext {
     int in_w, in_h;         ///< width and height for the padded input video, which has to be aligned to the chroma values in order to avoid chroma issues
     int inlink_w, inlink_h;
     AVRational aspect;
+    int div_y; /// Output dimensions must be divisible by this value
 
     char *w_expr;           ///< width  expression string
     char *h_expr;           ///< height expression string
@@ -156,6 +159,14 @@ static int config_input(AVFilterLink *inlink)
         }
     }
 
+    /* Let user specify some value that height has to be divisible by.  For example, if the height
+       isn't divisible by eight it will cause problems with swscale if it's further down the pipeline */
+    if (s->div_y > 0) {
+        s->h = s->h / s->div_y;
+        s->h = s->h * s->div_y;
+    }
+
+
     /* evaluate x and y */
     av_expr_parse_and_eval(&res, (expr = s->x_expr),
                            var_names, var_values,
@@ -166,6 +177,7 @@ static int config_input(AVFilterLink *inlink)
                                       NULL, NULL, NULL, NULL, NULL, 0, ctx)) < 0)
         goto eval_fail;
     s->y = var_values[VAR_Y] = res;
+
     /* evaluate x again, as it may depend on the evaluated y value */
     if ((ret = av_expr_parse_and_eval(&res, (expr = s->x_expr),
                                       var_names, var_values,
@@ -430,6 +442,7 @@ static const AVOption pad_options[] = {
     { "h",      "set the pad area height expression",      OFFSET(h_expr), AV_OPT_TYPE_STRING, {.str = "ih"}, 0, 0, FLAGS },
     { "x",      "set the x offset expression for the input image position", OFFSET(x_expr), AV_OPT_TYPE_STRING, {.str = "0"}, 0, 0, FLAGS },
     { "y",      "set the y offset expression for the input image position", OFFSET(y_expr), AV_OPT_TYPE_STRING, {.str = "0"}, 0, 0, FLAGS },
+    { "div_y",  "Ensure y offset is divisible by this amount", OFFSET(div_y), AV_OPT_TYPE_INT, {.i64 = 1 }, 1, 128, FLAGS , "div_y" },
     { "color",  "set the color of the padded area border", OFFSET(rgba_color), AV_OPT_TYPE_COLOR, {.str = "black"}, .flags = FLAGS },
     { "eval",   "specify when to evaluate expressions",    OFFSET(eval_mode), AV_OPT_TYPE_INT, {.i64 = EVAL_MODE_INIT}, 0, EVAL_MODE_NB-1, FLAGS, "eval" },
          { "init",  "eval expressions once during initialization", 0, AV_OPT_TYPE_CONST, {.i64=EVAL_MODE_INIT},  .flags = FLAGS, .unit = "eval" },

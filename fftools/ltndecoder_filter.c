@@ -210,6 +210,7 @@ typedef struct OutputFilterPriv {
     /* Input stream properties (to help with decision making) */
     int                     in_width, in_height, in_top_field_first;
     AVRational              in_framerate;
+    enum AVColorSpace       in_color_space;
 
     // time base in which the output is sent to our downstream
     // does not need to match the filtersink's timebase
@@ -1672,6 +1673,22 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
             if (ret < 0)
                 return ret;
         }
+
+        if (height < 720) {
+            if (ofp->in_color_space != AVCOL_SPC_SMPTE170M) {
+                /* SD needs to always be in 601 */
+                ret = insert_filter(&last_filter, &pad_idx, "colorspace", "all=smpte170m");
+                if (ret < 0)
+                    return ret;
+            }
+        } else {
+            if (ofp->in_color_space == AVCOL_SPC_SMPTE170M) {
+                /* HD needs conversion from 601 to 709 */
+                ret = insert_filter(&last_filter, &pad_idx, "colorspace", "all=bt709");
+                if (ret < 0)
+                    return ret;
+            }
+        }
     }
 
     snprintf(name, sizeof(name), "trim_out_%s", ofp->name);
@@ -2079,6 +2096,7 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
                     ofp->in_height = ifp->height;
                     ofp->in_framerate = ifp->opts.framerate;
                     ofp->in_top_field_first = ifp->top_field_first;
+                    ofp->in_color_space = ifp->color_space;
                 }
             }
         }

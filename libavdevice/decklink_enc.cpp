@@ -62,6 +62,14 @@ extern "C" {
    audio block.  */
 #define AUDIO_PTS_FUDGEFACTOR 15
 
+/*
+  Debug logging levels
+   1 = Low frequency events and correctness checks that should always pass
+   2 = FIFO levels reported about once per second
+   3 = FIFO levels reported on every audio/video packet received
+   4 = General program flow (entry/exit of key functions)
+*/
+
 /* DeckLink callback class declaration */
 class decklink_frame : public IDeckLinkVideoFrame, public IDeckLinkVideoFrameMetadataExtensions
 {
@@ -420,8 +428,9 @@ class decklink_output_callback : public IDeckLinkVideoOutputCallback, public IDe
 {
 public:
     AVFormatContext *_avctx;
+    int64_t last_audio_callback;
 
-    decklink_output_callback(AVFormatContext *avctx) : _avctx(avctx) {}
+    decklink_output_callback(AVFormatContext *avctx) : _avctx(avctx), last_audio_callback(0) {}
     virtual HRESULT STDMETHODCALLTYPE ScheduledFrameCompleted(IDeckLinkVideoFrame *_frame, BMDOutputFrameCompletionResult result)
     {
         decklink_frame *frame = static_cast<decklink_frame *>(_frame);
@@ -512,6 +521,19 @@ public:
         struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
         PacketListEntry *cur;
         BMDTimeValue streamtime;
+
+        /* Make sure the callback is firing on schedule.  It may not be if the system is
+           heavily loaded */
+        if (cctx->debug_level >= 1) {
+            int64_t current_run = av_gettime_relative();
+            if (!preroll && last_audio_callback != 0 &&
+                ((current_run - last_audio_callback > 25000) ||
+                 (current_run - last_audio_callback < 18000)) ) {
+                av_log(_avctx, AV_LOG_ERROR, "Audio callback not firing on schedule.  last=%ld current=%ld delta=%ld\n",
+                       last_audio_callback, current_run, current_run - last_audio_callback);
+            }
+            last_audio_callback = current_run;
+        }
 
         pthread_mutex_lock(&ctx->audio_mutex);
 
@@ -866,6 +888,9 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
 
     if (cctx->thumbnail_filename)
         thumbnail_shutdown(&ctx->thumbnail_ctx);
+
+    av_log(avctx, AV_LOG_INFO, "Final stats: late=%d dropped=%d vo=%d ao=%d\n",
+           ctx->late, ctx->dropped, ctx->video_offset, ctx->audio_offset);
 
     ff_decklink_cleanup(avctx);
 
@@ -1569,6 +1594,11 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
 
     if (ctx->audio_st_lastpts[pkt->stream_index] != pkt->pts) {
         int64_t delta = pkt->pts - ctx->audio_st_lastpts[pkt->stream_index];
+
+        if (cctx->debug_level >= 1 && ctx->audio_st_lastpts[pkt->stream_index] != 0) {
+            av_log(avctx, AV_LOG_INFO, "Audio packet discontinuity expected=%ld received=%ld\n",
+                   ctx->audio_st_lastpts[pkt->stream_index], pkt->pts);
+        }
         if (delta > -AUDIO_PTS_FUDGEFACTOR && delta < AUDIO_PTS_FUDGEFACTOR) {
             /* Within the fudge factor, so just slip the packet's
                pts to match the where the last call left off */
@@ -1855,17 +1885,27 @@ error:
 int ff_decklink_write_packet(AVFormatContext *avctx, AVPacket *pkt)
 {
     AVStream *st = avctx->streams[pkt->stream_index];
+    struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
+    int ret = AVERROR(EIO);
+
+    if (cctx->debug_level >= 4)
+        av_log(avctx, AV_LOG_INFO, "%s called. Type=%s pts=%lld\n", __func__,
+               av_get_media_type_string(st->codecpar->codec_type), pkt->pts);
 
     if      (st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
-        return decklink_write_video_packet(avctx, pkt);
+        ret = decklink_write_video_packet(avctx, pkt);
     else if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
-        return decklink_write_audio_packet(avctx, pkt);
+        ret = decklink_write_audio_packet(avctx, pkt);
     else if (st->codecpar->codec_type == AVMEDIA_TYPE_DATA)
-        return decklink_write_data_packet(avctx, pkt);
+        ret = decklink_write_data_packet(avctx, pkt);
     else if (st->codecpar->codec_type == AVMEDIA_TYPE_SUBTITLE)
-        return decklink_write_subtitle_packet(avctx, pkt);
+        ret = decklink_write_subtitle_packet(avctx, pkt);
 
-    return AVERROR(EIO);
+    if (cctx->debug_level >= 4)
+        av_log(avctx, AV_LOG_INFO, "%s returning.  Type=%s\n", __func__,
+               av_get_media_type_string(st->codecpar->codec_type));
+
+    return ret;
 }
 
 int ff_decklink_list_output_devices(AVFormatContext *avctx, struct AVDeviceInfoList *device_list)

@@ -426,6 +426,7 @@ public:
     virtual HRESULT STDMETHODCALLTYPE ScheduledFrameCompleted(IDeckLinkVideoFrame *_frame, BMDOutputFrameCompletionResult result)
     {
         decklink_frame *frame = static_cast<decklink_frame *>(_frame);
+        struct decklink_cctx *cctx = (struct decklink_cctx *)_avctx->priv_data;
         struct decklink_ctx *ctx = frame->_ctx;
 
         if (frame->_avpacket) {
@@ -439,17 +440,17 @@ public:
             if (side_data) {
                 struct AVPipelineStats *stats = (struct AVPipelineStats *) side_data;
                 ltnlog_stat("VIDEOLATENCY_MS", (stats->avformat_output_time - stats->avformat_input_time) / 1000);
-#if 0
-                av_log(_avctx, AV_LOG_INFO,
-                       "in_pts=%" PRId64 " a=%" PRId64 " i=%" PRId64 " r=%" PRId64 " d=%" PRId64 " e=%" PRId64 " gs=%" PRId64 " ge=%" PRId64 " es=%" PRId64 " ee=%" PRId64 " wt=%" PRId64 " wm=%" PRId64 " o=%" PRId64 "\n",
-                       stats->input_pts, stats->avprotocol_arrival_time,
-                       stats->avformat_input_time, stats->avformat_read_time,
-                       stats->avcodec_decode_start, stats->avcodec_decode_end,
-                       stats->avfilter_graph_start, stats->avfilter_graph_end,
-                       stats->avcodec_encode_start, stats->avcodec_encode_end,
-                       stats->avformat_write_time, stats->avformat_mod_write_time,
-                       stats->avformat_output_time);
-#endif
+                if (cctx->latency_debug_level >= 1) {
+                    av_log(_avctx, AV_LOG_INFO,
+                           "in_pts=%" PRId64 " a=%" PRId64 " i=%" PRId64 " r=%" PRId64 " d=%" PRId64 " e=%" PRId64 " gs=%" PRId64 " ge=%" PRId64 " es=%" PRId64 " ee=%" PRId64 " wt=%" PRId64 " wm=%" PRId64 " o=%" PRId64 "\n",
+                           stats->input_pts, stats->avprotocol_arrival_time,
+                           stats->avformat_input_time, stats->avformat_read_time,
+                           stats->avcodec_decode_start, stats->avcodec_decode_end,
+                           stats->avfilter_graph_start, stats->avfilter_graph_end,
+                           stats->avcodec_encode_start, stats->avcodec_encode_end,
+                           stats->avformat_write_time, stats->avformat_mod_write_time,
+                           stats->avformat_output_time);
+                }
             }
 
             side_data = av_packet_get_side_data(frame->_avpacket, AV_PKT_DATA_SEI_UNREGISTERED,

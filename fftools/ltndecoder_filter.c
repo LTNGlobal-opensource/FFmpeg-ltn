@@ -1519,6 +1519,7 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
     AVFilterContext *last_filter = out->filter_ctx;
     int width = ofp->in_width;
     int height = ofp->in_height;
+    int top_field_first = ofp->in_top_field_first;
     AVBPrint bprint;
     int pad_idx = out->pad_idx;
     int ret;
@@ -1633,9 +1634,10 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
     if (do_interlace) {
         const char *mode = "mode=interleave_top";
-
+        top_field_first = 1;
         if (ofp->flags & OFILTER_FLAG_SDIOUTPUT && height == 480) {
             mode = "mode=interleave_bottom";
+            top_field_first = 0;
         }
 
         ret = insert_filter(&last_filter, &pad_idx, "tinterlace", mode);
@@ -1668,7 +1670,7 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
         /* Special case if the source 480i video is TFF, since 480i video
            over SDI is always supposed to be BFF */
-        if (height == 486 && ofp->in_top_field_first) {
+        if (height == 486 && top_field_first) {
             ret = insert_filter(&last_filter, &pad_idx, "phase", "mode=t");
             if (ret < 0)
                 return ret;

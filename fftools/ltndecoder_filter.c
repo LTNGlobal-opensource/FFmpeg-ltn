@@ -1061,6 +1061,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     AVFilterContext *last_filter = out->filter_ctx;
     int width = ost->ist->par->width;
     int height = ost->ist->par->height;
+    enum AVFieldOrder field_order = ost->ist->par->field_order;
     AVBPrint bprint;
     int pad_idx = out->pad_idx;
     int ret;
@@ -1182,10 +1183,11 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
     if (do_interlace) {
         AVFilterContext *tinterlace;
         const char *mode = "mode=interleave_top";
-
+        field_order = AV_FIELD_TT;
         if (of->format && strcmp(of->format->name, "decklink") == 0 &&
             height == 480) {
             mode = "mode=interleave_bottom";
+            field_order = AV_FIELD_BT;
         }
 
         snprintf(name, sizeof(name), "interlace_out_%d_%d",
@@ -1234,7 +1236,7 @@ static int configure_output_video_filter(FilterGraph *fg, OutputFilter *ofilter,
 
         /* Special case if the source 480i video is TFF, since 480i video
            over SDI is always supposed to be BFF */
-        if (height == 486 && ost->ist->par->field_order == AV_FIELD_TT) {
+        if (height == 486 && field_order == AV_FIELD_TT) {
             AVFilterContext *phase_filter;
             snprintf(name, sizeof(name), "phase_out_%d_%d",
                      ost->file_index, ost->st->index);

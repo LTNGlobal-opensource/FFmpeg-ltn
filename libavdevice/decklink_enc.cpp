@@ -661,9 +661,12 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     ctx->dlo->SetAudioCallback(ctx->output_callback);
     ctx->audio_samples_per_frame = bmdAudioSampleRate48kHz * st->time_base.num / st->time_base.den;
 
-    ctx->frames_preroll = st->time_base.den * ctx->preroll;
-    if (st->time_base.den > 1000)
-        ctx->frames_preroll /= 1000;
+    ctx->frames_preroll = ceil(st->time_base.den * ctx->preroll / st->time_base.num);
+    if (ctx->frames_preroll < 3) {
+        /* No matter what they specify as the preroll, we can't support lower than three
+           frames due to the way the hardware queueing works */
+        ctx->frames_preroll = 3;
+    }
 
     /* Buffer twice as many frames as the preroll. */
     ctx->frames_preroll = FFMIN(ctx->frames_preroll, 30);

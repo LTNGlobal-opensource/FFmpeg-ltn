@@ -933,7 +933,7 @@ static void video_sync_process(OutputFile *of, OutputStream *ost,
         ost->vsync_method != VSYNC_PASSTHROUGH &&
         ost->vsync_method != VSYNC_DROP) {
         if (delta0 < -0.6) {
-            av_log(ost, AV_LOG_VERBOSE, "Past duration %f too large\n", -delta0);
+            av_log(ost, AV_LOG_VERBOSE, "Past video duration %f too large\n", -delta0);
         } else
             av_log(ost, AV_LOG_DEBUG, "Clipping frame in rate conversion by %f\n", -delta0);
         sync_ipts = e->next_pts;

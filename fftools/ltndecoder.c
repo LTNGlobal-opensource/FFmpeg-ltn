@@ -1242,7 +1242,6 @@ static int transcode(int *err_rate_exceeded)
             av_log(NULL, AV_LOG_ERROR, "Error while filtering: %s\n", av_err2str(ret));
             break;
         }
-        ltnlog_stat("STATEMACHINE", LTED_RUNNING);
 
         /* dump report by using the output first video and audio streams */
         print_report(0, timer_start, cur_time);

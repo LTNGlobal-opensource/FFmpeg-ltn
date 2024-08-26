@@ -174,6 +174,8 @@ struct MpegTSContext {
     unsigned int nb_prg;
     struct Program *prg;
 
+    int selected_program;
+
     int8_t crc_validity[NB_PID_MAX];
     /** filters for various streams specified by PMT + for the PAT and PMT */
     MpegTSFilter *pids[NB_PID_MAX];
@@ -204,6 +206,8 @@ static const AVOption options[] = {
      {.i64 = 0}, 0, 1, 0 },
     {"max_packet_size", "maximum size of emitted packet", offsetof(MpegTSContext, max_packet_size), AV_OPT_TYPE_INT,
      {.i64 = 204800}, 1, INT_MAX/2, AV_OPT_FLAG_DECODING_PARAM },
+    {"selected_program", "prefilter by program", offsetof(MpegTSContext, selected_program), AV_OPT_TYPE_INT,
+     {.i64 = -1}, -1, 65535, AV_OPT_FLAG_DECODING_PARAM },
     { NULL },
 };
 
@@ -2375,6 +2379,12 @@ static void pmt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         return;
     if (!h->current_next)
         return;
+
+    /* If we are only interested in a single program, ignore any other programs
+       announced on the same PMT PID */
+    if (ts->selected_program != -1 && ts->selected_program != h->id)
+        return;
+
     if (skip_identical(h, tssf))
         return;
 
@@ -2630,6 +2640,10 @@ static void pat_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
         } else {
             MpegTSFilter *fil = ts->pids[pmt_pid];
             struct Program *prg;
+
+            if (ts->selected_program != -1 && ts->selected_program != sid)
+                continue;
+
             program = av_new_program(ts->stream, sid);
             if (program) {
                 program->program_num = sid;
@@ -2790,7 +2804,7 @@ static void sdt_cb(MpegTSFilter *filter, const uint8_t *section, int section_len
                 if (!provider_name)
                     break;
                 name = getstr8(&p, desc_end);
-                if (name) {
+                if (name && (ts->selected_program == -1 || ts->selected_program == sid)) {
                     AVProgram *program = av_new_program(ts->stream, sid);
                     if (program) {
                         av_dict_set(&program->metadata, "service_name", name, 0);
@@ -3185,8 +3199,25 @@ static int mpegts_read_header(AVFormatContext *s)
         handle_packets(ts, probesize / ts->raw_packet_size);
         /* if could not find service, enable auto_guess */
 
-        av_log(s, AV_LOG_INFO, "%s required %d bytes\n", __func__, avio_tell(pb));
+        av_log(s, AV_LOG_INFO, "%s required %" PRId64 " bytes\n", __func__, avio_tell(pb));
         ltnlog_stat("READ_HEADER_BYTES", avio_tell(s->pb));
+
+        if (ts->selected_program != -1) {
+            /* See if we found the program the user asked for... */
+            int i;
+            for (i = 0; i < ts->nb_prg; i++) {
+                if (ts->prg[i].id == ts->selected_program && ts->prg[i].pmt_found) {
+                    av_log(ts->stream, AV_LOG_INFO, "PMT for program %d was found\n",
+                           ts->prg[i].id);
+                    break;
+                }
+            }
+            if (i == ts->nb_prg) {
+                av_log(ts->stream, AV_LOG_ERROR, "Program requested %d was not found in PAT\n",
+                       ts->selected_program);
+                return AVERROR(EINVAL);
+            }
+        }
 
 #ifdef LTN_CONTINUE_EVEN_IF_PMT_NOT_FOUND
         ts->auto_guess = 1;

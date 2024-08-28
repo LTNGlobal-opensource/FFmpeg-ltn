@@ -151,6 +151,7 @@ struct decklink_ctx {
     uint16_t cdp_sequence_num;
     time_t last_refstatus_report;
     int64_t *audio_st_lastpts; /* Array of last PTS for audio streams */
+    int64_t *audio_st_offset; /* Array of audio delays per stream, Measured in samples */
 
     /* Options */
     int list_devices;

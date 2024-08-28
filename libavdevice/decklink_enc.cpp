@@ -901,6 +901,7 @@ av_cold int ff_decklink_write_trailer(AVFormatContext *avctx)
     pthread_mutex_destroy(&ctx->mutex);
     pthread_cond_destroy(&ctx->cond);
     av_freep(&ctx->audio_st_lastpts);
+    av_freep(&ctx->audio_st_offset);
 
 #if CONFIG_LIBKLVANC
     klvanc_context_destroy(ctx->vanc_ctx);
@@ -1594,6 +1595,9 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     int64_t cur_pts;
     int ret = 0;
 
+    /* Audio offset by stream */
+    pkt->pts += ctx->audio_st_offset[pkt->stream_index];
+
     if (ctx->audio_st_lastpts[pkt->stream_index] != pkt->pts) {
         int64_t delta = pkt->pts - ctx->audio_st_lastpts[pkt->stream_index];
 
@@ -1871,6 +1875,42 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
             goto error;
         if (decklink_enable_audio(avctx))
             goto error;
+
+        ctx->audio_st_offset = (int64_t *) av_malloc_array(avctx->nb_streams, sizeof(int64_t));
+        if (ctx->audio_st_offset == NULL)
+            goto error;
+    }
+
+    /* Configure Audio Delay parameters.  Note that the command line parameter
+       is specified in milliseconds but our internal offset is specified in
+       number of samples on the 48000 audio clock */
+    if (cctx->audio_delay_param) {
+        const char s[2] = ",";
+        char *token;
+        int count = 0, val;
+        int last_audio = 0;
+
+        /* get the first token */
+        token = strtok(cctx->audio_delay_param, s);
+
+        /* walk through other tokens */
+        while( token != NULL ) {
+            errno = 0;
+            val = strtol(token, NULL, 10);
+            if (errno == 0) {
+                /* Find the nth audio stream */
+                for (unsigned int n = last_audio; n < avctx->nb_streams; n++) {
+                    AVStream *st = avctx->streams[n];
+                    if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                        ctx->audio_st_offset[n] = val * 48000 / 1000;
+                        last_audio = n + 1;
+                        break;
+                    }
+                }
+            }
+            token = strtok(NULL, s);
+            count++;
+        }
     }
 
     ltnlog_stat("VIDEOMODE", ctx->bmd_mode);

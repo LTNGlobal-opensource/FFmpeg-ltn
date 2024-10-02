@@ -44,6 +44,9 @@ struct NDIContext {
     NDIlib_send_instance_t ndi_send;
     AVFrame *last_avframe;
     char *last_metadata;
+    uint8_t *buf1;
+    uint8_t *buf2;
+    uint8_t *cur_buf;
 };
 
 static int ndi_write_trailer(AVFormatContext *avctx)
@@ -59,6 +62,9 @@ static int ndi_write_trailer(AVFormatContext *avctx)
     av_freep(&ctx->video);
     av_freep(&ctx->audio);
 
+    av_freep(&ctx->buf1);
+    av_freep(&ctx->buf2);
+
     return 0;
 }
 
@@ -70,7 +76,7 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
     char *metadata_base64 = NULL;
     char *metadata_xml = NULL;
 
-    if (tmp->format != AV_PIX_FMT_UYVY422 && tmp->format != AV_PIX_FMT_BGRA &&
+    if (tmp->format != AV_PIX_FMT_YUV420P && tmp->format != AV_PIX_FMT_UYVY422 && tmp->format != AV_PIX_FMT_BGRA &&
         tmp->format != AV_PIX_FMT_BGR0 && tmp->format != AV_PIX_FMT_RGBA &&
         tmp->format != AV_PIX_FMT_RGB0) {
         av_log(avctx, AV_LOG_ERROR, "Got a frame with invalid pixel format.\n");
@@ -95,9 +101,32 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
         return AVERROR(ENOMEM);
 
     ctx->video->timecode = av_rescale_q(pkt->pts, st->time_base, NDI_TIME_BASE_Q);
-
     ctx->video->line_stride_in_bytes = avframe->linesize[0];
-    ctx->video->p_data = (void *)(avframe->data[0]);
+
+    /* The I420 support requires the three planes to be contiguous.  Preserve the same stride,
+       but copy all three planes into a single buffer that can be handed off to the NDI stack */
+    if (tmp->format == AV_PIX_FMT_YUV420P) {
+        if (ctx->cur_buf == NULL) {
+            if (ctx->buf1 == NULL)
+                ctx->buf1 = av_malloc((avframe->linesize[0] + avframe->linesize[1] + avframe->linesize[2]) * ctx->video->yres);
+            if (ctx->buf2 == NULL)
+                ctx->buf2 = av_malloc((avframe->linesize[0] + avframe->linesize[1] + avframe->linesize[2]) * ctx->video->yres);
+            ctx->cur_buf = ctx->buf1;
+        }
+
+        uint8_t *y_offset = ctx->cur_buf;
+        uint8_t *u_offset = ctx->cur_buf + avframe->linesize[0] * ctx->video->yres;
+        uint8_t *v_offset = u_offset + avframe->linesize[1] * ctx->video->yres / 2;
+        av_image_copy_plane(y_offset, avframe->linesize[0], avframe->data[0], avframe->linesize[0],
+                                 ctx->video->xres, ctx->video->yres);
+        av_image_copy_plane(u_offset, avframe->linesize[1], avframe->data[1], avframe->linesize[1],
+                                 ctx->video->xres / 2, ctx->video->yres / 2);
+        av_image_copy_plane(v_offset, avframe->linesize[2], avframe->data[2], avframe->linesize[2],
+                                 ctx->video->xres / 2, ctx->video->yres / 2);
+        ctx->video->p_data = ctx->cur_buf;
+    } else {
+        ctx->video->p_data = (void *)(avframe->data[0]);
+    }
 
     av_log(avctx, AV_LOG_DEBUG, "%s: pkt->pts=%"PRId64", timecode=%"PRId64", st->time_base=%d/%d\n",
         __func__, pkt->pts, ctx->video->timecode, st->time_base.num, st->time_base.den);
@@ -188,6 +217,11 @@ static int ndi_write_video_packet(AVFormatContext *avctx, AVStream *st, AVPacket
     /* asynchronous for one frame, but will block if a second frame
         is given before the first one has been sent */
     ctx->lib->NDIlib_send_send_video_async_v2(ctx->ndi_send, ctx->video);
+
+    if (ctx->cur_buf == ctx->buf1)
+        ctx->cur_buf = ctx->buf2;
+    else
+        ctx->cur_buf = ctx->buf1;
 
     av_frame_free(&ctx->last_avframe);
     ctx->last_avframe = avframe;
@@ -298,7 +332,7 @@ static int ndi_setup_video(AVFormatContext *avctx, AVStream *st)
         return AVERROR(EINVAL);
     }
 
-    if (c->format != AV_PIX_FMT_UYVY422 && c->format != AV_PIX_FMT_BGRA &&
+    if (c->format != AV_PIX_FMT_YUV420P && c->format != AV_PIX_FMT_UYVY422 && c->format != AV_PIX_FMT_BGRA &&
         c->format != AV_PIX_FMT_BGR0 && c->format != AV_PIX_FMT_RGBA &&
         c->format != AV_PIX_FMT_RGB0) {
         av_log(avctx, AV_LOG_ERROR, "Unsupported pixel format!"
@@ -331,6 +365,9 @@ static int ndi_setup_video(AVFormatContext *avctx, AVStream *st)
             break;
         case AV_PIX_FMT_RGB0:
             ctx->video->FourCC = NDIlib_FourCC_type_RGBX;
+            break;
+        case AV_PIX_FMT_YUV420P:
+            ctx->video->FourCC = NDIlib_FourCC_type_I420;
             break;
     }
 

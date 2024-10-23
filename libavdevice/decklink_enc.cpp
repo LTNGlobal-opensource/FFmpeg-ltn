@@ -597,7 +597,7 @@ public:
                        result, written);
             } else if (written != ctx->audio_pkt_numsamples) {
                 av_log(_avctx, AV_LOG_ERROR, "Audio write failure: pts=%ld requested=%d written=%d\n",
-                       cur->pkt.pts, ctx->audio_pkt_numsamples, written);
+                       pkt.pts, ctx->audio_pkt_numsamples, written);
             } else
                 ltnlog_stat("PLAY AUDIO BYTES", written);
 

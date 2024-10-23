@@ -575,8 +575,8 @@ int mux_check_init(void *arg)
             delay = (double) ist->pts_delta *
                     (double) ist->st->time_base.num / (double) ist->st->time_base.den;
             av_log(NULL, AV_LOG_DEBUG, "Delay for stream %d is %f\n", i, delay);
-            if ((ist->dec->type == AVMEDIA_TYPE_VIDEO) ||
-                (ist->dec->type == AVMEDIA_TYPE_AUDIO) && delay > target_preroll)
+            if (ist->dec && ((ist->dec->type == AVMEDIA_TYPE_VIDEO) ||
+                             (ist->dec->type == AVMEDIA_TYPE_AUDIO) && delay > target_preroll))
                 target_preroll = delay;
         }
 

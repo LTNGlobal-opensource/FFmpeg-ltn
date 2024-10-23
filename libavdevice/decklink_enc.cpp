@@ -1598,7 +1598,8 @@ static int decklink_write_audio_packet(AVFormatContext *avctx, AVPacket *pkt)
     /* Audio offset by stream */
     pkt->pts += ctx->audio_st_offset[pkt->stream_index];
 
-    if (ctx->audio_st_lastpts[pkt->stream_index] != pkt->pts) {
+    if (ctx->audio_st_lastpts[pkt->stream_index] != AV_NOPTS_VALUE
+        && ctx->audio_st_lastpts[pkt->stream_index] != pkt->pts) {
         int64_t delta = pkt->pts - ctx->audio_st_lastpts[pkt->stream_index];
 
         if (cctx->debug_level >= 1 && ctx->audio_st_lastpts[pkt->stream_index] != 0) {
@@ -1873,12 +1874,16 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
         ctx->audio_st_lastpts = (int64_t *) av_malloc_array(avctx->nb_streams, sizeof(int64_t));
         if (ctx->audio_st_lastpts == NULL)
             goto error;
+        for (unsigned int i = 0; i < avctx->nb_streams; i++)
+            ctx->audio_st_lastpts[i] = AV_NOPTS_VALUE;
         if (decklink_enable_audio(avctx))
             goto error;
 
         ctx->audio_st_offset = (int64_t *) av_malloc_array(avctx->nb_streams, sizeof(int64_t));
         if (ctx->audio_st_offset == NULL)
             goto error;
+        for (unsigned int i = 0; i < avctx->nb_streams; i++)
+            ctx->audio_st_offset[i] = 0;
     }
 
     /* Configure Audio Delay parameters.  Note that the command line parameter

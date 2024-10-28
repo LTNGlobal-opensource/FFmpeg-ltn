@@ -130,6 +130,7 @@ struct decklink_ctx {
     int list_formats;
     int64_t teletext_lines;
     double preroll;
+    double audio_preroll;
     int duplex_mode;
     DecklinkPtsSource audio_pts_source;
     DecklinkPtsSource video_pts_source;

@@ -45,6 +45,7 @@ struct decklink_cctx {
     int list_formats;
     int64_t teletext_lines;
     double preroll;
+    double audio_preroll;
     double discard;
     int v210;
     int audio_channels;

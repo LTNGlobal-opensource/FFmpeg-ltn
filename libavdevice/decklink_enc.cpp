@@ -406,7 +406,7 @@ public:
         /* Do final Scheduling of audio at least 50ms before deadline.  This ensures there
            was enough time for multiple audio streams to be interleaved, while sending to
            the hardware with enough time for actual output. */
-        int64_t window = streamtime + (bmdAudioSampleRate48kHz * 50 / 1000);
+        int64_t window = streamtime + (bmdAudioSampleRate48kHz * ctx->audio_preroll);
 
         if (preroll && ctx->audio_pkt_numsamples) {
             /* Throw away everything but the most recent 500ms.  This is to prevent
@@ -1700,6 +1700,7 @@ av_cold int ff_decklink_write_header(AVFormatContext *avctx)
     ctx->list_devices = cctx->list_devices;
     ctx->list_formats = cctx->list_formats;
     ctx->preroll      = cctx->preroll;
+    ctx->audio_preroll = cctx->audio_preroll;
     cctx->ctx = ctx;
 #if CONFIG_LIBKLVANC
     if (klvanc_context_create(&ctx->vanc_ctx) < 0) {

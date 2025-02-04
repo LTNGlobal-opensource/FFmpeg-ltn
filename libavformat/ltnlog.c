@@ -92,7 +92,7 @@ void ltnlog_stat(const char *str, uint64_t val)
     if (ltn_log_fd < 0)
         return;
 
-    buf = av_asprintf("%s: %" PRId64 "\n", str, val);
+    buf = av_asprintf("{\"stat_type\":\"%s\",\"value\":\"%" PRId64" \"}", str, val);
     if (!buf)
         return;
 
@@ -114,7 +114,7 @@ void ltnlog_msg(const char *msgtype, const char *fmt, ...)
     va_end(va);
 
     final[0] = 0x00;
-    av_strlcatf(final, sizeof(final), "%s: %s", msgtype, buf);
+    av_strlcatf(final, sizeof(final), "{\"msg_type\":\"%s\",\"value\":\"%s\"}", msgtype, buf);
 
     send(ltn_log_fd, final, strlen(final), 0);
 }

@@ -33,6 +33,7 @@
 #include "opt_common.h"
 
 #include "libavformat/avformat.h"
+#include "libavformat/ltnlog.h"
 
 #include "libavcodec/avcodec.h"
 #include "libavcodec/bsf.h"
@@ -1173,6 +1174,17 @@ static int opt_filter_complex_script(void *optctx, const char *opt, const char *
 }
 #endif
 
+static int opt_ltn_udp_monitor(void *optctx, const char *opt, const char *arg)
+{
+    int ret;
+
+    /* Set up notifications back to LTN controller */
+    ret = ltnlog_setup(arg);
+    if (ret < 0)
+        av_log(NULL, AV_LOG_ERROR, "Failed to setup LTN logger");
+    return 0;
+}
+
 void show_help_default(const char *opt, const char *arg)
 {
     int show_advanced = 0, show_avoptions = 0;
@@ -1991,6 +2003,10 @@ const OptionDef options[] = {
         .u1.name_canon = "codec", },
     { "dn", OPT_TYPE_BOOL, OPT_DATA | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT,
         { .off = OFFSET(data_disable) }, "disable data" },
+
+    { "udp_monitor",  OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
+        { .func_arg = opt_ltn_udp_monitor },
+        "monitoring port for LTN stats", "" },
 
 #if CONFIG_VAAPI
     { "vaapi_device", OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,

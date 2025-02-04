@@ -139,6 +139,7 @@ extern const AVFilter ff_af_ladspa;
 extern const AVFilter ff_af_loudnorm;
 extern const AVFilter ff_af_lowpass;
 extern const AVFilter ff_af_lowshelf;
+extern const AVFilter ff_af_ltnreport;
 extern const AVFilter ff_af_lv2;
 extern const AVFilter ff_af_mcompand;
 extern const AVFilter ff_af_pan;

@@ -544,7 +544,7 @@ static void *circular_buffer_task_rx( void *_URLContext)
                     char cur[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &(prevaddr->sin_addr), prev, INET_ADDRSTRLEN);
                     inet_ntop(AF_INET, &(srcaddr->sin_addr), cur, INET_ADDRSTRLEN);
-                    ltnlog_msg("UDPWARN", "Datagram's IP address changed %s:%d (was %s:%d)\n",
+                    ltnlog_msg("UDPWARN", "Datagram's IP address changed %s:%d (was %s:%d)",
                                cur, (int) ntohs(srcaddr->sin_port),
                                prev, (int) ntohs(prevaddr->sin_port));
                     av_log(h, AV_LOG_WARNING, "Datagram's IP address changed %s:%d (was %s:%d)\n",

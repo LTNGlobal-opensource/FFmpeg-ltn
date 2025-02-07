@@ -1061,7 +1061,7 @@ static int udp_read(URLContext *h, uint8_t *buf, int size)
             if (!pid->enabled)
                 continue;
 
-            ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld\n",
+            ltnlog_msg("UDP PID", "0x%04x,%lld,%lld,%lld",
                        i, pid->packetCount, pid->ccErrors, pid->teiErrors);
         }
         ltnlog_stat("UDP FIFO", s->fifo_depth);

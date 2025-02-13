@@ -205,6 +205,7 @@ extern const AVFilter ff_vf_bwdif_cuda;
 extern const AVFilter ff_vf_bwdif_vulkan;
 extern const AVFilter ff_vf_cas;
 extern const AVFilter ff_vf_ccrepack;
+extern const AVFilter ff_vf_ccreport;
 extern const AVFilter ff_vf_chromaber_vulkan;
 extern const AVFilter ff_vf_chromahold;
 extern const AVFilter ff_vf_chromakey;

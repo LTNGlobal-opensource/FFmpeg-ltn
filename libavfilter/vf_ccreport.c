@@ -62,6 +62,16 @@ static int config_input(AVFilterLink *link)
     return 0;
 }
 
+static void fill_rows(char *buf, size_t buflen, size_t numrows, size_t numcols)
+{
+    for (int row = 0; row < numrows; row++) {
+        for (int col = 0; col < numcols; col++) {
+            av_strlcat(buf, " ", buflen);
+        }
+        av_strlcat(buf, "\\n", buflen);
+    }
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 {
     CcreportContext *ctx = inlink->dst->priv;
@@ -90,9 +100,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
 
     /* Render the page */
     success = vbi_fetch_cc_page (ctx->vbi, &page, 1, TRUE);
-    if (success) {
+    if (success && page.dirty.y1 != -1) {
         int row, column;
         memset(buf, 0, sizeof(buf));
+
+        /* Fill up to the start of lines provided by the zvbi renderer */
+        fill_rows(buf, sizeof(buf), page.dirty.y0 - row, page.columns);
+
         for (row = page.dirty.y0; row <= page.dirty.y1; ++row) {
             const vbi_char *cp = page.text + row * page.columns;
             for (column = 0; column < page.columns; ++column) {
@@ -101,10 +115,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
             }
             av_strlcat(buf, "\\n", sizeof(buf));
         }
-        if (strlen(buf) > 0) {
-            ltnlog_msg("CC1", "%s", buf);
-            av_log(ctx, AV_LOG_DEBUG, "CC1=%s", buf);
-        }
+
+        /* Fill any remaining lines not provided by the zvbi renderer */
+        fill_rows(buf, sizeof(buf), page.rows - row, page.columns);
+
+        ltnlog_msg("CC1", "%s", buf);
+        av_log(ctx, AV_LOG_DEBUG, "CC1=%s", buf);
     }
 
     /* Pass through the original frame unmodified */

@@ -43,6 +43,7 @@
 
 #include "avformat.h"
 #include "internal.h"
+#include "ltnlog.h"
 
 #define HEXDUMP_PRINT(...)                                                    \
     do {                                                                      \
@@ -679,6 +680,9 @@ static void dump_stream_format(const AVFormatContext *ic, int i,
     dump_metadata(NULL, st->metadata, extra_indent, log_level);
 
     dump_sidedata(NULL, st, extra_indent, log_level);
+
+    /* Stream,PID,language,codec_string */
+    ltnlog_msg("STREAMINFO", "%d|0x%x|%s|%d/%d", i, st->id, buf, st->r_frame_rate.num, st->r_frame_rate.den);
 }
 
 static void dump_stream_group(const AVFormatContext *ic, uint8_t *printed,
@@ -889,6 +893,8 @@ void av_dump_format(AVFormatContext *ic, int index,
             const AVProgram *program = ic->programs[j];
             const AVDictionaryEntry *name = av_dict_get(program->metadata,
                                                         "name", NULL, 0);
+            char buf[1024];
+            buf[0] = 0;
             av_log(NULL, AV_LOG_INFO, "  Program %d %s\n", program->id,
                    name ? name->value : "");
             dump_metadata(NULL, program->metadata, "    ", AV_LOG_INFO);
@@ -896,8 +902,10 @@ void av_dump_format(AVFormatContext *ic, int index,
                 dump_stream_format(ic, program->stream_index[k],
                                    -1, index, is_output, AV_LOG_INFO);
                 printed[program->stream_index[k]] = 1;
+                av_strlcatf(buf, sizeof(buf), ",%d", program->stream_index[k]);
             }
             total += program->nb_stream_indexes;
+            ltnlog_msg("PROGRAMMAP", "%d%s", program->id, buf);
         }
         if (total < ic->nb_streams)
             av_log(NULL, AV_LOG_INFO, "  No Program\n");

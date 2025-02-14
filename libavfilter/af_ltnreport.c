@@ -36,6 +36,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out = ff_get_audio_buffer(outlink, in->nb_samples);
     AVRational rebase = av_mul_q(in->time_base, av_make_q(10, 1));
     int64_t target_time = s->last_reported + (rebase.den / rebase.num); /* Every 1/10 second */
+    const char *filtersource = "unknown";
+    AVDictionaryEntry *e;
     int ret;
 
     if (!out) {
@@ -43,16 +45,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         goto fail;
     }
 
+    e = av_dict_get(in->metadata, "filtersource", NULL, 0);
+    if (e && e->value) {
+        filtersource = e->value;
+    }
+
     if (in->pts > target_time) {
         /* Check for up to 16 channels of audio on this stream */
         for (int i = 0; i < 16; i++) {
-            AVDictionaryEntry *e;
             char key[256];
 
             snprintf(key, sizeof(key), "lavfi.astats.%d.RMS_level", i+1);
             e = av_dict_get(in->metadata, key, NULL, 0);
             if (e && e->value) {
-                ltnlog_msg("AUDIOLEVEL", "%s,%d,%s", inlink->src->name, i+1, e->value);
+                ltnlog_msg("AUDIOLEVEL", "%s,%d,%s", filtersource, i+1, e->value);
             }
         }
         s->last_reported = in->pts;

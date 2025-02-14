@@ -784,6 +784,9 @@ static int packet_decode(DecoderPriv *dp, AVPacket *pkt, AVFrame *frame)
         fd->dec.frame_num           = dec->frame_num - 1;
         fd->bits_per_raw_sample     = dec->bits_per_raw_sample;
 
+        /* Annotate which source we are coming from for the benefit of downstream filters */
+        av_dict_set(&frame->metadata, "filtersource", dp->parent_name, 0);
+
         fd->wallclock[LATENCY_PROBE_DEC_POST] = av_gettime_relative();
 
         frame->time_base = dec->pkt_timebase;

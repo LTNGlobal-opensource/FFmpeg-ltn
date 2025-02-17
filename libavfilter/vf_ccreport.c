@@ -78,57 +78,72 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
     AVFilterLink *outlink = inlink->dst->outputs[0];
     AVFrameSideData *side_data;
     vbi_page page;
-    vbi_sliced sliced;
+    vbi_sliced sliced[2];
+    int sliced_count = 0;
     vbi_bool success;
     double timestamp = 0;
     char buf[1024];
+    char cc_num[4];
 
     side_data = av_frame_get_side_data(frame, AV_FRAME_DATA_A53_CC);
     if (side_data == NULL || side_data->size < 3)
         return ff_filter_frame(outlink, frame);
 
-    if (side_data->data[0] == 0xfc) {
-        /* Feed the CC samples to the decoder */
-        sliced.id = VBI_SLICED_CAPTION_525_F1;
-        sliced.line = 21;
-        sliced.data[0] = side_data->data[1];
-        sliced.data[1] = side_data->data[2];
-        timestamp = ctx->last_timestamp + 0.033; /* FIXME */
-        vbi_decode (ctx->vbi, &sliced, 1, timestamp);
-        ctx->last_timestamp = timestamp;
+    /* Feed the CC samples to the decoder */
+    for (int i = 0; i < (side_data->size / 3); i += 3) {
+        if (side_data->data[i] == 0xfc) {
+            sliced[sliced_count].id = VBI_SLICED_CAPTION_525_F1;
+            sliced[sliced_count].line = 21;
+            sliced[sliced_count].data[0] = side_data->data[i + 1];
+            sliced[sliced_count].data[1] = side_data->data[i + 2];
+            sliced_count++;
+        } else if (side_data->data[i] == 0xfd) {
+            sliced[sliced_count].id = VBI_SLICED_CAPTION_525_F2;
+            sliced[sliced_count].line = 284;
+            sliced[sliced_count].data[0] = side_data->data[i + 1];
+            sliced[sliced_count].data[1] = side_data->data[i + 2];
+            sliced_count++;
+        }
     }
+    if (sliced_count > 0)
+        vbi_decode (ctx->vbi, sliced, sliced_count, timestamp);
+    ctx->last_timestamp = timestamp;
+    timestamp = ctx->last_timestamp + 0.033; /* FIXME */
 
     /* Render the page */
-    success = vbi_fetch_cc_page (ctx->vbi, &page, 1, TRUE);
-    if (success && page.dirty.y1 != -1) {
-        int row, column;
-        memset(buf, 0, sizeof(buf));
+    for (int i = 0; i < 4; i++) {
+        success = vbi_fetch_cc_page (ctx->vbi, &page, i + 1, TRUE);
+        if (success && page.dirty.y1 != -1) {
+            int row = 0, column = 0;
+            memset(buf, 0, sizeof(buf));
 
-        /* Fill up to the start of lines provided by the zvbi renderer */
-        fill_rows(buf, sizeof(buf), page.dirty.y0 - row, page.columns);
+            /* Fill up to the start of lines provided by the zvbi renderer */
+            fill_rows(buf, sizeof(buf), page.dirty.y0 - row, page.columns);
 
-        for (row = page.dirty.y0; row <= page.dirty.y1; ++row) {
-            const vbi_char *cp = page.text + row * page.columns;
-            for (column = 0; column < page.columns; ++column) {
-                if (cp->unicode == '"') {
-                    av_strlcatf(buf, sizeof(buf), "\\\"");
-                } else {
-                    char utf8_buf[5] = "";
-                    char tmp;
-                    int utf8_count = 0;
-                    PUT_UTF8(cp->unicode, tmp, utf8_buf[utf8_count++] = tmp;);
-                    av_strlcatf(buf, sizeof(buf), "%s", utf8_buf);
+            for (row = page.dirty.y0; row <= page.dirty.y1; ++row) {
+                const vbi_char *cp = page.text + row * page.columns;
+                for (column = 0; column < page.columns; ++column) {
+                    if (cp->unicode == '"') {
+                        av_strlcatf(buf, sizeof(buf), "\\\"");
+                    } else {
+                        char utf8_buf[5] = "";
+                        char tmp;
+                        int utf8_count = 0;
+                        PUT_UTF8(cp->unicode, tmp, utf8_buf[utf8_count++] = tmp;);
+                        av_strlcatf(buf, sizeof(buf), "%s", utf8_buf);
+                    }
+                    cp++;
                 }
-                cp++;
+                av_strlcat(buf, "\\n", sizeof(buf));
             }
-            av_strlcat(buf, "\\n", sizeof(buf));
+
+            /* Fill any remaining lines not provided by the zvbi renderer */
+            fill_rows(buf, sizeof(buf), page.rows - row, page.columns);
+
+            snprintf(cc_num, sizeof(cc_num), "CC%d", i + 1);
+            ltnlog_msg(cc_num, "%s", buf);
+            av_log(ctx, AV_LOG_DEBUG, "%s=%s", cc_num, buf);
         }
-
-        /* Fill any remaining lines not provided by the zvbi renderer */
-        fill_rows(buf, sizeof(buf), page.rows - row, page.columns);
-
-        ltnlog_msg("CC1", "%s", buf);
-        av_log(ctx, AV_LOG_DEBUG, "CC1=%s", buf);
     }
 
     /* Pass through the original frame unmodified */

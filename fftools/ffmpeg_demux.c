@@ -176,6 +176,10 @@ static void report_new_stream(Demuxer *d, const AVPacket *pkt)
            av_get_media_type_string(st->codecpar->codec_type),
            pkt->stream_index, pkt->pos, av_ts2timestr(pkt->dts, &st->time_base));
     d->nb_streams_warn = pkt->stream_index + 1;
+
+    /* We don't have the ability to go through probing again, so just exit and
+       let the caller restart the ffmpeg process */
+    exit(0);
 }
 
 static int seek_to_start(Demuxer *d, Timestamp end_pts)

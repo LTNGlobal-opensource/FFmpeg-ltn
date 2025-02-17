@@ -110,10 +110,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
         for (row = page.dirty.y0; row <= page.dirty.y1; ++row) {
             const vbi_char *cp = page.text + row * page.columns;
             for (column = 0; column < page.columns; ++column) {
-                if (cp->unicode == '"')
+                if (cp->unicode == '"') {
                     av_strlcatf(buf, sizeof(buf), "\\\"");
-                else
-                    av_strlcatf(buf, sizeof(buf), "%c", cp->unicode);
+                } else {
+                    char utf8_buf[5] = "";
+                    char tmp;
+                    int utf8_count = 0;
+                    PUT_UTF8(cp->unicode, tmp, utf8_buf[utf8_count++] = tmp;);
+                    av_strlcatf(buf, sizeof(buf), "%s", utf8_buf);
+                }
                 cp++;
             }
             av_strlcat(buf, "\\n", sizeof(buf));

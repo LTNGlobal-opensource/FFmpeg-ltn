@@ -110,7 +110,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *frame)
         for (row = page.dirty.y0; row <= page.dirty.y1; ++row) {
             const vbi_char *cp = page.text + row * page.columns;
             for (column = 0; column < page.columns; ++column) {
-                av_strlcatf(buf, sizeof(buf), "%c", cp->unicode);
+                if (cp->unicode == '"')
+                    av_strlcatf(buf, sizeof(buf), "\\\"");
+                else
+                    av_strlcatf(buf, sizeof(buf), "%c", cp->unicode);
                 cp++;
             }
             av_strlcat(buf, "\\n", sizeof(buf));

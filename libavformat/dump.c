@@ -682,7 +682,8 @@ static void dump_stream_format(const AVFormatContext *ic, int i,
     dump_sidedata(NULL, st, extra_indent, log_level);
 
     /* Stream,PID,language,codec_string */
-    ltnlog_msg("STREAMINFO", "%d|0x%x|%s|%d/%d", i, st->id, buf, st->r_frame_rate.num, st->r_frame_rate.den);
+    if (!is_output)
+        ltnlog_msg("STREAMINFO", "%d|0x%x|%s|%d/%d", i, st->id, buf, st->r_frame_rate.num, st->r_frame_rate.den);
 }
 
 static void dump_stream_group(const AVFormatContext *ic, uint8_t *printed,

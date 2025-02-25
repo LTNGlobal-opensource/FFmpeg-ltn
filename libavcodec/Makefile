@@ -1244,6 +1244,7 @@ OBJS-$(CONFIG_XWD_PARSER)              += xwd_parser.o
 include $(SRC_PATH)/libavcodec/bsf/Makefile
 
 OBJS-$(CONFIG_EXTRACT_EXTRADATA_BSF)      += av1_parse.o h2645_parse.o
+OBJS-$(CONFIG_H264_LTN_TIMESTAMP_BSF)     += h264_levels.o h2645data.o
 OBJS-$(CONFIG_H264_METADATA_BSF)          += h264_levels.o h2645data.o
 OBJS-$(CONFIG_HAPQA_EXTRACT_BSF)          += hap.o
 OBJS-$(CONFIG_HEVC_METADATA_BSF)          += h265_profile_level.o h2645data.o

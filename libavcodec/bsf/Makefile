@@ -14,6 +14,7 @@ OBJS-$(CONFIG_EAC3_CORE_BSF)              += bsf/eac3_core.o
 OBJS-$(CONFIG_EVC_FRAME_MERGE_BSF)        += bsf/evc_frame_merge.o
 OBJS-$(CONFIG_EXTRACT_EXTRADATA_BSF)      += bsf/extract_extradata.o
 OBJS-$(CONFIG_FILTER_UNITS_BSF)           += bsf/filter_units.o
+OBJS-$(CONFIG_H264_LTN_TIMESTAMP_BSF)     += bsf/h264_ltn_timestamp.o
 OBJS-$(CONFIG_H264_METADATA_BSF)          += bsf/h264_metadata.o
 OBJS-$(CONFIG_H264_MP4TOANNEXB_BSF)       += bsf/h264_mp4toannexb.o
 OBJS-$(CONFIG_H264_REDUNDANT_PPS_BSF)     += bsf/h264_redundant_pps.o

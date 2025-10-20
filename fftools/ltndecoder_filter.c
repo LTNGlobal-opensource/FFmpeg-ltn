@@ -208,7 +208,7 @@ typedef struct OutputFilterPriv {
     enum AVColorRange       color_range;
 
     /* Input stream properties (to help with decision making) */
-    int                     in_width, in_height, in_top_field_first;
+    int                     in_width, in_height, in_interlaced, in_top_field_first;
     AVRational              in_framerate;
     enum AVColorSpace       in_color_space;
 
@@ -1519,7 +1519,9 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
     AVFilterContext *last_filter = out->filter_ctx;
     int width = ofp->in_width;
     int height = ofp->in_height;
+    int interlaced = ofp->in_interlaced;
     int top_field_first = ofp->in_top_field_first;
+    AVRational framerate = ofp->in_framerate;
     AVBPrint bprint;
     int pad_idx = out->pad_idx;
     int ret;
@@ -1532,6 +1534,25 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
 
     if (ret < 0)
         return ret;
+
+    /* Special case for HEVC interlaced */
+    if (height == 240 || height == 288 || height == 540) {
+        ret = insert_filter(&last_filter, &pad_idx, "fieldmerge", NULL);
+        if (ret < 0)
+            return ret;
+        /* Halve the effective framerate */
+        framerate.den *= 2;
+        height *= 2;
+    }
+
+    /* Deinterlacing has to be done before other transforms... */
+    if (interlaced && do_deinterlace) {
+        char args[255];
+
+        snprintf(args, sizeof(args), "mode=%d", 1);
+        ret = insert_filter(&last_filter, &pad_idx, "yadif", args);
+        interlaced = 0;
+    }
 
     if ((ofp->width || ofp->height) && (ofp->flags & OFILTER_FLAG_AUTOSCALE)) {
         char args[255];
@@ -1621,11 +1642,11 @@ static int configure_output_video_filter(FilterGraph *fg, AVFilterGraph *graph,
         pad_idx     = 0;
     }
 
-    if (ofp->in_framerate.num) {
+    if (framerate.num) {
         char args[255];
         snprintf(args, sizeof(args), "fps=%d/%d",
-                 do_interlace ? ofp->in_framerate.num * 2 : ofp->in_framerate.num,
-                 ofp->in_framerate.den);
+                 do_interlace ? framerate.num * 2 : framerate.num,
+                 framerate.den);
 
         ret = insert_filter(&last_filter, &pad_idx, "fps", args);
         if (ret < 0)
@@ -1823,7 +1844,6 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
     char name[255];
     int ret, pad_idx = 0;
     AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
-    int interlaced_frame = ifp->interlaced;
 
     if (!par)
         return AVERROR(ENOMEM);
@@ -1908,21 +1928,6 @@ static int configure_input_video_filter(FilterGraph *fg, AVFilterGraph *graph,
             return ret;
 
         ifp->displaymatrix_applied = 1;
-    }
-
-    /* Special case for HEVC interlaced */
-    if (ifp->height == 240 || ifp->height == 288 || ifp->height == 540) {
-        ret = insert_filter(&last_filter, &pad_idx, "fieldmerge", NULL);
-        if (ret < 0)
-            return ret;
-    }
-
-    if (interlaced_frame && do_deinterlace) {
-        char args[255];
-
-        snprintf(args, sizeof(args), "mode=%d", 1);
-        ret = insert_filter(&last_filter, &pad_idx, "yadif", args);
-        interlaced_frame = 0;
     }
 
     snprintf(name, sizeof(name), "trim_in_%s", ifp->opts.name);
@@ -2097,6 +2102,7 @@ static int configure_filtergraph(FilterGraph *fg, FilterGraphThread *fgt)
                     ofp->in_width = ifp->width;
                     ofp->in_height = ifp->height;
                     ofp->in_framerate = ifp->opts.framerate;
+                    ofp->in_interlaced = ifp->interlaced;
                     ofp->in_top_field_first = ifp->top_field_first;
                     ofp->in_color_space = ifp->color_space;
                 }

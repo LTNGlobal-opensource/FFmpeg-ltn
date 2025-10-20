@@ -1116,7 +1116,8 @@ static int decklink_construct_vanc(AVFormatContext *avctx, struct decklink_ctx *
 
         ret = ff_decklink_packet_queue_get(&ctx->vanc_queue, &vanc_pkt, 1);
         if (vanc_pkt.pts + 1 < ctx->last_pts) {
-            av_log(avctx, AV_LOG_WARNING, "VANC packet too old, throwing away\n");
+            av_log(avctx, AV_LOG_WARNING, "VANC packet too old, throwing away: pkt=%ld last_pts=%ld\n",
+                   vanc_pkt.pts + 1, ctx->last_pts);
             av_packet_unref(&vanc_pkt);
             continue;
         }

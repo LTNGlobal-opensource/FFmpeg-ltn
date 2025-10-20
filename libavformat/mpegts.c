@@ -1808,6 +1808,7 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
     ts->pkt->stream_index = idx;
     prg = av_find_program_from_stream(ts->stream, NULL, idx);
     if (prg && prg->pcr_pid != -1 && prg->discard != AVDISCARD_ALL) {
+#ifdef LEGACY_SCTE35_INSERTION_TIMING
         MpegTSFilter *f = ts->pids[prg->pcr_pid];
         if (f && f->last_pcr != -1) {
             AVTransportTimestamp *transport_ts;
@@ -1820,6 +1821,29 @@ static void scte_data_cb(MpegTSFilter *filter, const uint8_t *section,
                 transport_ts->time_base = av_make_q(1, 90000);
             }
         }
+#else
+        /* Find the video stream in the program, and grab the most recent PTS */
+        int i;
+        AVFormatContext *s = ts->stream;
+        for (i = 0; i < prg->nb_stream_indexes; i++) {
+            AVStream *pst = s->streams[prg->stream_index[i]];
+            if (pst) {
+                if (pst->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                    FFStream *const sti = ffstream(pst);
+                    AVTransportTimestamp *transport_ts;
+                    ts->pkt->pts = ts->pkt->dts = sti->cur_dts & ((1ULL << 33) - 1);
+                    transport_ts = (AVTransportTimestamp *) av_packet_new_side_data(ts->pkt,
+                                                                                    AV_PKT_DATA_TRANSPORT_TIMESTAMP,
+                                                                                    sizeof(AVTransportTimestamp));
+                    if (transport_ts) {
+                        transport_ts->pts = ts->pkt->pts;
+                        transport_ts->time_base = av_make_q(1, 90000);
+                    }
+		    break;
+                }
+            }
+        }
+#endif
     }
     ts->stop_parse = 1;
 

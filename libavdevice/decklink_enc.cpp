@@ -1454,7 +1454,7 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame->hdr = hdr;
 
     const AVContentLightMetadata *lighting = (const AVContentLightMetadata *) av_packet_get_side_data(pkt, AV_PKT_DATA_CONTENT_LIGHT_LEVEL, &size);
-    if (hdr && size > 0)
+    if (lighting && size > 0)
         frame->lighting = lighting;
 
     frame->SetMetadata(st->codecpar->color_space, st->codecpar->color_trc);

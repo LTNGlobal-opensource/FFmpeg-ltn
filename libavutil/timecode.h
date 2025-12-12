@@ -95,6 +95,8 @@ uint32_t av_timecode_get_smpte_from_framenum(const AVTimecode *tc, int framenum)
  */
 uint32_t av_timecode_get_smpte(AVRational rate, int drop, int hh, int mm, int ss, int ff);
 
+uint32_t av_timecode_get_smpte_components(uint32_t tcsmpte, AVRational rate, int *drop, int *hh, int *mm, int *ss, int *ff, int *color, int *field);
+
 /**
  * Load timecode string in buf.
  *

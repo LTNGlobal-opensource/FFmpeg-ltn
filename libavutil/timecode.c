@@ -136,6 +136,27 @@ static unsigned bcd2uint(uint8_t bcd)
    return low + 10*high;
 }
 
+uint32_t av_timecode_get_smpte_components(uint32_t tcsmpte, AVRational rate, int *drop, int *hh, int *mm, int *ss, int *ff, int *color, int *field)
+{
+    *hh   = bcd2uint(tcsmpte     & 0x3f);    // 6-bit hours
+    *mm   = bcd2uint(tcsmpte>>8  & 0x7f);    // 7-bit minutes
+    *ss   = bcd2uint(tcsmpte>>16 & 0x7f);    // 7-bit seconds
+    *ff   = bcd2uint(tcsmpte>>24 & 0x3f);    // 6-bit frames
+    *drop = tcsmpte & 1<<30;  // 1-bit drop if not arbitrary bit
+    *color = tcsmpte & 1<<31;
+    *field = 0;
+
+    if (av_cmp_q(rate, (AVRational) {50, 1}) == 0) {
+        if (tcsmpte & 1 << 7)
+            *field = 1;
+    } else {
+        if (tcsmpte & 1 << 23)
+            *field = 1;
+    }
+
+    return 0;
+}
+
 char *av_timecode_make_smpte_tc_string2(char *buf, AVRational rate, uint32_t tcsmpte, int prevent_df, int skip_field)
 {
     unsigned hh   = bcd2uint(tcsmpte     & 0x3f);    // 6-bit hours

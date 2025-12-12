@@ -40,6 +40,7 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavutil/mastering_display_metadata.h"
 #include "libavutil/sei-timestamp.h"
+#include "libavutil/timecode.h"
 #include "avdevice.h"
 #include "thumbnail.h"
 #if CONFIG_LIBZVBI
@@ -78,7 +79,14 @@ public:
     decklink_frame(struct decklink_ctx *ctx, AVFrame *avframe, AVCodecID codec_id, int height, int width) :
         _ctx(ctx), _avframe(avframe), _avpacket(NULL), _codec_id(codec_id), _ancillary(NULL), _height(height), _width(width),  _refs(1) { }
     decklink_frame(struct decklink_ctx *ctx, AVPacket *avpacket, AVCodecID codec_id, int height, int width) :
-        _ctx(ctx), _avframe(NULL), _avpacket(avpacket), _codec_id(codec_id), _ancillary(NULL), _height(height), _width(width), _colorspace(AVCOL_SPC_BT709), _eotf(AVCOL_TRC_BT709), hdr(NULL), lighting(NULL), _refs(1) { }
+        _ctx(ctx), _avframe(NULL), _avpacket(avpacket), _codec_id(codec_id), _mf(NULL), _ancillary(NULL), _height(height), _width(width), _colorspace(AVCOL_SPC_BT709), _eotf(AVCOL_TRC_BT709), hdr(NULL), lighting(NULL), _refs(1) {
+#if 1
+        int ret = _ctx->dlo->CreateVideoFrame(width, height, GetRowBytes(), GetPixelFormat(), bmdFrameFlagDefault, &_mf);
+        if (ret != 0) {
+            av_log(NULL, AV_LOG_WARNING, "Failed to CreateVideoFrame: %d\n", ret);
+        }
+#endif
+ }
     virtual long           STDMETHODCALLTYPE GetWidth      (void)          { return _width; }
     virtual long           STDMETHODCALLTYPE GetHeight     (void)          { return _height; }
     virtual long           STDMETHODCALLTYPE GetRowBytes   (void)
@@ -120,7 +128,29 @@ public:
         return S_OK;
     }
 
-    virtual HRESULT STDMETHODCALLTYPE GetTimecode     (BMDTimecodeFormat format, IDeckLinkTimecode **timecode) { return S_FALSE; }
+    virtual HRESULT STDMETHODCALLTYPE GetTimecode     (BMDTimecodeFormat format, IDeckLinkTimecode **timecode)
+    {
+        //fprintf(stderr, "GetTimecode called mf=%p\n", _mf);
+        return _mf->GetTimecode(format, timecode);
+    }
+
+    virtual HRESULT STDMETHODCALLTYPE SetFlags (/* in */ BMDFrameFlags newFlags)
+    {
+        return _mf->SetFlags(newFlags);
+    }
+    virtual HRESULT STDMETHODCALLTYPE SetTimecode (/* in */ BMDTimecodeFormat format, /* in */ IDeckLinkTimecode* timecode)
+    {
+        return _mf->SetTimecode(format, timecode);
+    }
+    virtual HRESULT STDMETHODCALLTYPE SetTimecodeFromComponents (/* in */ BMDTimecodeFormat format, /* in */ uint8_t hours, /* in */ uint8_t minutes, /* in */ uint8_t seconds, /* in */ uint8_t frames, /* in */ BMDTimecodeFlags flags)
+    {
+        return _mf->SetTimecodeFromComponents(format, hours, minutes, seconds, frames, flags);
+    }
+    virtual HRESULT STDMETHODCALLTYPE SetTimecodeUserBits (/* in */ BMDTimecodeFormat format, /* in */ BMDTimecodeUserBits userBits)
+    {
+        return _mf->SetTimecodeUserBits(format, userBits);
+    }
+
     virtual HRESULT STDMETHODCALLTYPE GetAncillaryData(IDeckLinkVideoFrameAncillary **ancillary)
     {
         *ancillary = _ancillary;
@@ -325,6 +355,8 @@ public:
             av_packet_free(&_avpacket);
             if (_ancillary)
                 _ancillary->Release();
+            if (_mf)
+                _mf->Release();
             delete this;
         }
         return ret;
@@ -334,6 +366,7 @@ public:
     AVFrame *_avframe;
     AVPacket *_avpacket;
     AVCodecID _codec_id;
+    IDeckLinkMutableVideoFrame *_mf;
     IDeckLinkVideoFrameAncillary *_ancillary;
     int _height;
     int _width;
@@ -639,6 +672,7 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
     struct decklink_ctx *ctx = (struct decklink_ctx *)cctx->ctx;
     AVCodecParameters *c = st->codecpar;
+    BMDVideoOutputFlags tc_flags;
 
     if (ctx->video) {
         av_log(avctx, AV_LOG_ERROR, "Only one video stream is supported!\n");
@@ -670,11 +704,19 @@ static int decklink_setup_video(AVFormatContext *avctx, AVStream *st)
                " Check available formats with -list_formats 1.\n");
         return -1;
     }
-    if (ctx->supports_vanc && ctx->dlo->EnableVideoOutput(ctx->bmd_mode, bmdVideoOutputVANC) != S_OK) {
+
+    if (ctx->bmd_mode == bmdModeNTSC ||
+        ctx->bmd_mode == bmdModeNTSC2398 ||
+        ctx->bmd_mode == bmdModePAL)
+        tc_flags = bmdVideoOutputVITC;
+    else
+        tc_flags = bmdVideoOutputRP188;
+
+    if (ctx->supports_vanc && ctx->dlo->EnableVideoOutput(ctx->bmd_mode, bmdVideoOutputVANC | tc_flags) != S_OK) {
         av_log(avctx, AV_LOG_WARNING, "Could not enable video output with VANC! Trying without...\n");
         ctx->supports_vanc = 0;
     }
-    if (!ctx->supports_vanc && ctx->dlo->EnableVideoOutput(ctx->bmd_mode, bmdVideoOutputFlagDefault) != S_OK) {
+    if (!ctx->supports_vanc && ctx->dlo->EnableVideoOutput(ctx->bmd_mode, bmdVideoOutputFlagDefault | tc_flags) != S_OK) {
         av_log(avctx, AV_LOG_ERROR, "Could not enable video output!\n");
         return -1;
     }
@@ -1350,6 +1392,76 @@ done:
 }
 #endif
 
+static BMDTimecodeFormat decklink_get_tc_format(struct decklink_ctx *ctx, int field)
+{
+    if (ctx->bmd_mode == bmdModeNTSC ||
+        ctx->bmd_mode == bmdModeNTSC2398 ||
+        ctx->bmd_mode == bmdModePAL) {
+        if (field)
+            return bmdTimecodeVITCField2;
+        else
+            return bmdTimecodeVITC;
+    } else {
+        if (field)
+            return bmdTimecodeRP188VITC2;
+        else
+            return bmdTimecodeRP188VITC1;
+    }
+}
+
+static int decklink_construct_tc(AVFormatContext *avctx, struct decklink_ctx *ctx,
+                                 AVPacket *pkt, decklink_frame *frame,
+                                 AVStream *st)
+{
+    size_t size;
+    int hh, mm, ss, ff, color, field, drop;
+
+    const uint32_t *tc;
+    tc = (const uint32_t *) av_packet_get_side_data(pkt, AV_PKT_DATA_S12M_TIMECODE, &size);
+    if (tc == NULL || size == 0)
+        return 0;
+
+    if ((size != sizeof(uint32_t) * 4) || (tc[0] > 3)) {
+        av_log(avctx, AV_LOG_ERROR, "S12M timecode side data malformed\n");
+        return -1;
+    }
+
+    uint32_t num_tcs = tc[0];
+    if (num_tcs == 1 && av_cmp_q(st->avg_frame_rate, (AVRational) {30, 1}) <= 0) {
+        /* Some commercial encoders ony give us a single timestamp for interlaced
+           video, even though the SDI standard expects both timecodes.  So reuse
+           the one timestamp for both fields so we're conformant */
+        BMDTimecodeFlags flags = bmdTimecodeFlagDefault;
+        av_timecode_get_smpte_components(tc[1], st->avg_frame_rate, &drop, &hh, &mm, &ss, &ff, &color, &field);
+
+        if (color)
+            flags |= bmdTimecodeColorFrame;
+
+        if (drop)
+            flags |= bmdTimecodeIsDropFrame;
+
+        frame->SetTimecodeFromComponents(decklink_get_tc_format(ctx, 0), hh, mm, ss, ff, flags);
+        frame->SetTimecodeFromComponents(decklink_get_tc_format(ctx, 1), hh, mm, ss, ff, bmdTimecodeFieldMark);
+    } else {
+        for (size_t i = 1; i < num_tcs + 1; i++) {
+            BMDTimecodeFlags flags = bmdTimecodeFlagDefault;
+            av_timecode_get_smpte_components(tc[i], st->avg_frame_rate, &drop, &hh, &mm, &ss, &ff, &color, &field);
+
+            if (color)
+                flags |= bmdTimecodeColorFrame;
+
+            if (drop)
+                flags |= bmdTimecodeIsDropFrame;
+
+            if (field)
+                flags |= bmdTimecodeFieldMark;
+
+            frame->SetTimecodeFromComponents(decklink_get_tc_format(ctx, field), hh, mm, ss, ff, flags);
+        }
+    }
+    return 0;
+}
+
 static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
 {
     struct decklink_cctx *cctx = (struct decklink_cctx *)avctx->priv_data;
@@ -1458,6 +1570,9 @@ static int decklink_write_video_packet(AVFormatContext *avctx, AVPacket *pkt)
         frame->lighting = lighting;
 
     frame->SetMetadata(st->codecpar->color_space, st->codecpar->color_trc);
+
+    if (decklink_construct_tc(avctx, ctx, pkt, frame, st))
+        av_log(avctx, AV_LOG_ERROR, "Failed to construct Timecode data\n");
 
     /* Always keep at most one second of frames buffered. */
     pthread_mutex_lock(&ctx->mutex);

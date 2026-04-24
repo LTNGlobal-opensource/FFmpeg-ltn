@@ -22,6 +22,8 @@
 #include "libavutil/mem.h"
 #include "libavutil/opt.h"
 
+#include "libavformat/ltnlog.h"
+
 #include "bsf.h"
 #include "bsf_internal.h"
 #include "cbs.h"
@@ -507,6 +509,7 @@ static int h264_metadata_update_fragment(AVBSFContext *bsf, AVPacket *pkt,
     }
 
     if (ctx->sei_user_data && seek_point) {
+        ltnlog_msg("SEIUSERDATA", "%s", ctx->sei_user_data_payload.data);
         err = ff_cbs_sei_add_message(ctx->common.output, au, 1,
                                      SEI_TYPE_USER_DATA_UNREGISTERED,
                                      &ctx->sei_user_data_payload, NULL);

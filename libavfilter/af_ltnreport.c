@@ -55,7 +55,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         for (int i = 0; i < 16; i++) {
             char key[256];
 
-            snprintf(key, sizeof(key), "lavfi.astats.%d.RMS_level", i+1);
+            snprintf(key, sizeof(key), "lavfi.astats.%d.Peak_level", i+1);
             e = av_dict_get(in->metadata, key, NULL, 0);
             if (e && e->value) {
                 ltnlog_msg("AUDIOLEVEL", "%s,%d,%s", filtersource, i+1, e->value);
